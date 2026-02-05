@@ -1,0 +1,13 @@
+# If you only wish to "use" lgrs with conda, you can just
+# > conda env create -n lgrs -f environment.yml
+#
+# If you want to develop lgrs, you should do this:
+# > conda create -n lgrs
+# > conda activate lgrs
+# > conda env update --file environment_dev.yml
+# > conda env update --file environment.yml
+# If either of the "update" steps takes forever, consider using "mamba" instead of "conda".
+#
+dependencies:
+  - numpy
+  - rasterio

@@ -1,0 +1,23 @@
+# Please read comments in environment.yml
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - black
+  - bump-my-version
+  - flake8
+  - icecream
+  - ipympl
+  - jupyterlab
+  - mypy
+  - pylint
+  - pytest
+  - pytest-cov
+  - sphinx
+  - sphinxcontrib
+  - sphinxcontrib-apidoc
+  - sphinxcontrib-autoprogram
+  - twine
+  - pip
+  - pip:
+    - ufmt
