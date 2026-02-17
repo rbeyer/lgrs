@@ -11,7 +11,7 @@ For brevity, this paper is referred to as M2025 hereinafter.
 
 
 ##############################################################################
-#%% IMPORT
+# region> IMPORT
 ##############################################################################
 # External.
 from __future__ import annotations
@@ -22,10 +22,11 @@ import osgeo.osr
 import re
 import pathlib
 
+# endregion
 
 
 ##############################################################################
-#%% CONFIGURATION
+# region> CONFIGURATION
 ##############################################################################
 #---- LTM --------------------------------------------------------------------
 # Note: See Table 4 of M2025 for most of these variables.
@@ -54,10 +55,12 @@ LTM_CENTRAL_SCALE_FACTOR = 0.999  # `k_0` in M2025 (exact,  unitless)
 LTM_LATITUDE_OF_PROJECTION_AXIS = 0  # `phi_0` in M2025 (degrees)
 LTM_ZONE_HALF_WIDTH = 4  # `W` in M2025 (degrees)
 
+# endregion
+
 
 
 ##############################################################################
-#%% UTILITY
+# region> UTILITY
 ##############################################################################
 def conform_longitude(longitude: float, *, fudge: bool = False) -> float:
     # Conform longitude to expected range, [-180, 180).
@@ -164,10 +167,12 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Tranverse Mercator / LTM zone {ltm_zo
         raise TypeError("WKT could not be parsed")
     return sr
 
+# endregion
+
 
 
 ##############################################################################
-#%% NAMED TUPLES
+# region> NAMED TUPLES
 ##############################################################################
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class BaseGridCoordinates:
@@ -369,10 +374,12 @@ class LtmZone:
     def minimum_longitude(self) -> int:
         return self.center_longitude - LTM_ZONE_HALF_WIDTH
     
-        
+# endregion
+
+
 
 ##############################################################################
-#%% CONVERSION FUNCTIONS
+# region> CONVERSION FUNCTIONS
 ##############################################################################
 # def compare_ltm_or_lps(string1: str, string2: str) -> float:
 #     for string in (string1, string2):
@@ -382,12 +389,15 @@ class LtmZone:
 #                             "with four parts delimited by spaces: "
 #                             "<zone_number> <hemisphere> <easting> <northing>")
 
+# endregion
     
 
+
 ##############################################################################
-#%% DEMO CODE
+# region> DEMO CODE
 ##############################################################################
 # if __name__ == "__main__":
 #     result = convert_to_ltm_or_lps(latitude=-2.0, longitude=-3.0, 
 #                                    as_string=True)
-    
+
+# endregion

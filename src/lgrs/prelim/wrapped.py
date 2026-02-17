@@ -6,7 +6,7 @@ Created on Mon Feb  9 14:30:11 2026
 """
 
 ##############################################################################
-#%% IMPORT
+# region> IMPORT
 ##############################################################################
 # External.
 import collections
@@ -20,10 +20,11 @@ import tempfile
 # Internal.
 import lgrs.toy
 
+# endregion
 
 
 ##############################################################################
-#%% PATCHING
+# region> PATCHING
 ##############################################################################
 MODULE_PATH = pathlib.Path(__file__).parent
 COORD_CONVER_STR = (MODULE_PATH / r"LGRS_Coordinate_Conversion_mk7.2.py").read_text()
@@ -85,11 +86,12 @@ def set_globals(code_string: str, **kwargs) -> None:
                                 repl=f"{var_name} = {var_value!r}", 
                                 string=code_string)
     return code_string
-    
+
+# endregion
 
 
 ##############################################################################
-#%% CONVERSION METHODS
+# region> CONVERSION METHODS
 ##############################################################################
 def LatLon2LTM(*, latitude: float, longitude: float, 
                info: bool = False, trunc_val: int = 1, 
@@ -97,10 +99,13 @@ def LatLon2LTM(*, latitude: float, longitude: float,
     conformed_longitude = lgrs.toy.conform_longitude(longitude)
     return execute(COORD_CONVER_STR, latitude, conformed_longitude,
                    info=info, trunc_val=trunc_val, condensed=condensed)
-    
+
+# endregion
+
+
 
 ##############################################################################
-#%% UTILITY
+# region> UTILITY
 ##############################################################################
 def calculate_disparity(*, latitude: float, longitude: float) -> float:
     # Generate coordinate instances.
@@ -131,11 +136,13 @@ def iterate_utm_zone_key_latitude_longitude_tuples(
         for latitude in (-max_abs_lat, -max_abs_lat / 2,
                          0, max_abs_lat / 2, max_abs_lat):
             yield (latitude, longitude)
-        
-    
+
+# endregion
+
+
 
 ##############################################################################
-#%% TESTS
+# region> TESTS
 ##############################################################################
 latlon_to_disparity = {}
 prev_lon = None  # Initialize.
@@ -563,3 +570,5 @@ for latlon, disparity in latlon_to_disparity.items():
 (40.0, 356) 2.3239755603293012e-07
 (80, 356) 5.2662494578600104e-08
 """
+
+# endregion
