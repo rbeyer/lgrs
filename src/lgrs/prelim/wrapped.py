@@ -23,6 +23,7 @@ import lgrs.toy
 # endregion
 
 
+
 ##############################################################################
 # region> PATCHING
 ##############################################################################
@@ -72,7 +73,7 @@ def execute(original_code_string: str, *args, **kwargs) -> str:
         return stdout_str
 
 
-def patch(code_string: str) -> None:
+def patch(code_string: str) -> str:
     for pattern, repl in (
             ("(?m)^import sys$", "import sys; from sys import exit"),
             ):
@@ -80,7 +81,7 @@ def patch(code_string: str) -> None:
     return code_string
 
 
-def set_globals(code_string: str, **kwargs) -> None:
+def set_globals(code_string: str, **kwargs) -> str:
     for var_name, var_value in kwargs.items():
         code_string = _sub_once(pattern=f"(?m)^{var_name} = .+", 
                                 repl=f"{var_name} = {var_value!r}", 
@@ -88,6 +89,7 @@ def set_globals(code_string: str, **kwargs) -> None:
     return code_string
 
 # endregion
+
 
 
 ##############################################################################
