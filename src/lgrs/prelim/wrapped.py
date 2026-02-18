@@ -58,11 +58,11 @@ def execute(original_code_string: str, *args, **kwargs) -> str:
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
         f.write(configured_code_string)
     temp_path = pathlib.Path(f.name)
-    with subprocess.Popen(
-            f"{sys.executable} {temp_path} "
-            f"{_get_method_name()} {' '.join(map(repr, args))}",
-            stdout=subprocess.PIPE
-            ) as p:
+    popen_args = [sys.executable, str(temp_path),
+                  _get_method_name(), *map(repr, args)]
+    with subprocess.Popen(popen_args,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE) as p:
         stdout_bytes, _ = p.communicate()
     temp_path.unlink()
     stdout_str = stdout_bytes.decode().strip()

@@ -154,7 +154,7 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Tranverse Mercator / LTM zone {ltm_zo
       LENGTHUNIT["metre",1]],
   USAGE[
     SCOPE["Lunar Transverse Mercator Zone LTM_{ltm_zone.number}{ltm_zone.hemisphere}."],
-    BBOX[{ltm_zone.maximum_latitude},{ltm_zone.minimum_longitude},{ltm_zone.minimum_latitude},{ltm_zone.maximum_longitude}]]]
+    BBOX[{ltm_zone.minimum_latitude},{ltm_zone.minimum_longitude},{ltm_zone.maximum_latitude},{ltm_zone.maximum_longitude}]]]
 """.strip()
     if not bound:
         # *REASSIGNMENT*
