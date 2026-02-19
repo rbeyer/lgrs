@@ -35,26 +35,27 @@ import pathlib
 # additional changes to the code will likely be necessary.
 
 # Boundaries.
-LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE = 82  # (degrees)
-LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE = 80  # (degrees)
+LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE: float = 82  # (degrees)
+LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE: float = 80  # (degrees)
 
 # False northing and easting.
-LTM_FALSE_EASTING = 250_000  # `F_E` in M2025 (meters)
-LTM_N_FALSE_NORTHING = 0  # `F_N` in M2025 (meters)
-LTM_S_FALSE_NORTHING = 2_500_000  # `F_N` in M2025 (meters)
+LTM_FALSE_EASTING: float = 250_000  # `F_E` in M2025 (meters)
+LTM_N_FALSE_NORTHING: float = 0  # `F_N` in M2025 (meters)
+LTM_S_FALSE_NORTHING: float = 2_500_000  # `F_N` in M2025 (meters)
 
-# Shape paramters.
-ELLIPSOIDAL_FLATTENING = 0  # `f` in M2025 (unitless)
-# Note: `e` in M2025 (unitless).
-ECCENTRICITY = (ELLIPSOIDAL_FLATTENING * (2 - ELLIPSOIDAL_FLATTENING))**0.5
-LUNAR_RADIUS = 1_737_400  # `a` in M2025 (meters)
-# Note: `n` in M2025 (unitless).
-THIRD_FLATTENING = ELLIPSOIDAL_FLATTENING / (2 - ELLIPSOIDAL_FLATTENING)
+# Shape parameters.
+ELLIPSOIDAL_FLATTENING: float = 0  # `f` in M2025 (unitless)
+# Below: `e` in M2025 (unitless).
+ECCENTRICITY: float = (ELLIPSOIDAL_FLATTENING
+                       * (2 - ELLIPSOIDAL_FLATTENING))**0.5
+LUNAR_RADIUS: float = 1_737_400  # `a` in M2025 (meters)
+# Below: `n` in M2025 (unitless).
+THIRD_FLATTENING: float = ELLIPSOIDAL_FLATTENING / (2 - ELLIPSOIDAL_FLATTENING)
 
 # Other parameters.
-LTM_CENTRAL_SCALE_FACTOR = 0.999  # `k_0` in M2025 (exact,  unitless)
-LTM_LATITUDE_OF_PROJECTION_AXIS = 0  # `phi_0` in M2025 (degrees)
-LTM_ZONE_HALF_WIDTH = 4  # `W` in M2025 (degrees)
+LTM_CENTRAL_SCALE_FACTOR: float = 0.999  # `k_0` in M2025 (exact,  unitless)
+LTM_LATITUDE_OF_PROJECTION_AXIS: float = 0  # `phi_0` in M2025 (degrees)
+LTM_ZONE_HALF_WIDTH: float = 4  # `W` in M2025 (degrees)
 
 # endregion
 
@@ -118,9 +119,9 @@ def make_zone_spatial_reference(
         # `sr.ExportToPrettyWkt()` and identify any outdated or 
         # otherwise non-preferred formatting.
         # Note: As a temporary solution, and a deviation from M2025,
-        # including the LTM zone in the projection namne.
+        # including the LTM zone in the projection name.
         proj_wkt = f"""
-PROJCRS["Moon (2015) - Sphere / Ocentric / Tranverse Mercator / LTM zone {ltm_zone.number}{ltm_zone.hemisphere}",
+PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {ltm_zone.number}{ltm_zone.hemisphere}",
   BASEGEOGCRS["Moon (2015) - Sphere / Ocentric",
     DATUM["Moon (2015) - Sphere",
       ELLIPSOID["Moon (2015) - Sphere",{LUNAR_RADIUS},0,
@@ -177,8 +178,8 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Tranverse Mercator / LTM zone {ltm_zo
 ##############################################################################
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class BaseGridCoordinates:
-    easting: int|float
-    northing: int|float
+    easting: float
+    northing: float
 
     def grid_distance_to(self, other: BaseGridCoordinates) -> float:
         # Verify compatibility.
@@ -284,7 +285,7 @@ class LtmCoordinates(BaseGridCoordinates):
             
         # Format and return string.
         string = (f"{self.zone_number} {self.hemisphere} "
-                  "{easting!r} {northing!r}")
+                  f"{easting!r} {northing!r}")
         if condensed:
             string = string.replace(" ", "")  # *REASSIGNMENT*
         return string        
@@ -330,7 +331,7 @@ class LtmZone:
         return new
     
     @functools.cached_property
-    def center_longitude(self) -> int:
+    def center_longitude(self) -> float:
         ctr_lon = ((self.number - 1)
                    * (2 * LTM_ZONE_HALF_WIDTH)
                    - 180
@@ -338,11 +339,11 @@ class LtmZone:
         return ctr_lon
 
     @functools.cached_property
-    def false_easting(self) -> int:
+    def false_easting(self) -> float:
         return LTM_FALSE_EASTING
 
     @functools.cached_property
-    def false_northing(self) -> int:
+    def false_northing(self) -> float:
         match self.hemisphere:
             case "N":
                 return LTM_N_FALSE_NORTHING
@@ -350,7 +351,7 @@ class LtmZone:
                 return LTM_S_FALSE_NORTHING
 
     @functools.cached_property
-    def maximum_latitude(self) -> int:
+    def maximum_latitude(self) -> float:
         if self.hemisphere == "S":
             return 0
         elif self.extend_ltm:
@@ -359,11 +360,11 @@ class LtmZone:
             return LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
     
     @functools.cached_property
-    def maximum_longitude(self) -> int:
+    def maximum_longitude(self) -> float:
         return self.center_longitude + LTM_ZONE_HALF_WIDTH
         
     @functools.cached_property
-    def minimum_latitude(self) -> int:
+    def minimum_latitude(self) -> float:
         if self.hemisphere == "N":
             return 0
         elif self.extend_ltm:
@@ -372,7 +373,7 @@ class LtmZone:
             return -LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
                 
     @functools.cached_property
-    def minimum_longitude(self) -> int:
+    def minimum_longitude(self) -> float:
         return self.center_longitude - LTM_ZONE_HALF_WIDTH
     
 # endregion
