@@ -349,6 +349,8 @@ class LtmZone:
                 return LTM_N_FALSE_NORTHING
             case "S":
                 return LTM_S_FALSE_NORTHING
+            case _:
+                raise TypeError(f"Unrecognized hemisphere: {self.hemisphere}")
 
     @functools.cached_property
     def maximum_latitude(self) -> float:
