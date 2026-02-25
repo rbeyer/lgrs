@@ -120,7 +120,7 @@ def calculate_disparity(*, latitude: float, longitude: float) -> float:
                                                     longitude=longitude2)
     # Note: Using extended LTM latitudes requires user interaction in
     # 7.2 code.
-    new_coords = new_geo_coords.to_ltm_or_lps(extend_ltm=False)
+    new_coords = new_geo_coords.to_lps_or_ltm(extended_ltm=False)
     
     # Convert coordinate strings to coordinate instances.
     dist = new_coords.grid_distance_to(orig_coords)
@@ -146,25 +146,25 @@ def iterate_utm_zone_key_latitude_longitude_tuples(
 ##############################################################################
 # region> TESTS
 ##############################################################################
-latlon_to_disparity = {}
-prev_lon = None  # Initialize.
-for lat, lon in iterate_utm_zone_key_latitude_longitude_tuples():
-    if lon != prev_lon:
-        print(f"lon = {lon}  [max disparity so far = {max(latlon_to_disparity.values(), default=0)}]")
-        prev_lon = lon
-        # if lon == -180:
-        #     print("  will skip (incompatible with `osgeo`)")
-    # Note: Not supported by `osgeo`.
-    # if lon == -180:
-    #     continue
-    disp = calculate_disparity(latitude=lat, longitude=lon)
-    latlon_to_disparity[(lat, lon)] = disp
-disparities = list(latlon_to_disparity.values())
-disparities.sort()
-for latlon, disparity in latlon_to_disparity.items():
-    if disparity < 1e-8:
-        continue
-    print(latlon, disparity)
+# latlon_to_disparity = {}
+# prev_lon = None  # Initialize.
+# for lat, lon in iterate_utm_zone_key_latitude_longitude_tuples():
+#     if lon != prev_lon:
+#         print(f"lon = {lon}  [max disparity so far = {max(latlon_to_disparity.values(), default=0)}]")
+#         prev_lon = lon
+#         # if lon == -180:
+#         #     print("  will skip (incompatible with `osgeo`)")
+#     # Note: Not supported by `osgeo`.
+#     # if lon == -180:
+#     #     continue
+#     disp = calculate_disparity(latitude=lat, longitude=lon)
+#     latlon_to_disparity[(lat, lon)] = disp
+# disparities = list(latlon_to_disparity.values())
+# disparities.sort()
+# for latlon, disparity in latlon_to_disparity.items():
+#     if disparity < 1e-8:
+#         continue
+#     print(latlon, disparity)
 
 # Note: North jumps ~26 mm between the following two coordinates, which
 # are only separated by ~27.3 um, or ~10,000x less.

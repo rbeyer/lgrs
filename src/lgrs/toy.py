@@ -15,55 +15,34 @@ For brevity, this paper is referred to as M2025 hereinafter.
 ##############################################################################
 # External.
 from __future__ import annotations
-import dataclasses
-import functools
-import math
-import osgeo.osr
-import re
+import abc as _abc
+import dataclasses as _dataclasses
+import functools as _functools
+import math as _math
+import typing as _typing
+from osgeo import osr as _osr
+import re as _re
 import pathlib
 
 # endregion
 
 
 
-##############################################################################
-# region> CONFIGURATION
-##############################################################################
-#---- LTM --------------------------------------------------------------------
-# Note: See Table 4 of M2025 for most of these variables.
-# Note: If any of these variables are modified from their M2025 values,
-# additional changes to the code will likely be necessary.
-
-# Boundaries.
-LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE: float = 82  # (degrees)
-LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE: float = 80  # (degrees)
-
-# False northing and easting.
-LTM_FALSE_EASTING: float = 250_000  # `F_E` in M2025 (meters)
-LTM_N_FALSE_NORTHING: float = 0  # `F_N` in M2025 (meters)
-LTM_S_FALSE_NORTHING: float = 2_500_000  # `F_N` in M2025 (meters)
-
-# Shape parameters.
-ELLIPSOIDAL_FLATTENING: float = 0  # `f` in M2025 (unitless)
-# Below: `e` in M2025 (unitless).
-ECCENTRICITY: float = (ELLIPSOIDAL_FLATTENING
-                       * (2 - ELLIPSOIDAL_FLATTENING))**0.5
-LUNAR_RADIUS: float = 1_737_400  # `a` in M2025 (meters)
-# Below: `n` in M2025 (unitless).
-THIRD_FLATTENING: float = ELLIPSOIDAL_FLATTENING / (2 - ELLIPSOIDAL_FLATTENING)
-
-# Other parameters.
-LTM_CENTRAL_SCALE_FACTOR: float = 0.999  # `k_0` in M2025 (exact,  unitless)
-LTM_LATITUDE_OF_PROJECTION_AXIS: float = 0  # `phi_0` in M2025 (degrees)
-LTM_ZONE_HALF_WIDTH: float = 4  # `W` in M2025 (degrees)
-
-# endregion
 
 
 
 ##############################################################################
 # region> UTILITY
 ##############################################################################
+_zone_hint_pattern = _re.compile(
+    "(?i)^(?P<zone_num>[0-9]+)?(?P<hemi>[N|S])?$"
+)
+
+def conform_latitude(latitude: float) -> float:
+    if abs(latitude) > 90:
+        raise TypeError("latitude must be in [-90, 90] interval")
+    return latitude
+
 def conform_longitude(longitude: float, *, fudge: bool = False) -> float:
     # Conform longitude to expected range, [-180, 180).
     # TODO: Determine whether accepted range is reasonable.
@@ -94,11 +73,10 @@ def conform_longitude(longitude: float, *, fudge: bool = False) -> float:
 def make_zone_spatial_reference(
         *, latitude: float, longitude: float, 
         bound: bool = True, extend_ltm: bool = True
-        ) -> osgeo.osr.SpatialReference:
-    # Validate coordinates.
-    if abs(latitude) > 90:
-        raise TypeError("latitude must be in [-90, 90] interval")
-    # Note: Required by Eq. 13 of M2025 and by WKT.
+        ) -> _osr.SpatialReference:
+    # Validate and conform coordinates.
+    latitude = conform_latitude(latitude)  # *REASSIGNMENT*
+    # Below: Required by Eq. 13 of M2025 and by WKT.
     longitude = conform_longitude(longitude)  # *REASSIGNMENT*
     
     # Determine whether to use LTM or LPS.
@@ -118,7 +96,8 @@ def make_zone_spatial_reference(
         # TODO: Compare format below (taken from pp. 23-24 of M2025) to
         # `sr.ExportToPrettyWkt()` and identify any outdated or 
         # otherwise non-preferred formatting.
-        # Note: As a temporary solution, and a deviation from M2025,
+        # TODO: Determine whether solution should be permanent.
+        # Below: As a temporary solution, and a deviation from M2025,
         # including the LTM zone in the projection name.
         proj_wkt = f"""
 PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {ltm_zone.number}{ltm_zone.hemisphere}",
@@ -160,225 +139,81 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {ltm_z
 """.strip()
     if not bound:
         # *REASSIGNMENT*
-        proj_wkt, sub_count = re.subn(r",\s*BBOX\[.+?\]", "", proj_wkt)
+        proj_wkt, sub_count = _re.subn(r",\s*BBOX\[.+?\]", "", proj_wkt)
         assert (sub_count == 1)
     
     # Create and return projection instance.
-    sr = osgeo.osr.SpatialReference()
+    sr = _osr.SpatialReference()
     if sr.ImportFromWkt(proj_wkt):
         raise TypeError("WKT could not be parsed")
     return sr
 
-# endregion
-
-
-
-##############################################################################
-# region> NAMED TUPLES
-##############################################################################
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class BaseGridCoordinates:
-    easting: float
-    northing: float
-
-    def grid_distance_to(self, other: BaseGridCoordinates) -> float:
-        # Verify compatibility.
-        # TODO: Update restrictions as new subclasses are added.
-        if type(self) is not type(other):
-            raise TypeError(f"Cannot compare mixed types: {self!r}, {other!r}")
-        inst_dicts = []
-        for instance in (self, other):
-            inst_dict = dataclasses.asdict(instance)
-            del inst_dict["easting"]
-            del inst_dict["northing"]
-            inst_dicts.append(inst_dict)
-        self_dict, other_dict = inst_dicts
-        if self_dict != other_dict:
-            for key, self_value in self_dict.items():
-                if other_dict[key] != self_value:
-                    raise TypeError(f"`{key}` does not match: "
-                                    f"{self!r}, {other!r}")
-            # Note: This line should never be encountered.
-            raise TypeError(f"Not comparable: {self!r}, {other!r}")
-            
-        # Calculate and return distance.
-        dist = math.dist((self.easting, self.northing), 
-                         (other.easting, other.northing))
-        return dist
-                
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class GeographicCoordinates:
-    latitude: float
-    longitude: float
-
-    def to_ltm_or_lps(
-            self, *, extend_ltm: bool = False
-            ) -> LtmCoordinates|LpsCoordinates:
-        # Project.
-        proj_sr = make_zone_spatial_reference(latitude=self.latitude, 
-                                              longitude=self.longitude,
-                                              extend_ltm=extend_ltm)
-        geo_sr = osgeo.osr.SpatialReference()
-        geo_sr.CopyGeogCSFrom(proj_sr)
-        coord_transform = osgeo.osr.CoordinateTransformation(geo_sr, proj_sr)
-        
-        # Create coordinates instance.
-        easting, northing, elevation = coord_transform.TransformPoint(
-            self.latitude, self.longitude
-            )
-        _, zone_str = proj_sr.GetName().rsplit(" ", maxsplit=1)
-        zone_num_str = zone_str[:-1]
-        hemi_str = zone_str[-1]
-        if zone_num_str:
-            proj_coords = LtmCoordinates(zone_number=int(zone_num_str), 
-                                         hemisphere=hemi_str, 
-                                         easting=easting, northing=northing)
-        else:
-            proj_coords = LpsCoordinates(hemisphere=hemi_str,
-                                         easting=easting, northing=northing)
-        return proj_coords
-
-
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class LtmCoordinates(BaseGridCoordinates):
-    zone_number: int
-    hemisphere: str
-    
-    @classmethod
-    def from_string(cls, string: str):  # TODO: Add `-> typing.Self`.
-        # Parse `string`.
-        if " " in string:
-            parts = string.split(" ")
-            if len(parts) != 4:
-                raise TypeError("If non-condensed, `string` must have four "
-                                "parts delimited by spaces: <zone_number> "
-                                "<hemisphere> <easting> <northing>")
-            zone_str, hemisphere, easting_str, northing_str = parts
-        elif "." in string:
-            raise TypeError("The decimal point is only supported in the non-"
-                            "condensed format.")
-        else:
-            raise NotImplementedError("Support for condensed format.")
-            
-        # Return new coordinates instance.
-        new = cls(zone_number=int(zone_str), hemisphere=hemisphere,
-                  easting=float(easting_str), northing=float(northing_str))
-        return new
-
-    def as_string(self, *, 
-                  truncation_meters: int = 1, condensed: bool = True) -> str:
-        # Extract and optionally truncate easting and northing.
-        if truncation_meters:
-            if not math.log10(truncation_meters).is_integer():
-                # Note: Similar error in 7.2 code.
-                raise TypeError("`truncation_meters` must be 10 to a positive "
-                                "integer power")
-            # *REASSIGNMENTS*
-            easting = (math.floor(self.easting / truncation_meters) 
-                       * truncation_meters)
-            northing = (math.floor(self.northing / truncation_meters) 
-                        * truncation_meters)
-        else:
-            easting = self.easting
-            northing = self.northing
-            
-        # Format and return string.
-        string = (f"{self.zone_number} {self.hemisphere} "
-                  f"{easting!r} {northing!r}")
-        if condensed:
-            string = string.replace(" ", "")  # *REASSIGNMENT*
-        return string        
-    
-    
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class LpsCoordinates(BaseGridCoordinates):
-    hemisphere: str
-    
-    
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class LtmZone:
-    number: int
-    hemisphere: str
-    extend_ltm: bool = False
-    
-    @classmethod
-    def from_geographic(
-            cls, *, 
-            latitude: float, longitude: float, extend_ltm: bool = False,
-            error: bool = True
-            ):  # TODO: Add `-> typing.Self|None`.
-        # Determine whether LTM is supported.
-        if extend_ltm:
-            ltm_max_abs_lat = LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
-        else:
-            ltm_max_abs_lat = LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
-        # TODO: Compare to behavior of original code.
-        if abs(latitude) > ltm_max_abs_lat:
-            if error:
-                raise TypeError(f"latitude is not supported: {latitude}")
+def parse_zone_hint(
+        zone_hint: int | str | None
+) -> tuple[int | None, str | None]:
+    hemi: str | None = None  # Default.
+    zone_num: int | None = None  # Default.
+    zone_hint_is_ok: bool = True  # Default.
+    match zone_hint:
+        case None:
+            pass
+        case int():
+            zone_num = zone_hint
+        case str():
+            zone_hint_match = _zone_hint_pattern.search(zone_hint)
+            if zone_hint_match:
+                parsed_zone_num = zone_hint_match.group("zone_num")
+                if parsed_zone_num:
+                    zone_num = int(zone_hint_match.group("zone_num"))
+                hemi = zone_hint_match.group("hemi")
             else:
-                return None
-            
-        # Identify zone number and hemisphere.
-        # Note: Eq. 13 of M2025. Zones are 1-indexed.
-        zone_num = math.floor((longitude + 180)/(2 * LTM_ZONE_HALF_WIDTH)) + 1        
-        # Note: Related to eqs. 14 and 15 of M2025.
-        hemi = "N" if latitude >= 0 else "S"
-        
-        # Create and return instance.
-        new = cls(number=zone_num, hemisphere=hemi, extend_ltm=extend_ltm)
-        return new
-    
-    @functools.cached_property
-    def center_longitude(self) -> float:
-        ctr_lon = ((self.number - 1)
-                   * (2 * LTM_ZONE_HALF_WIDTH)
-                   - 180
-                   + LTM_ZONE_HALF_WIDTH)        
-        return ctr_lon
+                zone_hint_is_ok = False
+        case _:
+            zone_hint_is_ok = False
+    if not zone_hint_is_ok:
+        raise TypeError(f"`zone_hint` not recognized: {zone_hint!r}")
+    return (zone_num, hemi)
 
-    @functools.cached_property
-    def false_easting(self) -> float:
-        return LTM_FALSE_EASTING
+# def resolve_zone_number_and_hemisphere(
+#         *, zone_number: int | None = None, hemisphere: str | None = None,
+#         latitude: float | None = None, longitude: float | None = None,
+#         extend_ltm: bool = False
+# ) -> tuple[int | None, str]:
+#     if hemisphere is None:
+#         if latitude is None:
+#             raise TypeError("If `hemisphere` is not specified, "
+#                             "`latitude` must be specified.")
+#         hemisphere = "N" if latitude >= 0 else "S"
+#     if zone_number is None:
+#         if latitude is None:
+#             raise TypeError("If `zone_number` is not specified, "
+#                             "`latitude` must be specified.")
+#         if extend_ltm:
+#             ltm_max_abs_lat = LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+#         else:
+#             ltm_max_abs_lat = LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
+#         # TODO: Compare to behavior of original code.
+#         use_lps = (abs(latitude) > ltm_max_abs_lat)
+#         if not use_lps:
+#             if longitude is None:
+#                 raise TypeError("To resolve LTM zone, "
+#                                 "`longitude` must be specified.")
+#             # Below: Eq. 13 of M2025. Zones are 1-indexed.
+#             zone_number = (
+#                     _math.floor((longitude + 180)
+#                                 / (2 * LTM_ZONE_HALF_WIDTH))
+#                     + 1
+#             )
+#     return (zone_number, hemisphere)
 
-    @functools.cached_property
-    def false_northing(self) -> float:
-        match self.hemisphere:
-            case "N":
-                return LTM_N_FALSE_NORTHING
-            case "S":
-                return LTM_S_FALSE_NORTHING
-            case _:
-                raise TypeError(f"Unrecognized hemisphere: {self.hemisphere}")
-
-    @functools.cached_property
-    def maximum_latitude(self) -> float:
-        if self.hemisphere == "S":
-            return 0
-        elif self.extend_ltm:
-            return LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
-        else:
-            return LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
-    
-    @functools.cached_property
-    def maximum_longitude(self) -> float:
-        return self.center_longitude + LTM_ZONE_HALF_WIDTH
-        
-    @functools.cached_property
-    def minimum_latitude(self) -> float:
-        if self.hemisphere == "N":
-            return 0
-        elif self.extend_ltm:
-            return -LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
-        else:
-            return -LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
-                
-    @functools.cached_property
-    def minimum_longitude(self) -> float:
-        return self.center_longitude - LTM_ZONE_HALF_WIDTH
-    
 # endregion
+
+
+
+##############################################################################
+# region> AREAS
+##############################################################################
+
 
 
 
