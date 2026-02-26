@@ -17,6 +17,7 @@ import typing as _typing
 # Internal.
 import lgrs.bases as _bases
 import lgrs.coords as _coords
+import lgrs.util as _util
 
 # endregion
 
@@ -263,6 +264,16 @@ class BaseZone(_bases.AbstractBaseZone):
     @_abc.abstractmethod
     def spatial_reference(self) -> _osr.SpatialReference:
         ...
+
+    #! @Ross: The commented code below is a lot more compact but
+    #! equivalent to the section above. I'd planned to replace the
+    #! above with that below anyway.
+    # maximum_latitude: float = _util.make_abstract_property()
+    # maximum_longitude: float = _util.make_abstract_property()
+    # minimum_latitude: float = _util.make_abstract_property()
+    # minimum_longitude: float = _util.make_abstract_property()
+    # name: str = _util.make_abstract_property()
+    # spatial_reference: _osr.SpatialReference = _util.make_abstract_property()
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsZone(BaseZone):
