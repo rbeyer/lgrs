@@ -119,9 +119,9 @@ class BaseZone(_bases.AbstractBaseZone):
             extended_ltm: bool = False, is_global: bool = False
     ) -> LpsZone | LtmZone:
         if extended_ltm:
-            ltm_max_abs_lat = LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
-        else:
             ltm_max_abs_lat = LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
+        else:
+            ltm_max_abs_lat = LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
         # Note: Choice of `>` rather than `>=` is arbitrary.
         # TODO: Confirm this arbitrary choice. Alternatively, could add
         #  (ugly) `prefer_ltm` argument or use `cls` as a hint.
@@ -474,13 +474,94 @@ class LtmZone(BaseZone):
 ##############################################################################
 # region> TEMPORARY TESTING CODE
 ##############################################################################
-# TODO: Consolidate all testing formally.
-# y = BaseZone.from_name("23N", is_global=False)
-# y.spatial_reference
-# z = BaseZone.from_name("N", is_global=True)
-# z.spatial_reference
+if __name__ == "__main__":
+    # TODO: Consolidate all testing formally.
+    # y = BaseZone.from_name("23N", is_global=False)
+    # y.spatial_reference
+    # z = BaseZone.from_name("N", is_global=True)
+    # z.spatial_reference
 
-test_geo_coord_1 = _coords.GeographicCoordinates(latitude=1, longitude=2)
-test_geo_coord_2 = _coords.GeographicCoordinates(latitude=85, longitude=2)
-test_ltm_coord = test_geo_coord_1.to_lps_or_ltm()
-test_lps_coord = test_geo_coord_2.to_lps_or_ltm()
+    # Create some geographic test coordinates.
+    # Note: Longitudes are arbitrary.
+    low_lat_geo_coords = _coords.GeographicCoordinates(latitude=1, longitude=2)
+    # Note: This is in the latitudinal interval where both LPS and LTM
+    # apply.
+    transitional_geo_coords = _coords.GeographicCoordinates(latitude=81, longitude=-31)
+    polar_geo_coords = _coords.GeographicCoordinates(latitude=85, longitude=176)
+
+    # Test auto-conversion to appropriate gridded system: LPS or LTM.
+    low_lat_ltm_coords = low_lat_geo_coords.to_lps_or_ltm()
+    assert isinstance(low_lat_ltm_coords, _coords.LtmCoordinates)
+    transitional_ltm_coords = transitional_geo_coords.to_lps_or_ltm(extended_ltm=True)
+    assert isinstance(low_lat_ltm_coords, _coords.LtmCoordinates)
+    transitional_lps_coords = transitional_geo_coords.to_lps_or_ltm(extended_ltm=False)
+    assert isinstance(transitional_lps_coords, _coords.LpsCoordinates)
+    polar_lps_coords = polar_geo_coords.to_lps_or_ltm()
+    assert isinstance(polar_lps_coords, _coords.LpsCoordinates)
+
+    # Demonstrate forced conversion to a particular zone, as may be
+    # useful when an operation adopts a standard zone but then ventures
+    # slightly outside it.
+    # Note: Interestingly, `osgeo` still makes this conversion even
+    # though the WKT I use (adapted directly from M2025) has an explicit
+    # BBOX constraint, which is correctly parsed by `osgeo`. I'm
+    # inclined to look into this a bit more and prevent accidental
+    # conversion to the wrong zone with a warning or error; the user can
+    # override this with `is_global=True`, which is already supported in
+    # most places. (That setting makes the zone have global extent in
+    # the WKT; equivalent behavior is also supported in the 7.2 code,
+    # with a user override (see line 536).)
+    zone_max_lon = low_lat_ltm_coords.zone.maximum_longitude
+    outside_geo_coords = _coords.GeographicCoordinates(
+        latitude=low_lat_ltm_coords.latitude, longitude=zone_max_lon + 0.1
+    )
+    outside_ltm_coords = outside_geo_coords.to_lps_or_ltm()
+    assert outside_ltm_coords.zone != low_lat_ltm_coords.zone
+    forced_outside_ltm_coords = low_lat_ltm_coords.zone.transform_coordinates_into(
+        # Below: `outside_geo_coords` would work just as well.
+        outside_ltm_coords
+    )
+    assert forced_outside_ltm_coords.zone == low_lat_ltm_coords.zone
+
+    # Confirm back-conversion and print results.
+    global_items = tuple(globals().items())
+    for original_coords, gridded_coords in (
+        (low_lat_geo_coords, low_lat_ltm_coords),
+        (transitional_geo_coords, transitional_ltm_coords),
+        (transitional_geo_coords, transitional_lps_coords),
+        (polar_lps_coords, polar_lps_coords),
+        (outside_geo_coords, outside_ltm_coords),
+        (outside_geo_coords, forced_outside_ltm_coords),
+    ):
+        orig_name = None  # Initialize.
+        gridded_name = None  # Initialize.
+        for name, value in global_items:
+            if original_coords is value:
+                orig_name = name
+            if gridded_coords is value:
+                gridded_name = name
+        if orig_name is None:
+            raise TypeError(f"Could not find variable: {original_coords!r}")
+        if gridded_name is None:
+            raise TypeError(f"Could not find variable: {gridded_coords!r}")
+        reconstructed_coords = gridded_coords.to_geographic()
+        assert abs(original_coords.latitude - reconstructed_coords.latitude) < 1e-12
+        assert abs(original_coords.longitude - reconstructed_coords.longitude) < 1e-12
+        print(f"* {orig_name} --> {gridded_name} * \n"
+              f"original: {original_coords} \n"
+              f"gridded: {gridded_coords} \n"
+              f"reconstructed: {reconstructed_coords} \n")
+
+    # Note: This illustrates what I mean by "heavily object-oriented",
+    # which I think is more Pythonic anyway. No need to bookkeep
+    # (mentally or otherwise) what system you're in (geographic, LPS,
+    # LTM, LGRS, or LGRS condensed), and what each coordinate means
+    # ([scratches head] "now, is it latitude or longitude first? or is
+    # this maybe a northing? an easting??") because the coordinates
+    # instance remembers all of it for you (cf. a plain `tuple`).
+    # Conversely, the user will need to specify the same level of detail
+    # in the CLI regardless of the under-the-hood approach, but that's
+    # unavoidable for what are essentially convenience functions. The
+    # code within those convenience functions will also be easier to
+    # interpret and maintain, IMHO, given the object-oriented approach
+    # I've adopted.
