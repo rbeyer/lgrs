@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "lgrs"
 description = "The lgrs package is software to support the Lunar Grid Reference System."
 authors = [
-    {name = "Ethan Schaefer", email = "eschaefer@seti.org"}
+    {name = "Ethan Schaefer", email = "eschaefer@seti.org"},
     {name = "Ross Beyer", email = "rbeyer@seti.org"}
 ]
 dynamic = ["version", "readme"]
@@ -21,7 +21,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy", "rasterio"
+    "numpy", "pyproj"
 ]
 
 [project.scripts]
