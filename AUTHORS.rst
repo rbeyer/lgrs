@@ -5,7 +5,7 @@ Credits
 Development Lead
 ----------------
 
-* Ethan Schaefer <eshcaefer@seti.org>, SETI Institute 
+* Ethan Schaefer <eschaefer@seti.org>, SETI Institute
 
 Contributors
 ------------
