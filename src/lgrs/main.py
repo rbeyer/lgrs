@@ -329,8 +329,8 @@ class BaseTransformer(_abc.ABC):
 
     @classmethod
     def from_srs(
-            cls, srs_from: _typing.Any, srs_to: _typing.Any, *args,
-            cache: bool = True, **kwargs
+            cls, srs_from: _typing.Any, srs_to: _typing.Any,
+            *args, **kwargs
     ) -> GriddedTransformer | _pyproj.Transformer:
         """
         Make a Transformer for any combination of `CRS` and `GRS`.
