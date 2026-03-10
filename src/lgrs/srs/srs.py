@@ -47,7 +47,7 @@ class GRS:
         # precaution.
         ...
 
-class BaseSRS(GRS, _pyproj.CRS, _abc.ABC):
+class BaseSRS(_abc.ABC):
     """
     Abstract base class for spatial reference systems.
     """
