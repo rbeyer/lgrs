@@ -99,13 +99,13 @@ def from_lps_or_ltm(easting: float, northing: float, *,
 
     Examples
     --------
-    >>> import lgrs.cli
-    >>> lgrs.cli.from_lps_or_ltm(488590, 608480)
+    >>> import lgrs.easy
+    >>> lgrs.easy.from_lps_or_ltm(488590, 608480)
     (zone="A", area="ZS", easting=13590, northing=8480,
      string="AZS1359008480")
-    >>> lgrs.cli.from_lps_or_ltm(488590, 608480, typ=Type.STRING)
+    >>> lgrs.easy.from_lps_or_ltm(488590, 608480, typ=Type.STRING)
     "AZS1359008480"
-    >>> lgrs.cli.from_lps_or_ltm(488590, 608480, typ=Type.STRING)
+    >>> lgrs.easy.from_lps_or_ltm(488590, 608480, typ=Type.PRETTY)
     "A ZS 13590 08480"
 
     """
