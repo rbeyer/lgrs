@@ -3097,14 +3097,16 @@ def main(switch, trunc_val, condensed=True):
 
 # determine input argument format
 
-info = False  # Original: False
-trunc_val = 0  # Original: 1
+info = True  # Original: False
+trunc_val = 10  # Original: 1
 condensed = False  # Original: True
 
 #* Begin: Added.
-sys.argv[1:] = ("LatLon2LTM", 1., 1.)
+# sys.argv[1:] = ("LatLon2LTM", 1., 1.)
 # sys.argv[1:] = ("LatLon2LPS", 85., 1.)
-#* End: Added
+sys.argv[1:] = ("PolarLGRS2PolarLGRS_ACC", "A", "Z", "S", "13590", "08480")
+sys.argv[1:] = ("PolarLGRS2Polar_ACC", "A", "Z", "S", "13590", "08480")
+#* End: Added.
 
 if info:
     StartTime = datetime.datetime.now()
