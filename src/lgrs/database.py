@@ -32,12 +32,12 @@ class SRSInfo(_pyproj_database.CRSInfo):
 ##############################################################################
 # Conservative option, nearly identical to
 # `pyproj.database.query_utm_crs_info()`. Note the necessary inclusion
-# of `extend_ltm` to cover the 80-82 degrees LPS/LTM overlap.
+# of `extended_ltm` to cover the 80-82 degrees LPS/LTM overlap.
 def query_ltm_crs_info(
         datum_name: str | None = "IAU_2015:30100",
         area_of_interest: _pyproj_aoi.AreaOfInterest | None = None,
         contains: bool = False, *,
-        extend_ltm: bool = False,
+        extended_ltm: bool = False,
 ) -> list[SRSInfo]:
     ...
 
@@ -52,7 +52,7 @@ def query_lps_and_ltm_crs_info(
         datum_name: str | None = "IAU_2015:30100",
         area_of_interest: _pyproj_aoi.AreaOfInterest | None = None,
         contains: bool = False, *,
-        extend_ltm: bool = False,
+        extended_ltm: bool = False,
         latitude: float | _collections.abc.Iterable[float] | None = None,
         longitude: float | _collections.abc.Iterable[float] | None = None
 ) -> list[SRSInfo]:
@@ -71,7 +71,7 @@ def query_lps_and_ltm_crs_info(
         contains `area_of_interest`. If `False`, `infos` will only reference a
         CRS if its area of use intersects the specified `area_of_interest`.
         Ignored if `area_of_interest` is unspecified.
-    extend_ltm : bool, default=False
+    extended_ltm : bool, default=False
         Whether to use extended LTM zones, which span from 80 to 82 degrees N
         and S.
     latitude : float or iterable of floats, optional
@@ -90,6 +90,9 @@ def query_lps_and_ltm_crs_info(
         If the combination of `area_of_interest`, `latitude`, and `longitude`
         are under- or over-specified.
 
+    Examples
+    --------
+    >>> query_lps_and_ltm_crs_info(latitude=0., longitude=0.)
     """
     match (latitude, longitude).count(None):
         case 1:

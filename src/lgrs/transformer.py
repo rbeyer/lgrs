@@ -60,7 +60,7 @@ class GriddedTransformer:
         >>> assert gt_1 is gt_3  # Only if `enable_caching()`.
         """
         # Note: If both `srs_from` and `srs_to` are CRSs, raise
-        # `NonGriddedException`.
+        # `NonGriddedError`.
         ...
 
     # TODO: We should decide whether to emulate the return type behavior
@@ -145,7 +145,7 @@ class GriddedTransformer:
 
     @staticmethod
     def to_wkt() -> _typing.NoReturn:
-        raise _lgrs_exceptions.NonGriddedException(
+        raise _lgrs_exceptions.NonGriddedError(
             "WKT does not support transformations involving gridded "
             "coordinate systems."
         )
