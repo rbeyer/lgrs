@@ -15,7 +15,7 @@ import pyproj as _pyproj
 ##############################################################################
 # region> EXCEPTIONS
 ##############################################################################
-class NonGriddedException(_pyproj.exceptions.CRSError):
+class NonGriddedError(_pyproj.exceptions.CRSError):
     """
     Raised when a non-gridded object is unexpectedly encountered.
 
@@ -25,6 +25,17 @@ class NonGriddedException(_pyproj.exceptions.CRSError):
     """
     pass
 
+class NonPolarError(_pyproj.exceptions.ProjError):
+    """
+    Raised when the non-polar region is unexpectedly referenced.
+    """
+    pass
+
+class PolarError(_pyproj.exceptions.ProjError):
+    """
+    Raised when the polar region is unexpectedly referenced.
+    """
+    pass
 
 
 # endregion
