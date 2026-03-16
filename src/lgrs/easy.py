@@ -57,7 +57,10 @@ def from_geographic(latitude: float, longitude: float, *,
                     extended_ltm: bool = False) -> tuple | str:
     ...
 
-# Note: Or could "cheat" and call this `from_projected()`.
+# TODO: Or could "cheat" and call this `from_projected()`, perhaps even
+#  replace-all "lps_or_ltm" ro "projected" across the package, with the
+#  understanding (as we'd state in the docs) that projected invariably
+#  means LPS or LTM in the package.
 def from_lps_or_ltm(easting: float, northing: float, *,
                     fmt: Format = Format.LGRS,
                     typ: Type = Type.LABELED,
