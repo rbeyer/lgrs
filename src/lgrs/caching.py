@@ -8,20 +8,79 @@
 # region> IMPORT
 ##############################################################################
 import collections as _collections
+import functools as _functools
+import typing as _typing
 
 
 
 # endregion
 ##############################################################################
-# region> CACHING
+# region> INTRA-MODULE USE
 ##############################################################################
-# TODO: Cache `CRS`, `SRS`, `pyproj.Transformer`, and
-#  `GriddedTransformer` instances that are created via this library.
-
 _CACHING_IS_ENABLED: bool = True
+_NOT_FOUND = object()
 
-_cache: dict[_collections.abc.Callable, dict] = {}
+_cache: dict = {}
 
+def _query_cache(
+        func_or_cls: _collections.abc.Callable | type, *args, **kwargs
+) -> tuple[_collections.abc.Hashable, _typing.Any]:
+    # Abort if caching is disabled.
+    if not _CACHING_IS_ENABLED:
+        return (None, _NOT_FOUND)
+
+    # Generate cache key.
+    kwargs_list = list(kwargs.items())
+    kwargs_list.sort()
+    kwargs_tuple = tuple(kwargs_list)
+    key = (func_or_cls, args, kwargs_tuple)
+
+    # Return cached instance or `None`.
+    cached = _cache.get(key, _NOT_FOUND)
+    return (key, cached)
+
+def _store_to_cache(key: _collections.abc.Hashable, value: _typing.Any) -> None:
+    if key is not None:
+        _cache[key] = value
+
+
+
+# endregion
+##############################################################################
+# region> INTRA-PACKAGE USE
+##############################################################################
+class _Multiton:
+    _is_from_cache: bool = False  # Default.
+
+    def __new__(cls, *args, **kwargs) -> _typing.Any:
+        key, cached = _query_cache(cls, *args, **kwargs)
+        if cached is _NOT_FOUND:
+            new = super().__new__(cls)
+            _store_to_cache(key, new)
+            return new
+        else:
+            cached._is_from_cache = True
+            return cached
+
+def _optionally_cache(
+        func: _collections.abc.Callable
+) -> _collections.abc.Callable:
+    @_functools.wraps(func)
+    def wrapped(*args, **kwargs) -> _typing.Any:
+        key, cached = _query_cache(func, *args, **kwargs)
+        if cached is not _NOT_FOUND:
+            return cached
+        result = func(*args, **kwargs)
+        _store_to_cache(key, result)
+        return result
+    return wrapped
+
+
+
+# endregion
+##############################################################################
+# region> PUBLIC USE
+##############################################################################
 def enable_caching(enable: bool = True, *, clear: bool = False) -> None:
     """
     Enable or disable caching, and optionally clear the cache.
