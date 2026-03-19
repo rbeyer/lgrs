@@ -1,4 +1,6 @@
 # !/bin/env python3
+#* Original file name: LGRS_Coordinate_Conversion_mk7.2.py
+#* Version: 7.2
 # =====================================================================
 ''' PROGRAM INFORMATION
 Program:  LGRS_Coordinate_Conversion_mk7.py 
