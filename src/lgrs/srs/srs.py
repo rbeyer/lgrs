@@ -146,23 +146,6 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     False
     """
 
-class GRS(metaclass=_caching._MetaMultiton):
-    """
-    Class for gridded reference systems, analogous to `pyproj.CRS`.
-    """
-
-    def __init__(self, ) -> None:
-        # Support instantiation by "LGRS:" and "ACC:", or maybe drop the
-        # colons?
-        # Note: Use of custom authorities is explicitly recommended in
-        # the PROJ docs
-        # (https://proj.org/en/stable/apps/projinfo.html#cmdoption-projinfo-output-id).
-        # Note: We could test "LGRS" and "ACC" against
-        # `pyproj.database.get_authorities()` at startup and issue a
-        # warning if there is a collision, as future-proofing
-        # precaution.
-        ...
-
 # Note: Only identical calls are cached here. Compare:
 # `_CrsParameters.make_crs()`.
 @_caching._optionally_cache
@@ -230,6 +213,29 @@ def make_lunar_crs(
     params = _CrsParameters(**locals())
     crs = params.make_crs()
     return crs
+
+
+
+# endregion
+##############################################################################
+# region> GRIDDED REFERENCE SYSTEMS
+##############################################################################
+class GRS(metaclass=_caching._MetaMultiton):
+    """
+    Class for gridded reference systems, analogous to `pyproj.CRS`.
+    """
+
+    def __init__(self, ) -> None:
+        # Support instantiation by "LGRS:" and "ACC:", or maybe drop the
+        # colons?
+        # Note: Use of custom authorities is explicitly recommended in
+        # the PROJ docs
+        # (https://proj.org/en/stable/apps/projinfo.html#cmdoption-projinfo-output-id).
+        # Note: We could test "LGRS" and "ACC" against
+        # `pyproj.database.get_authorities()` at startup and issue a
+        # warning if there is a collision, as future-proofing
+        # precaution.
+        ...
 
 
 
