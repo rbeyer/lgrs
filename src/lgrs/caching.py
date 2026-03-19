@@ -49,24 +49,67 @@ def _store_to_cache(key: _collections.abc.Hashable, value: _typing.Any) -> None:
 ##############################################################################
 # region> INTRA-PACKAGE USE
 ##############################################################################
-class _Multiton:
-    _is_from_cache: bool = False  # Default.
+class _MetaMultiton(type):
+    """
+    Metaclass to support optional caching.
 
-    def __new__(cls, *args, **kwargs) -> _typing.Any:
+    Caching is controlled by `enable_caching()`.
+
+    Examples
+    --------
+    >>> @MyClass(metaclass=_MetaMultiton):
+    ...     def __init__(self, string: str) -> None:
+    ...         pass
+    >>> enable_caching()
+    >>> x = MyClass("spam")
+    >>> y = MyClass("spam")
+    >>> y is x
+    True
+    >>> z = MyClass("pram")
+    >>> z is x
+    False
+    """
+    def __call__(cls, *args, **kwargs) -> _typing.Any:
         key, cached = _query_cache(cls, *args, **kwargs)
-        if cached is _NOT_FOUND:
-            new = super().__new__(cls)
-            _store_to_cache(key, new)
-            return new
-        else:
-            # Note: Do not assign directly, in case `cached` is a frozen
-            # dataclass.
-            object.__setattr__(cached, "_is_from_cache", True)
+        if cached is not _NOT_FOUND:
             return cached
+        new = cls.__new__(cls, *args, **kwargs)
+        cls.__init__(new, *args, **kwargs)
+        _store_to_cache(key, new)
+        return new
 
 def _optionally_cache(
         func: _collections.abc.Callable
 ) -> _collections.abc.Callable:
+    """
+    Decorate a function to optionally cache its results.
+
+    Caching is controlled by `enable_caching()`.
+
+    Parameters
+    ----------
+    func : callable
+        The callable to optionally cache.
+
+    Returns
+    -------
+    wrapped : callable
+        A wrapped version of `func`.
+
+    Examples
+    --------
+    >>> @_optionally_cache
+    ... def my_func(string: str) -> list:
+    ...     return []
+    >>> enable_caching()
+    >>> x = my_func("spam")
+    >>> y = my_func("spam")
+    >>> y is x
+    True
+    >>> z = my_func("pram")
+    >>> z is x
+    False
+    """
     @_functools.wraps(func)
     def wrapped(*args, **kwargs) -> _typing.Any:
         key, cached = _query_cache(func, *args, **kwargs)
