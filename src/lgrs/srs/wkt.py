@@ -158,7 +158,7 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
 # region> ZONES
 ##############################################################################
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class BaseZone(_abc.ABC):
+class BaseZone(metaclass=_caching._AbstractMetaMultiton):
     extended_ltm: bool = False
     hemisphere: str
     datum_name: str = "IAU_2015:30100"
@@ -213,7 +213,7 @@ class BaseZone(_abc.ABC):
         ...
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class LpsZone(_caching._Multiton, BaseZone):
+class LpsZone(BaseZone):
     number: None = None  # Ignored, but included to parallel `LtmZone`.
 
     # * INITIALIZATION. -----------------------------------------------
@@ -266,7 +266,7 @@ class LpsZone(_caching._Multiton, BaseZone):
         return wkt
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class LtmZone(_caching._Multiton, BaseZone):
+class LtmZone(BaseZone):
     number: int
 
     # * INITIALIZATION. -----------------------------------------------
