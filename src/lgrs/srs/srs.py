@@ -46,7 +46,7 @@ class CRS(_caching._Multiton, _pyproj.CRS):
     True
     # However, equivalent arguments are not guaranteed to cache identically.
     >>> crs_utm3 = CRS("WGS 84 / UTM zone 15N")
-    >>> crs_utm3.is_exact_same(crs_utm2)
+    >>> crs_utm3.is_exact_same(crs_utm)
     True
     >>> crs_utm3 is crs_utm
     False
