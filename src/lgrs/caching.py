@@ -7,6 +7,7 @@
 ##############################################################################
 # region> IMPORT
 ##############################################################################
+import abc as _abc
 import collections as _collections
 import functools as _functools
 import typing as _typing
@@ -77,6 +78,18 @@ class _MetaMultiton(type):
         cls.__init__(new, *args, **kwargs)
         _store_to_cache(key, new)
         return new
+
+class _AbstractMetaMultiton(_abc.ABCMeta):
+    """
+    Metaclass to support optional caching, that inherits from `abc.ABCMeta`.
+
+    Caching is controlled by `enable_caching()`.
+
+    See Also
+    --------
+    _MetaMultiton : Concrete equivalent, with examples.
+    """
+    __call__ = _MetaMultiton.__call__
 
 def _optionally_cache(
         func: _collections.abc.Callable
