@@ -33,7 +33,7 @@ _crs_name_pattern = _re.compile(
     "$"  # Match to end.
 )
 
-class CRS(_caching._Multiton, _pyproj.CRS):
+class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     """
     Equivalent to `pyproj.CRS` with caching support.
 
@@ -171,7 +171,7 @@ def make_lps_or_ltm_crs(
     #  a `.lps_zone`) to parallel `pyproj.CRS.utm_zone`.
     return crs
 
-class GRS(_caching._Multiton):
+class GRS(metaclass=_caching._MetaMultiton):
     """
     Class for gridded reference systems, analogous to `pyproj.CRS`.
     """
