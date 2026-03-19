@@ -58,7 +58,7 @@ class _MetaMultiton(type):
 
     Examples
     --------
-    >>> @MyClass(metaclass=_MetaMultiton):
+    >>> class MyClass(metaclass=_MetaMultiton):
     ...     def __init__(self, string: str) -> None:
     ...         pass
     >>> enable_caching()
