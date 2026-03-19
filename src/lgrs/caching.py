@@ -59,7 +59,9 @@ class _Multiton:
             _store_to_cache(key, new)
             return new
         else:
-            cached._is_from_cache = True
+            # Note: Do not assign directly, in case `cached` is a frozen
+            # dataclass.
+            object.__setattr__(cached, "_is_from_cache", True)
             return cached
 
 def _optionally_cache(
