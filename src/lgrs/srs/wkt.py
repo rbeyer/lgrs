@@ -163,7 +163,7 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
 ##############################################################################
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class BaseZone(metaclass=_caching._AbstractMetaMultiton):
-    extended_ltm: bool = False
+    extend_ltm: bool = False
     hemisphere: str
     datum_name: str = DATUM_NAME
 
@@ -233,7 +233,7 @@ class LpsZone(BaseZone):
     def maximum_latitude(self) -> float:
         if self.hemisphere == "N":
             return 90.
-        elif self.extended_ltm:
+        elif self.extend_ltm:
             return -LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
             return -LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
@@ -242,7 +242,7 @@ class LpsZone(BaseZone):
     def minimum_latitude(self) -> float:
         if self.hemisphere == "S":
             return -90.
-        elif self.extended_ltm:
+        elif self.extend_ltm:
             return LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
             return LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
@@ -310,7 +310,7 @@ class LtmZone(BaseZone):
     def maximum_latitude(self) -> float:
         if self.hemisphere == "S":
             return 0
-        elif self.extended_ltm:
+        elif self.extend_ltm:
             return LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
             return LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
@@ -323,7 +323,7 @@ class LtmZone(BaseZone):
     def minimum_latitude(self) -> float:
         if self.hemisphere == "N":
             return 0
-        elif self.extended_ltm:
+        elif self.extend_ltm:
             return -LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
             return -LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE

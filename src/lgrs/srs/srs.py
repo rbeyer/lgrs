@@ -42,7 +42,7 @@ class _CrsParameters:
     zone: int | None = None
     south: bool | None = None
     ellps: str | None = None
-    extended_ltm: bool = False
+    extend_ltm: bool = False
 
     def __post_init__(self, name: str | None) -> None:
         # Parse `name`, if specified.
@@ -50,7 +50,7 @@ class _CrsParameters:
             if (self.proj, self.zone, self.south, self.ellps).count(None) != 4:
                 raise TypeError(
                     "If `name` is specified, all other arguments "
-                    "except for `extended_ltm` must be `None`"
+                    "except for `extend_ltm` must be `None`"
                 )
             self._parse_name(name)
 
@@ -116,7 +116,7 @@ class _CrsParameters:
         hemisphere = ("S" if self.south else "N")
         zone_instance = type_(
             number=self.zone, hemisphere=hemisphere,
-            extended_ltm=self.extended_ltm, datum_name=self.ellps
+            extend_ltm=self.extend_ltm, datum_name=self.ellps
         )
         crs = CRS.from_wkt(zone_instance.wkt)
         # TODO: Retain? Document?
@@ -153,7 +153,7 @@ def make_lunar_crs(
         name: str | None = None, *,
         proj: str | None = None, zone: int | None = None,
         south: bool | None = None, ellps: str | None = None,
-        extended_ltm: bool = False,
+        extend_ltm: bool = False,
 ) -> CRS:
     """
     Return LPS or LTM zone `CRS` using UTM-like `proj.CRS()` arguments.
@@ -164,7 +164,7 @@ def make_lunar_crs(
     ----------
     name : str, optional
         String name of `crs`. If specified, all remaining arguments, except
-        for `extended_ltm`, are interpreted from `name` and cannot be
+        for `extend_ltm`, are interpreted from `name` and cannot be
         independently specified.
     proj : str, optional
         "LTM" or "LPS". If not specified, `proj` is inferred from `zone`.
@@ -176,7 +176,7 @@ def make_lunar_crs(
         unless `name` is specified.
     ellps : str, default="IAU_2015:30100"
         The name of the `crs` ellipsoid. Only "IAU_2015:30100" is supported.
-    extended_ltm : bool, default=False
+    extend_ltm : bool, default=False
         Whether to use the extended LTM range of 80-82 degrees.
 
     Returns
