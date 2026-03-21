@@ -43,6 +43,10 @@ import lgrs.caching as _caching
 # Note: If any of these variables are modified from their M2025 values,
 # additional changes to the code will likely be necessary.
 
+# Datum.
+DATUM_NAME = "IAU_2015:30100"
+DATUM_WKT_ID = 'ID[“IAU”,30100,2015]'
+
 # Boundaries.
 LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE: float = 82.  # (degrees)
 LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE: float = 80.  # (degrees)
@@ -77,7 +81,7 @@ PROJCRS[“Moon (2015) - Sphere / Ocentric / {{north_or_south}} Polar”,
         LENGTHUNIT[“metre”,1]]],
     PRIMEM[“Reference Meridian”,0,
       ANGLEUNIT[“degree”,0.0174532925199433]],
-    ID[“IAU”,30100,2015]],
+    {DATUM_WKT_ID}],
   CONVERSION[“{{north_or_south}} Polar”,
     METHOD[“Polar Stereographic (variant A)”,
       ID[“EPSG”,9810]],
@@ -120,7 +124,7 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
         LENGTHUNIT["metre",1]]],
     PRIMEM["Reference Meridian",0,
       ANGLEUNIT["degree",0.0174532925199433]],
-    ID["IAU",30100,2015]],
+    {DATUM_WKT_ID}],
   CONVERSION["transverse Mercator",
     METHOD["transverse Mercator",
       ID["EPSG",9807]],
@@ -161,16 +165,16 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
 class BaseZone(metaclass=_caching._AbstractMetaMultiton):
     extended_ltm: bool = False
     hemisphere: str
-    datum_name: str = "IAU_2015:30100"
+    datum_name: str = DATUM_NAME
 
     # * UTILITIES. ----------------------------------------------------
     def _get_bbox_string(self) -> str:
         return f"BBOX[{self.minimum_latitude},{self.minimum_longitude},{self.maximum_latitude},{self.maximum_longitude}]"
 
     def _validate_datum_name(self) -> None:
-        if self.datum_name != "IAU_2015:30100":
+        if self.datum_name != DATUM_NAME:
             raise TypeError(
-                "`datum_name` must be 'IAU_2015:30100', not: "
+                f"`datum_name` must be {DATUM_NAME!r}, not: "
                 f"{self.datum_name!r}"
             )
 
@@ -248,7 +252,7 @@ class LpsZone(BaseZone):
         # Note: Format is loosely inspired by PROJ, e.g.,
         # "NAD83 / UTM zone 15N", though PROJ supports no UPS
         # equivalent.
-        return f"IAU_2015:30100 / LPS {self.hemisphere}"
+        return f"{DATUM_NAME} / LPS {self.hemisphere}"
 
     @_functools.cached_property
     def wkt(self) -> str:
@@ -332,7 +336,7 @@ class LtmZone(BaseZone):
     def name(self) -> str:
         # Note: Format is inspired by PROJ, e.g.,
         # "NAD83 / UTM zone 15N".
-        return f"IAU_2015:30100 / LTM zone {self.number}{self.hemisphere}"
+        return f"{DATUM_NAME} / LTM zone {self.number}{self.hemisphere}"
 
     @_functools.cached_property
     def wkt(self) -> str:
