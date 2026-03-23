@@ -497,8 +497,9 @@ def query_lunar_crs_info(
     inclusive_bounds : bool, default=False
         Whether to treat LPS and LTM boundaries as inclusive when applying
         spatial filters (`area_of_interest`, `latitude`, and `longitude`).
-        If `False`, the behavior is undefined but typically faster than
-        `True`.
+        If `False` and only one `*_ltm` argument is `True`, each coordinate
+        is associated with exactly one `CRS`. `False` is generally more
+        performant.
     latitude : float or iterable of floats, optional
         The latitude(s) to query.
     longitude : float or array, optional
