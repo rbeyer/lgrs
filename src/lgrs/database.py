@@ -231,16 +231,9 @@ def _parse_lunar_crs_short_name(short_name: str) -> _ShortNameParsed:
 ##############################################################################
 # region> INFO CLASS
 ##############################################################################
-@_functools.total_ordering
 class LunarCrsInfo(_pyproj_database.CRSInfo):
     """
     Subclass of `pyproj_database.CRSInfo`.
-
-    Instances sort by:
-        1) `.is_lps` before `.is_ltm`
-        2) by `.hemisphere` ("N" before "S")
-        3) by `.ltm_zone` (numerically)
-        4) by `.ltm_limit`
 
     Attributes
     ----------
@@ -261,6 +254,8 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     -------
     get_crs()
         Get the corresponding `pyproj.CRS` instance.
+    sorter()
+        Convenient sorter for `LunarCrsInfo` instances.
 
     See Also
     --------
@@ -271,12 +266,6 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     # created by that factory function.
     _short_name: str
     _short_name_parsed: _ShortNameParsed
-
-    def __eq__(self, other):
-        return  self._sort_tuple == other._sort_tuple
-
-    def __lt__(self, other):
-        return  self._sort_tuple < other._sort_tuple
 
     @_functools.cached_property
     def _sort_tuple(self) -> tuple[int, int, int | None, str]:
@@ -414,6 +403,44 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         crs = _srs.make_lunar_crs(name, **kwargs)
         return crs
 
+    @staticmethod
+    def sorter(info: LunarCrsInfo) -> tuple:
+        """
+        Function suitable for use as the `key` argument to `sorted()`.
+
+        Instances sort by:
+            1) `.is_lps` before `.is_ltm`
+            2) by `.hemisphere` ("N" before "S")
+            3) by `.ltm_zone` (numerically)
+            4) by `.ltm_limit`
+
+        Parameters
+        ----------
+        info : LunarCrsInfo
+            The instance to be sorted.
+
+        Returns
+        -------
+        sort_tuple : tuple
+            A `tuple` to support the described sort order.
+
+        Examples
+        --------
+        >>> info_list = query_lunar_crs_info(extended_ltm=True, polar_ltm=True)
+        >>> info_list.sort(key=LunarCrsInfo.sorter)
+        But note that the above sort is already applied by
+        `query_lunar_crs_info()`.
+        >>> first_info = info_list[0]
+        >>> all((first_info.lps_hemisphere == "N",
+        ...      first_info.ltm_limit == 80.))
+        True
+        >>> last_info = info_list[-1]
+        >>> all((last_info.ltm_zone == 45, last_info.hemisphere == "S",
+        ...      last_info.ltm_limit == 90.))
+        True
+        """
+        return info._sort_tuple
+
 # Note: Unfortunately, if we want to replicate
 # `pyproj.query_utm_crs_info()` as closely as possible, we'd need to
 # implement something like `pyproj.database.CRSInfo` (stub below) and
@@ -480,7 +507,8 @@ def query_lunar_crs_info(
     Returns
     -------
     infos : list[LunarCrsInfo]
-        List of LPS and/or LTM CRS information instances.
+        List of LPS and/or LTM CRS information instances, sorted by
+        `LunarCrsInfo.sorter`.
 
     Raises
     ------
@@ -624,7 +652,7 @@ def query_lunar_crs_info(
     # Gather unique `CRSInfo` instances and return.
     unique_crs_short_name_set = set(cum_crs_short_names)
     infos = list(map(LunarCrsInfo._from_short_name, unique_crs_short_name_set))
-    infos.sort()
+    infos.sort(key=LunarCrsInfo.sorter)
     return infos
 
 
