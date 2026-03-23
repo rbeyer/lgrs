@@ -17,6 +17,7 @@ import unittest
 # Internal.
 import lgrs.caching as caching
 import lgrs.srs.srs as srs
+import lgrs.srs.wkt as wkt
 
 
 
@@ -39,8 +40,7 @@ class TestDirectCrsGeneration(unittest.TestCase):
         self.assertEqual(proj_crs.area_of_use.south, south)
         self.assertEqual(proj_crs.area_of_use.east, east)
         self.assertEqual(proj_crs.area_of_use.west, west)
-        # TODO: Change string to `wkt.DATUM_NAME`.
-        iau_datum = crs.Datum.from_authority(*"IAU_2015:30100".split(":"))
+        iau_datum = crs.Datum.from_authority(*wkt.DATUM_NAME.split(":"))
         self.assertEqual(proj_crs.datum, iau_datum)
         # Note: Ultimately, this merely tests against the text of the
         # input WKT.
