@@ -42,15 +42,16 @@ class _CrsParameters:
     zone: int | None = None
     south: bool | None = None
     ellps: str | None = None
-    extend_ltm: bool = False
+    extended_ltm: bool = False
+    polar_ltm: bool = False
 
     def __post_init__(self, name: str | None) -> None:
         # Parse `name`, if specified.
         if name is not None:
             if (self.proj, self.zone, self.south, self.ellps).count(None) != 4:
                 raise TypeError(
-                    "If `name` is specified, all other arguments "
-                    "except for `extend_ltm` must be `None`"
+                    "If `name` is specified, all other arguments, except for "
+                    "`extended_ltm` and `polar_ltm`, must be `None`"
                 )
             self._parse_name(name)
 
@@ -92,12 +93,17 @@ class _CrsParameters:
             self.proj = self.proj.upper()
 
         # Check compatibility.
-        if self.proj == "LPS" and self.zone is not None:
-            raise TypeError(
-                f"If `proj` is {self.proj!r}, `zone` must be `None`, not: "
-                f"{self.zone!r}"
-            )
-        elif self.proj == "LTM" and self.zone is None:
+        if self.proj == "LPS":
+            if self.zone is not None:
+                raise TypeError(
+                    f"If `proj` is {self.proj!r}, `zone` must be `None`, not: "
+                    f"{self.zone!r}"
+                )
+            if self.polar_ltm:
+                raise TypeError(
+                    f"If `proj` is {self.proj!r}, `polar_ltm` must be `False`."
+                )
+        elif self.zone is None:
             raise TypeError(
                 f"If `proj` is {self.proj!r}, `zone` must be specified."
             )
@@ -116,13 +122,18 @@ class _CrsParameters:
         hemisphere = ("S" if self.south else "N")
         zone_instance = type_(
             number=self.zone, hemisphere=hemisphere,
-            extend_ltm=self.extend_ltm, datum_name=self.ellps
+            extended_ltm=self.extended_ltm, polar_ltm=self.polar_ltm,
+            datum_name=self.ellps
         )
         crs = CRS.from_wkt(zone_instance.wkt)
-        # TODO: Retain? Document?
+        # TODO: Retain? Document? Or `CRS` -> `LunarCrs` and share
+        #  convenience attribute generation (from `._short_name`) with
+        #  `database.LunarCrsInfo`?
         if self.proj == "LPS":
             crs.lps_hemisphere = hemisphere
+            crs.ltm_zone = None
         else:
+            crs.lps_hemisphere = None
             # Note: Parallels `CRS.utm_zone`.
             crs.ltm_zone = f"{self.zone}{hemisphere}"
         return crs
@@ -153,7 +164,7 @@ def make_lunar_crs(
         name: str | None = None, *,
         proj: str | None = None, zone: int | None = None,
         south: bool | None = None, ellps: str | None = None,
-        extend_ltm: bool = False,
+        extended_ltm: bool = False, polar_ltm: bool = False
 ) -> CRS:
     """
     Return LPS or LTM zone `CRS` using UTM-like `proj.CRS()` arguments.
@@ -164,8 +175,8 @@ def make_lunar_crs(
     ----------
     name : str, optional
         String name of `crs`. If specified, all remaining arguments, except
-        for `extend_ltm`, are interpreted from `name` and cannot be
-        independently specified.
+        for `extended_ltm` and `polar_ltm`, are interpreted from `name` and
+        cannot be independently specified.
     proj : str, optional
         "LTM" or "LPS". If not specified, `proj` is inferred from `zone`.
         That is, `zone=None` implies `proj="LPS"`, otherwise `proj="LTM"`.
@@ -176,13 +187,21 @@ def make_lunar_crs(
         unless `name` is specified.
     ellps : str, default="IAU_2015:30100"
         The name of the `crs` ellipsoid. Only "IAU_2015:30100" is supported.
-    extend_ltm : bool, default=False
-        Whether to use the extended LTM range of 80-82 degrees.
+    extended_ltm : bool, default=False
+        Whether to extend the LTM/LPS boundary to 82 degrees N or S.
+    polar_ltm : bool, default=False
+        Whether to extend LTM zones to 90 degrees N or S.
 
     Returns
     -------
     crs : CRS
         The LPS or LTM zone `CRS` instance.
+
+    Raises
+    ------
+    TypeError
+        If CRS is under- or over-specified, or if `proj` is "LPS" but
+        `polar_ltm` is `True`.
 
     Examples
     --------
