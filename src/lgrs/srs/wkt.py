@@ -163,7 +163,8 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
 ##############################################################################
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class BaseZone(metaclass=_caching._AbstractMetaMultiton):
-    extend_ltm: bool = False
+    extended_ltm: bool = False
+    polar_ltm: bool = False
     hemisphere: str
     datum_name: str = DATUM_NAME
 
@@ -186,6 +187,15 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
             )
 
     # * ATTRIBUTES. ----------------------------------------------------
+    @_functools.cached_property
+    def ltm_limit(self) -> float:
+        if self.polar_ltm:
+            return 90.
+        elif self.extended_ltm:
+            return LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
+        else:
+            return LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+
     @property
     @_abc.abstractmethod
     def maximum_latitude(self) -> float:
@@ -233,19 +243,15 @@ class LpsZone(BaseZone):
     def maximum_latitude(self) -> float:
         if self.hemisphere == "N":
             return 90.
-        elif self.extend_ltm:
-            return -LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
-            return -LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+            return -self.ltm_limit
 
     @_functools.cached_property
     def minimum_latitude(self) -> float:
         if self.hemisphere == "S":
             return -90.
-        elif self.extend_ltm:
-            return LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
-            return LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+            return self.ltm_limit
 
     @_functools.cached_property
     def name(self) -> str:
@@ -310,10 +316,8 @@ class LtmZone(BaseZone):
     def maximum_latitude(self) -> float:
         if self.hemisphere == "S":
             return 0
-        elif self.extend_ltm:
-            return LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
-            return LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+            return self.ltm_limit
 
     @_functools.cached_property
     def maximum_longitude(self) -> float:
@@ -323,10 +327,8 @@ class LtmZone(BaseZone):
     def minimum_latitude(self) -> float:
         if self.hemisphere == "N":
             return 0
-        elif self.extend_ltm:
-            return -LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
-            return -LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+            return -self.ltm_limit
 
     @_functools.cached_property
     def minimum_longitude(self) -> float:
