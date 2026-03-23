@@ -5,7 +5,7 @@ __email__ = "rbeyer@seti.org"  # TODO: Decide which, both?
 __version__ = "0.1.0"
 
 # Note: Analogous to `pyproj`:
-from lgrs.srs.srs import BaseSRS, CRS, GRS
+from lgrs.srs.srs import CRS, GRS
 from lgrs.transformer import BaseTransformer, GriddedTransformer
 
 # Note: Unlike in `pyproj`:
