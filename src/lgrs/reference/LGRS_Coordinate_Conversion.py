@@ -2561,7 +2561,7 @@ def main(switch, trunc_val, condensed=True):
                 else:
                     raise IndexError("Operation aborted: Number of inputs not correct."
                                     "Input for Condensed LTM: "
-                                    "\nzone\{1-45\}\nh\{N|S\}\n00000E\n00000N.")
+                                    "\nzone{1-45}\nh{N|S}\n00000E\n00000N.")
             # LPS:        h,E,N
             elif form_in == "LPS":
                 if len(sys.argv)-1 == 2:
@@ -2573,7 +2573,7 @@ def main(switch, trunc_val, condensed=True):
                 else:
                     raise IndexError("Operation aborted: Number of inputs not correct."
                                     "Input for Condensed LPS:"
-                                    "\nh\{N|S\}\n00000E\n00000N.")
+                                    "\nh{N|S}\n00000E\n00000N.")
 
             # LGRS:       lonBand,latBand,e25k,n25k,E,N
             elif form_in=="LGRS":
@@ -2588,8 +2588,8 @@ def main(switch, trunc_val, condensed=True):
                 else:
                     raise IndexError("Operation aborted: Number of inputs not correct."
                                 "Input for Condensed LGRS: "
-                                "\nlonBand\{1-45\}\nlatBand\{N|S\}\n"
-                                "e25k\{A-Z\}\nn25k\{A-Z\}\nE{00000}\nN{00000}")
+                                "\nlonBand{1-45}\nlatBand{N|S}\n"
+                                "e25k{A-Z}\nn25k{A-Z}\nE{00000}\nN{00000}")
             # Polar_LGRS  lonBand,e25k,n25k,E,N
             elif form_in == "PolarLGRS":
                 if len(sys.argv)-1 == 2:
@@ -2604,7 +2604,7 @@ def main(switch, trunc_val, condensed=True):
                 else:
                     raise IndexError("Operation aborted: Number of inputs not correct."
                                     "Input for Condensed Polar LGRS: "
-                                "\nlatBand\{N|S\}\ne25k\{A-Z\}\nn25k\{A-Z\}"
+                                "\nlatBand{N|S}\ne25k{A-Z}\nn25k{A-Z}"
                                 "\nE{00000}\nN{00000}")
             # LGRS_ACC:         lonBand,latBand,e25k,n25k,e1k,E,n1k,N
             elif form_in == "LGRS_ACC":
@@ -2622,8 +2622,8 @@ def main(switch, trunc_val, condensed=True):
                 else:
                     raise IndexError("Operation aborted: Number of inputs not correct."
                                      "Input for Condensed LGRS_ACC: "
-                                "\nlonBand\{1-45\}\nlatBand\{N|S\}\n"
-                                "e25k\{A-Z\}\nn25k\{A-Z\}\nE{00000}\nN{00000}"
+                                "\nlonBand{1-45}\nlatBand{N|S}\n"
+                                "e25k{A-Z}\nn25k{A-Z}\nE{00000}\nN{00000}"
                     "Input for LGRS_ACC:\nlonBand\nlatBand\ne25k\nn25k\ne1k\nn1k\nE\nN")
 
             elif form_in == "PolarLGRS_ACC":
