@@ -13,7 +13,7 @@ attempt to craft various pieces of code.  It is very messy and a work-in-process
 Nothing is guaranteed about structure until we pass the 1.0 version.
 
 Reference document that this library follows is
-is `McClernan, M.T., Dennis, M.L., Theriot, I.H., Hare, T.M., Archinal, B.A., Ostrach, L.R., Hunter, M.A., Miller, M.J., Beyer, R.A., Annex, A.M., and Lawrence, S.J., 2025, Lunar grid systems, coordinate systems, and map projections for the Artemis missions and lunar surface navigation: U.S. Geological Survey Techniques and Methods, book 11, chap. E1, 308 p., DOI: 10.3133/tm11E1 <https://doi.org/10.3133/tm11E1>`.
+is `McClernan, M.T., Dennis, M.L., Theriot, I.H., Hare, T.M., Archinal, B.A., Ostrach, L.R., Hunter, M.A., Miller, M.J., Beyer, R.A., Annex, A.M., and Lawrence, S.J., 2025, Lunar grid systems, coordinate systems, and map projections for the Artemis missions and lunar surface navigation: U.S. Geological Survey Techniques and Methods, book 11, chap. E1, 308 p., DOI: 10.3133/tm11E1 <https://doi.org/10.3133/tm11E1>`__.
 
 The code in the lgrs.reference modules are from Dr. McClernan's "mark 7.2" version.
 
