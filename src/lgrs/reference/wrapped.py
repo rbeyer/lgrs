@@ -8,27 +8,21 @@
 ##############################################################################
 # region> IMPORT
 ##############################################################################
+# External.
 from __future__ import annotations
 import builtins as _builtins
 import collections as _collections
 import contextlib as _contextlib
 import dataclasses as _dataclasses
 import functools as _functools
-import inspect as _inspect
 import io as _io
 import pathlib as _pathlib
 import sys as _sys
 import typing as _typing
 
-from sphinx.ext.inheritance_diagram import latex_visit_inheritance_diagram
-
-# endregion
-##############################################################################
-# region> READ SCRIPTS
-##############################################################################
-HOST_DIR_PATH = _pathlib.Path(__file__).parent
-COORDINATE_CONVERSION_PATH = HOST_DIR_PATH / "LGRS_Coordinate_Conversion_edited.py"
-COORDINATE_CONVERSION_CODE_STRING = COORDINATE_CONVERSION_PATH.read_text()
+# Internal.
+import lgrs.reference.LGRS_Coordinate_Conversion as _cconv
+_cconv.initialize_LGRS_function_globals()
 
 
 
@@ -50,20 +44,14 @@ def _execute_coordinate_conversion(
         method_name: str, value: _BaseLocus, trunc_val: int,
         return_type: type[_BaseLocus]
 ) -> _BaseLocus:
-    # Set script parameters.
-    explicit_globals = {
-        "info": False,
-        "trunc_val": trunc_val,
-        "condensed": False,
-    }
-    _sys.argv = ["", method_name, *value.spaced.split(" ")]
-    
     # Execute script, capturing stdout.
+    _sys.argv = ["", method_name, *value.spaced.split(" ")]
     f = _io.StringIO()
     with _contextlib.redirect_stdout(f):
         try:
-            exec(COORDINATE_CONVERSION_CODE_STRING, globals=explicit_globals)
+            _cconv.main(method_name, trunc_val, False)
         except SystemExit as e:
+            # TODO: Re-create this error and see if catching is still necessary.
             raise TypeError(f.getvalue())
     stdout_str = f.getvalue()
 
