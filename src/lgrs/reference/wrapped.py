@@ -45,6 +45,7 @@ def _execute_coordinate_conversion(
         return_type: type[_BaseLocus]
 ) -> _BaseLocus:
     # Execute script, capturing stdout.
+    orig_sys_argv = _sys.argv
     _sys.argv = ["", method_name, *value.spaced.split(" ")]
     f = _io.StringIO()
     with _contextlib.redirect_stdout(f):
@@ -53,6 +54,7 @@ def _execute_coordinate_conversion(
         except SystemExit as e:
             # TODO: Re-create this error and see if catching is still necessary.
             raise TypeError(f.getvalue())
+    _sys.argv = orig_sys_argv
     stdout_str = f.getvalue()
 
     # Create and return instance.
