@@ -8,569 +8,397 @@
 ##############################################################################
 # region> IMPORT
 ##############################################################################
-# External.
-import collections
-import inspect
-import pathlib
-import re
-import subprocess
-import sys
-import tempfile
+from __future__ import annotations
+import builtins as _builtins
+import collections as _collections
+import contextlib as _contextlib
+import dataclasses as _dataclasses
+import functools as _functools
+import inspect as _inspect
+import io as _io
+import pathlib as _pathlib
+import sys as _sys
+import typing as _typing
 
-# Internal.
-import lgrs.toy
+from sphinx.ext.inheritance_diagram import latex_visit_inheritance_diagram
 
 # endregion
-
-
-
 ##############################################################################
-# region> PATCHING
+# region> READ SCRIPTS
 ##############################################################################
-MODULE_PATH = pathlib.Path(__file__).parent
-COORD_CONVER_STR = (MODULE_PATH / r"LGRS_Coordinate_Conversion_mk7.2.py").read_text()
-GRID_GEN_STR = (MODULE_PATH / r"LGRS_Coordinate_Conversion_mk7.2.py").read_text()
+HOST_DIR_PATH = _pathlib.Path(__file__).parent
+COORDINATE_CONVERSION_PATH = HOST_DIR_PATH / "LGRS_Coordinate_Conversion_edited.py"
+COORDINATE_CONVERSION_CODE_STRING = COORDINATE_CONVERSION_PATH.read_text()
 
 
-def _get_method_name() -> str:
-    frame_infos = inspect.stack()
-    for i, frame_info in enumerate(frame_infos):
-        if frame_info.function == "_get_method_name":
-            break
+
+# endregion
+##############################################################################
+# region> UTILITIES
+##############################################################################
+def _coerce_to_int(string: str) -> int | None:
+    try:
+        float_val = float(string)
+    except ValueError:
+        return None
+    if float_val.is_integer():
+        return int(float_val)
     else:
-        raise TypeError("Could not find own call in stack.")
-    return frame_infos[i+2].function
+        return None
 
-
-def _sub_once(*, pattern: str, repl: str, string: str) -> str:
-    new_string, sub_count = re.subn(pattern, repl, string)
-    match sub_count:
-        case 0:
-            raise TypeError(f"pattern not found: {pattern!r}")
-        case 1:
-            return new_string
-        case _:
-            raise TypeError(f"pattern found in >1 place: {pattern!r}")
-
-
-def execute(original_code_string: str, *args, **kwargs) -> str:
-    patched_code_string = patch(original_code_string)
-    configured_code_string = set_globals(patched_code_string, **kwargs)
-    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
-        f.write(configured_code_string)
-    temp_path = pathlib.Path(f.name)
-    popen_args = [sys.executable, str(temp_path),
-                  _get_method_name(), *map(repr, args)]
-    with subprocess.Popen(popen_args,
-                          stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE) as p:
-        stdout_bytes, _ = p.communicate()
-    temp_path.unlink()
-    stdout_str = stdout_bytes.decode().strip()
-    if p.returncode:
-        raise TypeError(stdout_str)
-    else:
-        return stdout_str
-
-
-def patch(code_string: str) -> str:
-    for pattern, repl in (
-            ("(?m)^import sys$", "import sys; from sys import exit"),
-            ):
-        code_string = _sub_once(pattern=pattern, repl=repl, string=code_string)
-    return code_string
-
-
-def set_globals(code_string: str, **kwargs) -> str:
-    for var_name, var_value in kwargs.items():
-        code_string = _sub_once(pattern=f"(?m)^{var_name} = .+", 
-                                repl=f"{var_name} = {var_value!r}", 
-                                string=code_string)
-    return code_string
-
-# endregion
-
-
-
-##############################################################################
-# region> CONVERSION METHODS
-##############################################################################
-def LatLon2LTM(*, latitude: float, longitude: float, 
-               info: bool = False, trunc_val: int = 1, 
-               condensed: bool = True) -> str:
-    conformed_longitude = lgrs.toy.conform_longitude(longitude)
-    return execute(COORD_CONVER_STR, latitude, conformed_longitude,
-                   info=info, trunc_val=trunc_val, condensed=condensed)
-
-# endregion
-
-
-
-##############################################################################
-# region> UTILITY
-##############################################################################
-def calculate_disparity(*, latitude: float, longitude: float) -> float:
-    # Generate coordinate instances.
-    orig_coord_str = LatLon2LTM(latitude=latitude, longitude=longitude,
-                                trunc_val=0, condensed=False)
-    orig_coords = lgrs.toy.LtmCoordinates.from_string(orig_coord_str)
-    # TODO: Diagnose why fudge is necessary.
-    longitude2 = lgrs.toy.conform_longitude(longitude, fudge=True)
-    new_geo_coords = lgrs.toy.GeographicCoordinates(latitude=latitude, 
-                                                    longitude=longitude2)
-    # Note: Using extended LTM latitudes requires user interaction in
-    # 7.2 code.
-    new_coords = new_geo_coords.to_lps_or_ltm(extended_ltm=False)
+def _execute_coordinate_conversion(
+        method_name: str, value: _BaseLocus, trunc_val: int,
+        return_type: type[_BaseLocus]
+) -> _BaseLocus:
+    # Set script parameters.
+    explicit_globals = {
+        "info": False,
+        "trunc_val": trunc_val,
+        "condensed": False,
+    }
+    _sys.argv = ["", method_name, *value.spaced.split(" ")]
     
-    # Convert coordinate strings to coordinate instances.
-    dist = new_coords.grid_distance_to(orig_coords)
-    return dist
-    
+    # Execute script, capturing stdout.
+    f = _io.StringIO()
+    with _contextlib.redirect_stdout(f):
+        try:
+            exec(COORDINATE_CONVERSION_CODE_STRING, globals=explicit_globals)
+        except SystemExit as e:
+            raise TypeError(f.getvalue())
+    stdout_str = f.getvalue()
 
-def iterate_utm_zone_key_latitude_longitude_tuples(
-        use_extended: bool = False
-        ) -> collections.abc.Iterator[tuple[float, float]]:
-    if use_extended:
-        max_abs_lat = lgrs.toy.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
-    else:
-        max_abs_lat = lgrs.toy.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
-    for longitude in range(-180, 360, lgrs.toy.LTM_ZONE_HALF_WIDTH):
-        for latitude in (-max_abs_lat, -max_abs_lat / 2,
-                         0, max_abs_lat / 2, max_abs_lat):
-            yield (latitude, longitude)
+    # Create and return instance.
+    new = return_type.from_string(stdout_str.strip())
+    return new
+
+
+
+# endregion
+##############################################################################
+# region> DATACLASSES
+##############################################################################
+@_dataclasses.dataclass(kw_only=True, frozen=True)
+class _BaseLocus:
+
+    def __iter__(self) -> _collections.abc.Iterable:
+        return (getattr(self, field.name)
+                for field in _dataclasses.fields(self))
+
+    @classmethod
+    def from_string(
+            cls, string: str, *, coerce_to_int: bool = True
+    ) -> _BaseLocus:
+        # Note: `fields` and `parts` are mapped from last to first to
+        # accommodate leading optional arguments for `*Acc`.
+        fields = tuple(reversed(_dataclasses.fields(cls)))
+        parts = tuple(reversed(string.split(" ")))
+        if len(parts) > len(fields):
+            raise TypeError(
+                "`string` contains too many space-delimited "
+                f"components: {string!r}"
+            )
+        init_kwargs = {}
+        for field, part in zip(fields, parts):
+            val_typ = getattr(_builtins, field.type)
+            try:
+                val = val_typ(part)
+            except ValueError as e:
+                if (not coerce_to_int) or (field.type != "int"):
+                    raise e
+                val = _coerce_to_int(part)
+                if val is None:
+                    raise e
+            init_kwargs[field.name] = val
+        return cls(**init_kwargs)
+
+    @_functools.cached_property
+    def condensed(self) -> str:
+        return self.spaced.replace(" ", "")
+
+    @_functools.cached_property
+    def spaced(self) -> str:
+        strings = []
+        for val in self:
+            if val is None:
+                continue
+            if isinstance(val, str):
+                string = val
+            else:
+                string = repr(val)
+            strings.append(string)
+        return " ".join(strings)
+
+    def is_equal_to(
+            self, other: _typing.Self, *,
+            max_float_difference: float | None = None,
+            error: bool = False
+    ) -> bool:
+        # Validate and resolve arguments.
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                f"`other` must be of type {type(self).__name__}, not: {other!r}"
+            )
+        if max_float_difference is None:
+            # Note: Expected difference is "very small" but exact
+            # default magnitudes are not rigorous.
+            if isinstance(self, LatLon):
+                max_float_difference = 1e-12
+            else:
+                max_float_difference = 1e-9
+
+        # Compare.
+        for field, self_val, other_val in zip(
+                _dataclasses.fields(self), self, other, strict=True
+        ):
+            if self_val == other_val:
+                continue
+            if (field.type == "float"
+                and abs(self_val - other_val) <= max_float_difference):
+                continue
+            if not error:
+                return False
+            raise TypeError(
+                f"{field.name!r} values differ:\n"
+                f"    {self_val!r} vs. {other_val!r}"
+           )
+        return True
+
+@_dataclasses.dataclass(kw_only=True, frozen=True)
+class LpsAcc(_BaseLocus):
+    longitudinal_band: str
+    easting_area: str
+    northing_area: str
+    easting_1k: str
+    easting: int
+    northing_1k: str
+    northing: int
+
+@_dataclasses.dataclass(kw_only=True, frozen=True)
+class LtmAcc(_BaseLocus):
+    longitudinal_band: int
+    latitudinal_band: str
+    easting_area: str
+    northing_area: str
+    easting_1k: str
+    easting: int
+    northing_1k: str
+    northing: int
+
+@_dataclasses.dataclass(kw_only=True, frozen=True)
+class LatLon(_BaseLocus):
+    latitude: float
+    longitude: float
+
+@_dataclasses.dataclass(kw_only=True, frozen=True)
+class LpsLgrs(_BaseLocus):
+    longitudinal_band: str
+    easting_area: str
+    northing_area: str
+    easting: int
+    northing: int
+
+@_dataclasses.dataclass(kw_only=True, frozen=True)
+class LtmLgrs(_BaseLocus):
+    longitudinal_band: int
+    latitudinal_band: str
+    easting_area: str
+    northing_area: str
+    easting: int
+    northing: int
+
+@_dataclasses.dataclass(kw_only=True, frozen=True)
+class Lps(_BaseLocus):
+    hemisphere: str
+    easting: float
+    northing: float
+
+@_dataclasses.dataclass(kw_only=True, frozen=True)
+class Ltm(_BaseLocus):
+    zone_number: int
+    hemisphere: str
+    easting: float
+    northing: float
+
+
+
+# endregion
+##############################################################################
+# region> CONVERSION FUNCTIONS
+##############################################################################
+def LGRS2ACC(value: LtmLgrs, *, trunc_val: int = 0) -> LtmAcc:
+    return _execute_coordinate_conversion(
+        "LGRS2ACC", value, trunc_val, LtmAcc
+    )
+
+def LGRS2LGRS_ACC(value: LtmLgrs, *, trunc_val: int = 0) -> LtmAcc:
+    return _execute_coordinate_conversion(
+        "LGRS2LGRS_ACC", value, trunc_val, LtmAcc
+    )
+
+def LGRS2LTM(value: LtmLgrs, *, trunc_val: int = 0) -> Ltm:
+    return _execute_coordinate_conversion(
+        "LGRS2LTM", value, trunc_val, Ltm
+    )
+
+def LGRS2LatLon(value: LtmLgrs, *, trunc_val: int = 0) -> LatLon:
+    return _execute_coordinate_conversion(
+        "LGRS2LatLon", value, trunc_val, LatLon
+    )
+
+def LGRS_ACC2LGRS(value: LtmAcc, *, trunc_val: int = 0) -> LtmLgrs:
+    return _execute_coordinate_conversion(
+        "LGRS_ACC2LGRS", value, trunc_val, LtmLgrs
+    )
+
+def LGRS_ACC2LTM(value: LtmAcc, *, trunc_val: int = 0) -> Ltm:
+    return _execute_coordinate_conversion(
+        "LGRS_ACC2LTM", value, trunc_val, Ltm
+    )
+
+def LGRS_ACC2LatLon(value: LtmAcc, *, trunc_val: int = 0) -> LatLon:
+    return _execute_coordinate_conversion(
+        "LGRS_ACC2LatLon", value, trunc_val, LatLon
+    )
+
+def LPS2ACC(value: Lps, *, trunc_val: int = 0) -> LtmAcc:
+    return _execute_coordinate_conversion(
+        "LPS2ACC", value, trunc_val, LtmAcc
+    )
+
+def LPS2LatLon(value: Lps, *, trunc_val: int = 0) -> LatLon:
+    return _execute_coordinate_conversion(
+        "LPS2LatLon", value, trunc_val, LatLon
+    )
+
+def LPS2PolarLGRS(value: Lps, *, trunc_val: int = 0) -> LpsLgrs:
+    return _execute_coordinate_conversion(
+        "LPS2PolarLGRS", value, trunc_val, LpsLgrs
+    )
+
+def LPS2PolarLGRS_ACC(value: Lps, *, trunc_val: int = 0) -> LpsAcc:
+    return _execute_coordinate_conversion(
+        "LPS2PolarLGRS_ACC", value, trunc_val, LpsAcc
+    )
+
+def LTM2ACC(value: Ltm, *, trunc_val: int = 0) -> LtmAcc:
+    return _execute_coordinate_conversion(
+        "LTM2ACC", value, trunc_val, LtmAcc
+    )
+
+def LTM2LGRS(value: Ltm, *, trunc_val: int = 0) -> LtmLgrs:
+    return _execute_coordinate_conversion(
+        "LTM2LGRS", value, trunc_val, LtmLgrs
+    )
+
+def LTM2LGRS_ACC(value: Ltm, *, trunc_val: int = 0) -> LtmAcc:
+    return _execute_coordinate_conversion(
+        "LTM2LGRS_ACC", value, trunc_val, LtmAcc
+    )
+
+def LTM2LatLon(value: Ltm, *, trunc_val: int = 0) -> LatLon:
+    return _execute_coordinate_conversion(
+        "LTM2LatLon", value, trunc_val, LatLon
+    )
+
+def LatLon2ACC(value: LatLon, *, trunc_val: int = 0) -> LtmAcc:
+    return _execute_coordinate_conversion(
+        "LatLon2ACC", value, trunc_val, LtmAcc
+    )
+
+def LatLon2LGRS(value: LatLon, *, trunc_val: int = 0) -> LtmLgrs:
+    return _execute_coordinate_conversion(
+        "LatLon2LGRS", value, trunc_val, LtmLgrs
+    )
+
+def LatLon2LGRS_ACC(value: LatLon, *, trunc_val: int = 0) -> LtmAcc:
+    return _execute_coordinate_conversion(
+        "LatLon2LGRS_ACC", value, trunc_val, LtmAcc
+    )
+
+def LatLon2LPS(value: LatLon, *, trunc_val: int = 0) -> Lps:
+    return _execute_coordinate_conversion(
+        "LatLon2LPS", value, trunc_val, Lps
+    )
+
+def LatLon2LTM(value: LatLon, *, trunc_val: int = 0) -> Ltm:
+    return _execute_coordinate_conversion(
+        "LatLon2LTM", value, trunc_val, Ltm
+    )
+
+def LatLon2PolarLGRS(value: LatLon, *, trunc_val: int = 0) -> LpsLgrs:
+    return _execute_coordinate_conversion(
+        "LatLon2PolarLGRS", value, trunc_val, LpsLgrs
+    )
+
+def LatLon2PolarLGRS_ACC(value: LatLon, *, trunc_val: int = 0) -> LpsAcc:
+    return _execute_coordinate_conversion(
+        "LatLon2PolarLGRS_ACC", value, trunc_val, LpsAcc
+    )
+
+def LatLon2Polar_ACC(value: LatLon, *, trunc_val: int = 0) -> LpsAcc:
+    return _execute_coordinate_conversion(
+        "LatLon2Polar_ACC", value, trunc_val, LpsAcc
+    )
+
+def PolarLGRS2LPS(value: LpsLgrs, *, trunc_val: int = 0) -> Lps:
+    return _execute_coordinate_conversion(
+        "PolarLGRS2LPS", value, trunc_val, Lps
+    )
+
+def PolarLGRS2LatLon(value: LpsLgrs, *, trunc_val: int = 0) -> LatLon:
+    return _execute_coordinate_conversion(
+        "PolarLGRS2LatLon", value, trunc_val, LatLon
+    )
+
+def PolarLGRS2PolarLGRS_ACC(value: LpsLgrs, *, trunc_val: int = 0) -> LpsAcc:
+    return _execute_coordinate_conversion(
+        "PolarLGRS2PolarLGRS_ACC", value, trunc_val, LpsAcc
+    )
+
+def PolarLGRS2Polar_ACC(value: LpsLgrs, *, trunc_val: int = 0) -> LpsAcc:
+    return _execute_coordinate_conversion(
+        "PolarLGRS2Polar_ACC", value, trunc_val, LpsAcc
+    )
+
+def PolarLGRS_ACC2LPS(value: LpsAcc, *, trunc_val: int = 0) -> Lps:
+    return _execute_coordinate_conversion(
+        "PolarLGRS_ACC2LPS", value, trunc_val, Lps
+    )
+
+def PolarLGRS_ACC2LatLon(value: LpsAcc, *, trunc_val: int = 0) -> LatLon:
+    return _execute_coordinate_conversion(
+        "PolarLGRS_ACC2LatLon", value, trunc_val, LatLon
+    )
+
+def PolarLGRS_ACC2PolarLGRS(value: LpsAcc, *, trunc_val: int = 0) -> LpsLgrs:
+    return _execute_coordinate_conversion(
+        "PolarLGRS_ACC2PolarLGRS", value, trunc_val, LpsLgrs
+    )
+
+
 
 # endregion
 
+polar_latlon = LatLon(latitude=85, longitude=1)
+polar_lps = LatLon2LPS(polar_latlon)
+polar_lps_recovered = LPS2LatLon(polar_lps)
+polar_lps_recovered.is_equal_to(polar_latlon, error=True)
+# Note: Below call will error because recovery is not exact.
+# strict_result = polar_lps_recovered.is_equal_to(
+#     polar_latlon, max_float_difference=0., error=True
+# )
 
+lps_lgrs = LpsLgrs(
+    longitudinal_band="A", easting_area="Z", northing_area="S",
+    easting=13590, northing=8480
+)
+alt_lps_lgrs = LpsLgrs.from_string("A Z S 13590 08480")
+alt_lps_lgrs.is_equal_to(lps_lgrs, max_float_difference=0, error=True)
+lps_acc = PolarLGRS2PolarLGRS_ACC(lps_lgrs)
+lps_lgrs_recovered = PolarLGRS_ACC2PolarLGRS(lps_acc)
+lps_lgrs_recovered.is_equal_to(lps_lgrs)
 
-##############################################################################
-# region> TESTS
-##############################################################################
-# latlon_to_disparity = {}
-# prev_lon = None  # Initialize.
-# for lat, lon in iterate_utm_zone_key_latitude_longitude_tuples():
-#     if lon != prev_lon:
-#         print(f"lon = {lon}  [max disparity so far = {max(latlon_to_disparity.values(), default=0)}]")
-#         prev_lon = lon
-#         # if lon == -180:
-#         #     print("  will skip (incompatible with `osgeo`)")
-#     # Note: Not supported by `osgeo`.
-#     # if lon == -180:
-#     #     continue
-#     disp = calculate_disparity(latitude=lat, longitude=lon)
-#     latlon_to_disparity[(lat, lon)] = disp
-# disparities = list(latlon_to_disparity.values())
-# disparities.sort()
-# for latlon, disparity in latlon_to_disparity.items():
-#     if disparity < 1e-8:
-#         continue
-#     print(latlon, disparity)
-
-# Note: North jumps ~26 mm between the following two coordinates, which
-# are only separated by ~27.3 um, or ~10,000x less.
-# print(calculate_disparity(latitude=0, longitude=4.00000000001))
-# print(calculate_disparity(latitude=0, longitude=4.000000000001))
-
-# Note: Output below are all anomalously high disparities if `fudge` is
-# set to `False`. Indeed, all > 1e-8.
-"""
-(0, -180) 0.02586338818073273
-(0, -172) 0.02586338818073273
-(0, -164) 0.02586338818073273
-(0, -148) 0.02586338818073273
-(0, -132) 0.02586338818073273
-(0, -124) 0.02586338818073273
-(0, -116) 0.02586338818073273
-(0, -92) 0.02586338818073273
-(0, -84) 0.02586338818073273
-(0, -76) 0.02586338818073273
-(0, -68) 0.02586338818073273
-(0, -52) 0.02586338818073273
-(0, -44) 0.02586338818073273
-(0, -36) 0.02586338818073273
-(0, -28) 0.02586338818073273
-(0, -20) 0.02586338818073273
-(0, -12) 0.02586338818073273
-(0, -4) 0.02586338818073273
-(0, 4) 0.02586338818073273
-(0, 12) 0.02586338818073273
-(0, 20) 0.02586338818073273
-(0, 28) 0.02586338818073273
-(0, 36) 0.02586338818073273
-(0, 44) 0.02586338818073273
-(0, 52) 0.02586338818073273
-(0, 60) 0.02586338818073273
-(0, 92) 0.02586338818073273
-(0, 100) 0.02586338818073273
-(0, 108) 0.02586338818073273
-(0, 124) 0.02586338818073273
-(0, 132) 0.02586338818073273
-(0, 140) 0.02586338818073273
-(0, 148) 0.02586338818073273
-(0, 156) 0.02586338818073273
-(0, 164) 0.02586338818073273
-(0, 180) 0.02586338818073273
-(0, 188) 0.02586338818073273
-(0, 196) 0.02586338818073273
-(0, 212) 0.02586338818073273
-(0, 228) 0.02586338818073273
-(0, 236) 0.02586338818073273
-(0, 244) 0.02586338818073273
-(0, 268) 0.02586338818073273
-(0, 276) 0.02586338818073273
-(0, 284) 0.02586338818073273
-(0, 292) 0.02586338818073273
-(0, 308) 0.02586338818073273
-(0, 316) 0.02586338818073273
-(0, 324) 0.02586338818073273
-(0, 332) 0.02586338818073273
-(0, 340) 0.02586338818073273
-(0, 348) 0.02586338818073273
-(0, 356) 0.02586338818073273
-"""
-
-# Note: Ditto, but with `fudge=True`.
-"""
-(-80, -180) 5.2604398650321146e-08
-(-40.0, -180) 2.325138530435725e-07
-(0, -180) 3.036548150703311e-07
-(40.0, -180) 2.325138530435725e-07
-(80, -180) 5.2604398650321146e-08
-(-80, -172) 5.269154263522292e-08
-(-40.0, -172) 2.3304579617560474e-07
-(0, -172) 3.0442606657743454e-07
-(40.0, -172) 2.3304579617560474e-07
-(80, -172) 5.269154263522292e-08
-(-80, -164) 5.2604398650321146e-08
-(-40.0, -164) 2.325138530435725e-07
-(0, -164) 3.036548150703311e-07
-(40.0, -164) 2.325138530435725e-07
-(80, -164) 5.2604398650321146e-08
-(-80, -156) 5.25463029693461e-08
-(-40.0, -156) 2.3246425829614976e-07
-(0, -156) 3.036548150703311e-07
-(40.0, -156) 2.3246425829614976e-07
-(80, -156) 5.25463029693461e-08
-(-80, -148) 5.2604398650321146e-08
-(-40.0, -148) 2.325138530435725e-07
-(0, -148) 3.036548150703311e-07
-(40.0, -148) 2.325138530435725e-07
-(80, -148) 5.2604398650321146e-08
-(-80, -140) 5.25463029693461e-08
-(-40.0, -140) 2.3246425829614976e-07
-(0, -140) 3.036548150703311e-07
-(40.0, -140) 2.3246425829614976e-07
-(80, -140) 5.25463029693461e-08
-(-80, -132) 5.2604398650321146e-08
-(-40.0, -132) 2.325138530435725e-07
-(0, -132) 3.036548150703311e-07
-(40.0, -132) 2.325138530435725e-07
-(80, -132) 5.2604398650321146e-08
-(-80, -124) 5.2604398650321146e-08
-(-40.0, -124) 2.325138530435725e-07
-(0, -124) 3.036548150703311e-07
-(40.0, -124) 2.325138530435725e-07
-(80, -124) 5.2604398650321146e-08
-(-80, -116) 5.269154263522292e-08
-(-40.0, -116) 2.3304579617560474e-07
-(0, -116) 3.0442606657743454e-07
-(40.0, -116) 2.3304579617560474e-07
-(80, -116) 5.269154263522292e-08
-(-80, -108) 5.2633446583598814e-08
-(-40.0, -108) 2.3228979745855405e-07
-(0, -108) 3.0359660740941763e-07
-(40.0, -108) 2.3228979745855405e-07
-(80, -108) 5.2633446583598814e-08
-(-80, -100) 5.2633446583598814e-08
-(-40.0, -100) 2.3228979745855405e-07
-(0, -100) 3.0359660740941763e-07
-(40.0, -100) 2.3228979745855405e-07
-(80, -100) 5.2633446583598814e-08
-(-80, -92) 5.2604398650321146e-08
-(-40.0, -92) 2.325138530435725e-07
-(0, -92) 3.036548150703311e-07
-(40.0, -92) 2.325138530435725e-07
-(80, -92) 5.2604398650321146e-08
-(-80, -84) 5.269154263522292e-08
-(-40.0, -84) 2.3258056565641702e-07
-(0, -84) 3.0398950912058353e-07
-(40.0, -84) 2.3258056565641702e-07
-(80, -84) 5.269154263522292e-08
-(-80, -76) 5.269154263522292e-08
-(-40.0, -76) 2.3258056565641702e-07
-(0, -76) 3.0398950912058353e-07
-(40.0, -76) 2.3258056565641702e-07
-(80, -76) 5.269154263522292e-08
-(-80, -68) 5.269154263522292e-08
-(-40.0, -68) 2.3258056565641702e-07
-(0, -68) 3.0398950912058353e-07
-(40.0, -68) 2.3258056565641702e-07
-(80, -68) 5.269154263522292e-08
-(-80, -60) 5.25463029693461e-08
-(-40.0, -60) 2.3222311073926736e-07
-(0, -60) 3.032619133591652e-07
-(40.0, -60) 2.3222311073926736e-07
-(80, -60) 5.25463029693461e-08
-(-80, -52) 5.2662494578600104e-08
-(-40.0, -52) 2.32368481798783e-07
-(0, -52) 3.0368391890078783e-07
-(40.0, -52) 2.32368481798783e-07
-(80, -52) 5.2662494578600104e-08
-(-80, -44) 5.25753507788694e-08
-(-40.0, -44) 2.32368481798783e-07
-(0, -44) 3.0346564017236233e-07
-(40.0, -44) 2.32368481798783e-07
-(80, -44) 5.25753507788694e-08
-(-80, -36) 5.2662494578600104e-08
-(-40.0, -36) 2.32368481798783e-07
-(0, -36) 3.0368391890078783e-07
-(40.0, -36) 2.32368481798783e-07
-(80, -36) 5.2662494578600104e-08
-(-80, -28) 5.2662494578600104e-08
-(-40.0, -28) 2.324351814729728e-07
-(0, -28) 3.0380033422261477e-07
-(40.0, -28) 2.324351814729728e-07
-(80, -28) 5.2662494578600104e-08
-(-80, -20) 5.2662494578600104e-08
-(-40.0, -20) 2.32368481798783e-07
-(0, -20) 3.0368391890078783e-07
-(40.0, -20) 2.32368481798783e-07
-(80, -20) 5.2662494578600104e-08
-(-80, -12) 5.2662494578600104e-08
-(-40.0, -12) 2.3239755603293012e-07
-(0, -12) 3.0372757464647293e-07
-(40.0, -12) 2.3239755603293012e-07
-(80, -12) 5.2662494578600104e-08
-(-80, -4) 5.2662494578600104e-08
-(-40.0, -4) 2.3239755603293012e-07
-(0, -4) 3.036984708160162e-07
-(40.0, -4) 2.3239755603293012e-07
-(80, -4) 5.2662494578600104e-08
-(-80, 4) 5.2662494578600104e-08
-(-40.0, 4) 2.3239755603293012e-07
-(0, 4) 3.036984708160162e-07
-(40.0, 4) 2.3239755603293012e-07
-(80, 4) 5.2662494578600104e-08
-(-80, 12) 5.2662494578600104e-08
-(-40.0, 12) 2.32368481798783e-07
-(0, 12) 3.0368391890078783e-07
-(40.0, 12) 2.32368481798783e-07
-(80, 12) 5.2662494578600104e-08
-(-80, 20) 5.269154263522292e-08
-(-40.0, 20) 2.324557045234461e-07
-(0, 20) 3.0377123039215803e-07
-(40.0, 20) 2.324557045234461e-07
-(80, 20) 5.269154263522292e-08
-(-80, 28) 5.2662494578600104e-08
-(-40.0, 28) 2.32368481798783e-07
-(0, 28) 3.0368391890078783e-07
-(40.0, 28) 2.32368481798783e-07
-(80, 28) 5.2662494578600104e-08
-(-80, 36) 5.2662494578600104e-08
-(-40.0, 36) 2.32368481798783e-07
-(0, 36) 3.0368391890078783e-07
-(40.0, 36) 2.32368481798783e-07
-(80, 36) 5.2662494578600104e-08
-(-80, 44) 5.2604398650321146e-08
-(-40.0, 44) 2.325138530435725e-07
-(0, 44) 3.036548150703311e-07
-(40.0, 44) 2.325138530435725e-07
-(80, 44) 5.2604398650321146e-08
-(-80, 52) 5.25753507788694e-08
-(-40.0, 52) 2.32368481798783e-07
-(0, 52) 3.0346564017236233e-07
-(40.0, 52) 2.32368481798783e-07
-(80, 52) 5.25753507788694e-08
-(-80, 60) 5.2604398650321146e-08
-(-40.0, 60) 2.325138530435725e-07
-(0, 60) 3.036548150703311e-07
-(40.0, 60) 2.325138530435725e-07
-(80, 60) 5.2604398650321146e-08
-(-80, 68) 5.2633446583598814e-08
-(-40.0, 68) 2.3228979745855405e-07
-(0, 68) 3.0359660740941763e-07
-(40.0, 68) 2.3228979745855405e-07
-(80, 68) 5.2633446583598814e-08
-(-80, 76) 5.2633446583598814e-08
-(-40.0, 76) 2.3228979745855405e-07
-(0, 76) 3.0359660740941763e-07
-(40.0, 76) 2.3228979745855405e-07
-(80, 76) 5.2633446583598814e-08
-(-80, 84) 5.2633446583598814e-08
-(-40.0, 84) 2.3228979745855405e-07
-(0, 84) 3.0359660740941763e-07
-(40.0, 84) 2.3228979745855405e-07
-(80, 84) 5.2633446583598814e-08
-(-80, 92) 5.2604398650321146e-08
-(-40.0, 92) 2.325138530435725e-07
-(0, 92) 3.036548150703311e-07
-(40.0, 92) 2.325138530435725e-07
-(80, 92) 5.2604398650321146e-08
-(-80, 100) 5.2604398650321146e-08
-(-40.0, 100) 2.325138530435725e-07
-(0, 100) 3.036548150703311e-07
-(40.0, 100) 2.325138530435725e-07
-(80, 100) 5.2604398650321146e-08
-(-80, 108) 5.269154263522292e-08
-(-40.0, 108) 2.3258056565641702e-07
-(0, 108) 3.0398950912058353e-07
-(40.0, 108) 2.3258056565641702e-07
-(80, 108) 5.269154263522292e-08
-(-80, 116) 5.25463029693461e-08
-(-40.0, 116) 2.3246425829614976e-07
-(0, 116) 3.036548150703311e-07
-(40.0, 116) 2.3246425829614976e-07
-(80, 116) 5.25463029693461e-08
-(-80, 124) 5.2604398650321146e-08
-(-40.0, 124) 2.325138530435725e-07
-(0, 124) 3.036548150703311e-07
-(40.0, 124) 2.325138530435725e-07
-(80, 124) 5.2604398650321146e-08
-(-80, 132) 5.2604398650321146e-08
-(-40.0, 132) 2.325138530435725e-07
-(0, 132) 3.036548150703311e-07
-(40.0, 132) 2.325138530435725e-07
-(80, 132) 5.2604398650321146e-08
-(-80, 140) 5.269154263522292e-08
-(-40.0, 140) 2.3304579617560474e-07
-(0, 140) 3.0442606657743454e-07
-(40.0, 140) 2.3304579617560474e-07
-(80, 140) 5.269154263522292e-08
-(-80, 148) 5.2604398650321146e-08
-(-40.0, 148) 2.325138530435725e-07
-(0, 148) 3.036548150703311e-07
-(40.0, 148) 2.325138530435725e-07
-(80, 148) 5.2604398650321146e-08
-(-80, 156) 5.269154263522292e-08
-(-40.0, 156) 2.3304579617560474e-07
-(0, 156) 3.0442606657743454e-07
-(40.0, 156) 2.3304579617560474e-07
-(80, 156) 5.269154263522292e-08
-(-80, 164) 5.2604398650321146e-08
-(-40.0, 164) 2.325138530435725e-07
-(0, 164) 3.036548150703311e-07
-(40.0, 164) 2.325138530435725e-07
-(80, 164) 5.2604398650321146e-08
-(-80, 172) 5.25463029693461e-08
-(-40.0, 172) 2.3246425829614976e-07
-(0, 172) 3.036548150703311e-07
-(40.0, 172) 2.3246425829614976e-07
-(80, 172) 5.25463029693461e-08
-(-80, 180) 5.2604398650321146e-08
-(-40.0, 180) 2.325138530435725e-07
-(0, 180) 3.036548150703311e-07
-(40.0, 180) 2.325138530435725e-07
-(80, 180) 5.2604398650321146e-08
-(-80, 188) 5.269154263522292e-08
-(-40.0, 188) 2.3304579617560474e-07
-(0, 188) 3.0442606657743454e-07
-(40.0, 188) 2.3304579617560474e-07
-(80, 188) 5.269154263522292e-08
-(-80, 196) 5.2604398650321146e-08
-(-40.0, 196) 2.325138530435725e-07
-(0, 196) 3.036548150703311e-07
-(40.0, 196) 2.325138530435725e-07
-(80, 196) 5.2604398650321146e-08
-(-80, 204) 5.25463029693461e-08
-(-40.0, 204) 2.3246425829614976e-07
-(0, 204) 3.036548150703311e-07
-(40.0, 204) 2.3246425829614976e-07
-(80, 204) 5.25463029693461e-08
-(-80, 212) 5.2604398650321146e-08
-(-40.0, 212) 2.325138530435725e-07
-(0, 212) 3.036548150703311e-07
-(40.0, 212) 2.325138530435725e-07
-(80, 212) 5.2604398650321146e-08
-(-80, 220) 5.25463029693461e-08
-(-40.0, 220) 2.3246425829614976e-07
-(0, 220) 3.036548150703311e-07
-(40.0, 220) 2.3246425829614976e-07
-(80, 220) 5.25463029693461e-08
-(-80, 228) 5.2604398650321146e-08
-(-40.0, 228) 2.325138530435725e-07
-(0, 228) 3.036548150703311e-07
-(40.0, 228) 2.325138530435725e-07
-(80, 228) 5.2604398650321146e-08
-(-80, 236) 5.2604398650321146e-08
-(-40.0, 236) 2.325138530435725e-07
-(0, 236) 3.036548150703311e-07
-(40.0, 236) 2.325138530435725e-07
-(80, 236) 5.2604398650321146e-08
-(-80, 244) 5.269154263522292e-08
-(-40.0, 244) 2.3304579617560474e-07
-(0, 244) 3.0442606657743454e-07
-(40.0, 244) 2.3304579617560474e-07
-(80, 244) 5.269154263522292e-08
-(-80, 252) 5.2633446583598814e-08
-(-40.0, 252) 2.3228979745855405e-07
-(0, 252) 3.0359660740941763e-07
-(40.0, 252) 2.3228979745855405e-07
-(80, 252) 5.2633446583598814e-08
-(-80, 260) 5.2633446583598814e-08
-(-40.0, 260) 2.3228979745855405e-07
-(0, 260) 3.0359660740941763e-07
-(40.0, 260) 2.3228979745855405e-07
-(80, 260) 5.2633446583598814e-08
-(-80, 268) 5.2604398650321146e-08
-(-40.0, 268) 2.325138530435725e-07
-(0, 268) 3.036548150703311e-07
-(40.0, 268) 2.325138530435725e-07
-(80, 268) 5.2604398650321146e-08
-(-80, 276) 5.269154263522292e-08
-(-40.0, 276) 2.3258056565641702e-07
-(0, 276) 3.0398950912058353e-07
-(40.0, 276) 2.3258056565641702e-07
-(80, 276) 5.269154263522292e-08
-(-80, 284) 5.269154263522292e-08
-(-40.0, 284) 2.3258056565641702e-07
-(0, 284) 3.0398950912058353e-07
-(40.0, 284) 2.3258056565641702e-07
-(80, 284) 5.269154263522292e-08
-(-80, 292) 5.269154263522292e-08
-(-40.0, 292) 2.3258056565641702e-07
-(0, 292) 3.0398950912058353e-07
-(40.0, 292) 2.3258056565641702e-07
-(80, 292) 5.269154263522292e-08
-(-80, 300) 5.25463029693461e-08
-(-40.0, 300) 2.3222311073926736e-07
-(0, 300) 3.032619133591652e-07
-(40.0, 300) 2.3222311073926736e-07
-(80, 300) 5.25463029693461e-08
-(-80, 308) 5.2662494578600104e-08
-(-40.0, 308) 2.32368481798783e-07
-(0, 308) 3.0368391890078783e-07
-(40.0, 308) 2.32368481798783e-07
-(80, 308) 5.2662494578600104e-08
-(-80, 316) 5.25753507788694e-08
-(-40.0, 316) 2.32368481798783e-07
-(0, 316) 3.0346564017236233e-07
-(40.0, 316) 2.32368481798783e-07
-(80, 316) 5.25753507788694e-08
-(-80, 324) 5.2662494578600104e-08
-(-40.0, 324) 2.32368481798783e-07
-(0, 324) 3.0368391890078783e-07
-(40.0, 324) 2.32368481798783e-07
-(80, 324) 5.2662494578600104e-08
-(-80, 332) 5.2662494578600104e-08
-(-40.0, 332) 2.324351814729728e-07
-(0, 332) 3.0380033422261477e-07
-(40.0, 332) 2.324351814729728e-07
-(80, 332) 5.2662494578600104e-08
-(-80, 340) 5.2662494578600104e-08
-(-40.0, 340) 2.32368481798783e-07
-(0, 340) 3.0368391890078783e-07
-(40.0, 340) 2.32368481798783e-07
-(80, 340) 5.2662494578600104e-08
-(-80, 348) 5.2662494578600104e-08
-(-40.0, 348) 2.3239755603293012e-07
-(0, 348) 3.0372757464647293e-07
-(40.0, 348) 2.3239755603293012e-07
-(80, 348) 5.2662494578600104e-08
-(-80, 356) 5.2662494578600104e-08
-(-40.0, 356) 2.3239755603293012e-07
-(0, 356) 3.036984708160162e-07
-(40.0, 356) 2.3239755603293012e-07
-(80, 356) 5.2662494578600104e-08
-"""
-
-# endregion
+# TODO: For `*LGRS` and `*ACC` types, change `int` -> `str`, to support
+#  leading zeros.
+# TODO: Extend `.from_string()` to support condensed strings (i.e.,
+#  strings without space delimiters) wherever necessary.
