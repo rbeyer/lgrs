@@ -1,6 +1,8 @@
 # !/bin/env python3
 #* Original file name: LGRS_Coordinate_Conversion_mk7.2.py
 #* Version: 7.2
+#* Only changes relative to the original file are to the following
+#* escape sequences in some strings: "\{" --> "{" and "\}" --> "}".
 # =====================================================================
 ''' PROGRAM INFORMATION
 Program:  LGRS_Coordinate_Conversion_mk7.py 
