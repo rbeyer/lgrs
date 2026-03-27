@@ -46,6 +46,16 @@ def _get_name_to_type(typ: type) -> dict[str, type]:
         name_to_type[name] = typ
     return name_to_type
 
+def _iter_value_strings(coords: _BaseCoordinate) -> _typing.Iterator[str]:
+    for value in coords:
+        match value:
+            case None:
+                continue
+            case str():
+                yield value
+            case _:
+                yield repr(value)
+
 
 
 # endregion
@@ -54,11 +64,14 @@ def _get_name_to_type(typ: type) -> dict[str, type]:
 ###############################################################################
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class _BaseCoordinate:
-    # TODO: Add `.__str__()`.
+    _template: _typing.ClassVar[str | None] = None
 
     def __iter__(self) -> _collections.abc.Iterable:
         return (getattr(self, field.name)
                 for field in _dataclasses.fields(self))
+
+    def __str__(self) -> str:
+        return self.string
 
     @classmethod
     def _from_ref_string(cls, string: str) -> _typing.Self:
@@ -79,6 +92,14 @@ class _BaseCoordinate:
             for part, (name, typ) in zip(parts, name_to_type.items())
         }
         return cls(**init_kwargs)
+
+    @_functools.cached_property
+    def string(self) -> str:
+        if self._template is None:
+            string = "".join(_iter_value_strings(self))
+        else:
+            string = self._template.format(**self.__dict__)
+        return string
 
     def is_equal_to(
             self, other: _typing.Self, *,
@@ -116,17 +137,21 @@ class _BaseCoordinate:
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LatLon(_BaseCoordinate):
+    # TODO: Should `._template` use N/S and E/W?
+    _template = "{latitude!r}° {longitude!r}°"
     latitude: float
     longitude: float
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class Lps(_BaseCoordinate):
+    _template = "{hemisphere}{easting!r}E{northing!r}N"
     hemisphere: str
     easting: float
     northing: float
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class Ltm(_BaseCoordinate):
+    _template = "{zone_number}{hemisphere}{easting!r}E{northing!r}N"
     zone_number: int
     hemisphere: str
     easting: float
