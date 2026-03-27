@@ -27,7 +27,7 @@ import lgrs.srs.wkt as wkt
 ###############################################################################
 class TestDirectCrsGeneration(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         caching.enable_caching(False, clear=True)
 
     def check_crs_generation(
@@ -48,7 +48,7 @@ class TestDirectCrsGeneration(unittest.TestCase):
             method_name_part, proj_crs.coordinate_operation.method_name
         )
 
-    def test_lps_generation(self):
+    def test_lps_generation(self) -> None:
         lps_n = srs.make_lunar_crs("N")
         self.check_crs_generation(
             proj_crs=lps_n,
@@ -59,7 +59,7 @@ class TestDirectCrsGeneration(unittest.TestCase):
             method_name_part="Stereographic"
         )
 
-    def test_ltm_generation(self):
+    def test_ltm_generation(self) -> None:
         ltm_1s = srs.make_lunar_crs("1S")
         self.check_crs_generation(
             proj_crs=ltm_1s,
@@ -72,7 +72,7 @@ class TestDirectCrsGeneration(unittest.TestCase):
 
 class TestDirectCrsInterconversion(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         caching.enable_caching(False, clear=True)
 
     def check_interconversion(
@@ -94,7 +94,7 @@ class TestDirectCrsInterconversion(unittest.TestCase):
         self.assertLess(abs(out_lat - in_lat), very_small_geo)
         self.assertLess(abs(out_lon - in_lon), very_small_geo)
 
-    def test_lps_interconversion(self):
+    def test_lps_interconversion(self) -> None:
         lps_s = srs.make_lunar_crs("S")
         # Note: `in_easting` and `in_northing` from run of 7.2 code with
         # `in_lat` and `in_lon` as inputs.
@@ -105,7 +105,7 @@ class TestDirectCrsInterconversion(unittest.TestCase):
             in_northing=542219.1855347467
         )
 
-    def test_ltm_interconversion(self):
+    def test_ltm_interconversion(self) -> None:
         ltm_45n = srs.make_lunar_crs("45N")
         # Note: `in_easting` and `in_northing` from run of 7.2 code with
         # `in_lat` and `in_lon` as inputs.
@@ -118,13 +118,13 @@ class TestDirectCrsInterconversion(unittest.TestCase):
 
 class TestCrsCaching(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         caching.enable_caching(True, clear=True)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         caching.enable_caching(False, clear=True)
 
-    def test_crs_caching(self):
+    def test_crs_caching(self) -> None:
         lps_s_core = srs.make_lunar_crs("S", extended_ltm=True)
         also_lps_s_core = srs.make_lunar_crs(
             proj="LPS", south=True, extended_ltm=True
