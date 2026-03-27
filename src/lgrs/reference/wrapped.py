@@ -53,8 +53,7 @@ def _execute_coordinate_conversion(
 ) -> _coords._BaseCoordinate:
     # Execute script, capturing stdout.
     orig_sys_argv = _sys.argv
-    string_components = (v if isinstance(v, str) else repr(v) for v in value)
-    _sys.argv = ["", method_name, *string_components]
+    _sys.argv = ["", method_name, *_coords._iter_value_strings(value)]
     f = _io.StringIO()
     with _contextlib.redirect_stdout(f):
         try:
@@ -232,3 +231,8 @@ def PolarLGRS_ACC2PolarLGRS(value: _coords.LpsAcc, *, trunc_val: int = 1) -> _co
 
 
 # endregion
+
+
+import lgrs.srs.coords as coords
+polar_latlon = coords.LatLon(latitude=85, longitude=1)
+polar_lps = LatLon2LPS(polar_latlon)
