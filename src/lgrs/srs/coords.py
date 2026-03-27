@@ -36,9 +36,11 @@ import typing as _typing
 # region> UTILITIES
 ###############################################################################
 @_functools.cache
-def _get_name_to_type(typ: type) -> dict[str, type]:
+def _get_field_name_to_type(typ: type) -> dict[str, type]:
     name_to_type = {}
     for name, typ in _typing.get_type_hints(typ).items():
+        if name[0] == "_":
+            continue
         if isinstance(typ, _types.UnionType):
             types = list(_typing.get_args(typ))
             types.remove(type(None))
@@ -81,15 +83,15 @@ class _BaseCoordinate:
         parts = tuple(string.split(" "))
         if len(parts) == 1:
             raise TypeError("`string` must be space-delimited")
-        name_to_type = _get_name_to_type(cls)
-        if len(parts) > len(name_to_type):
+        field_name_to_type = _get_field_name_to_type(cls)
+        if len(parts) > len(field_name_to_type):
             raise TypeError(
                 "`string` contains too many space-delimited "
                 f"components: {string!r}"
             )
         init_kwargs = {
             name: typ(part)
-            for part, (name, typ) in zip(parts, name_to_type.items())
+            for part, (name, typ) in zip(parts, field_name_to_type.items())
         }
         return cls(**init_kwargs)
 
@@ -192,9 +194,9 @@ class _GriddedCoordinate(_BaseCoordinate):
             match_dict["northing"] = e_and_n[digit_count:]
 
         # Coerce each argument to the correct type.
-        name_to_type = _get_name_to_type(cls)
+        field_name_to_type = _get_field_name_to_type(cls)
         init_kwargs = {
-            name: name_to_type[name](value_string)
+            name: field_name_to_type[name](value_string)
             for name, value_string in match_dict.items()
             if value_string is not None
         }
