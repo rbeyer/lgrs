@@ -12,10 +12,7 @@ Note: Below call would error because recovery is not exact:
 strict_result = polar_latlon_recovered.is_equal_to(
     polar_latlon, error=True, max_float_difference=0.
 )
->>> lps_lgrs = coords.LpsLgrs(
-...     longitudinal_band="A", easting_area="Z", northing_area="S",
-...     easting="13590", northing="08480"
-... )
+>>> lps_lgrs = coords.LpsLgrs.from_string("AZS1359008480")
 >>> lps_acc = PolarLGRS2PolarLGRS_ACC(lps_lgrs)
 >>> lps_lgrs_recovered = PolarLGRS_ACC2PolarLGRS(lps_acc)
 >>> lps_lgrs_recovered.is_equal_to(lps_lgrs, error=True)
@@ -231,8 +228,3 @@ def PolarLGRS_ACC2PolarLGRS(value: _coords.LpsAcc, *, trunc_val: int = 1) -> _co
 
 
 # endregion
-
-
-import lgrs.srs.coords as coords
-polar_latlon = coords.LatLon(latitude=85, longitude=1)
-polar_lps = LatLon2LPS(polar_latlon)
