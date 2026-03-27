@@ -44,8 +44,8 @@ class TestDirectCrsGeneration(unittest.TestCase):
         self.assertEqual(proj_crs.datum, iau_datum)
         # Note: Ultimately, this merely tests against the text of the
         # input WKT.
-        self.assertTrue(
-            method_name_part in proj_crs.coordinate_operation.method_name
+        self.assertIn(
+            method_name_part, proj_crs.coordinate_operation.method_name
         )
 
     def test_lps_generation(self):
@@ -87,12 +87,12 @@ class TestDirectCrsInterconversion(unittest.TestCase):
         # magnitudes of `very_small_projected` and `very_small_geo` are
         # not rigorous.
         very_small_projected = 1e-9
-        self.assertTrue(abs(out_easting - in_easting) < very_small_projected)
-        self.assertTrue(abs(out_northing - in_northing) < very_small_projected)
+        self.assertLess(abs(out_easting - in_easting), very_small_projected)
+        self.assertLess(abs(out_northing - in_northing), very_small_projected)
         out_lat, out_lon = transformer_to_geo.transform(in_easting, in_northing)
         very_small_geo = 1e-12
-        self.assertTrue(abs(out_lat - in_lat) < very_small_geo)
-        self.assertTrue(abs(out_lon - in_lon) < very_small_geo)
+        self.assertLess(abs(out_lat - in_lat), very_small_geo)
+        self.assertLess(abs(out_lon - in_lon), very_small_geo)
 
     def test_lps_interconversion(self):
         lps_s = srs.make_lunar_crs("S")
