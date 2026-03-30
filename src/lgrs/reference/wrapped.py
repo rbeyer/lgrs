@@ -34,7 +34,7 @@ import io as _io
 import sys as _sys
 
 # Internal.
-import lgrs.srs.coords as _coords
+import lgrs.coords as _coords
 import lgrs.reference.LGRS_Coordinate_Conversion as _cconv
 _cconv.initialize_LGRS_function_globals()
 
