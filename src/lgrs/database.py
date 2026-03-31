@@ -153,10 +153,13 @@ def _get_lunar_crs_short_names(
             hemi = ("N" if lat >= 0 else "S")
         if is_in_ltm(lat):
             # Below: Eq. 13 of M2025. Zones are 1-indexed.
-            zone_float = (lon + 180) / (2 * _wkt.LTM_ZONE_HALF_WIDTH)
+            zone_float = ((lon + 180) / (2 * _wkt.LTM_ZONE_HALF_WIDTH)) + 1
             zone_int = int(zone_float)
-            if not prefer_west_ltm or not zone_float.is_integer():
-                zone_int += 1  # *REASSIGNMENT*
+            if prefer_west_ltm and zone_float.is_integer():
+                if zone_int == 1:
+                    zone_int = 45  # *REASSIGNMENT*
+                else:
+                    zone_int -= 1  # *REASSIGNMENT*
             short_name = f"{zone_int:02}{hemi}"
         else:
             short_name = hemi
@@ -646,7 +649,7 @@ def query_lunar_crs_info(
         else:
             has_np = (90 in conformed_lat_set)
             has_sp = (-90 in conformed_lat_set)
-        kwargs2 = {"force_ltm": True}
+        kwargs2 = {"polar_ltm": True}
         if has_np and has_sp:
             kwargs2["south"] = None
         elif has_sp:
