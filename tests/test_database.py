@@ -32,144 +32,144 @@ class TestQueryDatabase(unittest.TestCase):
         "inclusive_bounds": False,
     }
 
-    def check_query(self, *, expected_short_names: list[str], **kwargs) -> None:
+    def check_query(self, *, expected_long_names: list[str], **kwargs) -> None:
         full_kwargs = self.default_kwargs.copy()
         full_kwargs.update(kwargs)
         infos = database.query_lunar_crs_info(**full_kwargs)
-        actual_short_names = [info._short_name for info in infos]
-        self.assertEqual(actual_short_names, expected_short_names)
+        actual_long_names = [info._long_name for info in infos]
+        self.assertEqual(actual_long_names, expected_long_names)
 
     def test_ltm_zone_center(self) -> None:
         self.check_query(
             latitude=40, longitude=0, inclusive_bounds=True,
-            expected_short_names=["23N"]
+            expected_long_names=["23N"]
         )
 
     def test_ltm_zone_equator_side(self) -> None:
         self.check_query(
             latitude=0, longitude=-176, inclusive_bounds=False,
-            expected_short_names=["01N"]
+            expected_long_names=["01N"]
         )
         self.check_query(
             latitude=0, longitude=-176, inclusive_bounds=True,
-            expected_short_names=["01N", "01S"]
+            expected_long_names=["01N", "01S"]
         )
 
     def test_ltm_zone_equator_corner(self) -> None:
         self.check_query(
             latitude=0, longitude=-180, inclusive_bounds=True,
-            expected_short_names=["01N", "45N", "01S", "45S"]
+            expected_long_names=["01N", "45N", "01S", "45S"]
         )
         self.check_query(
             latitude=0, longitude=-180, inclusive_bounds=True,
             contains=True,
-            expected_short_names=["01N", "45N", "01S", "45S"]
+            expected_long_names=["01N", "45N", "01S", "45S"]
         )
         self.check_query(
             latitude=[0, 0], longitude=[-180, -172], inclusive_bounds=True,
             contains=True,
-            expected_short_names=["01N", "01S"]
+            expected_long_names=["01N", "01S"]
         )
         self.check_query(
             latitude=0, longitude=180, inclusive_bounds=True,
-            expected_short_names=["01N", "45N", "01S", "45S"]
+            expected_long_names=["01N", "45N", "01S", "45S"]
         )
         self.check_query(
             latitude=0, longitude=-180, inclusive_bounds=True,
             contains=True,
-            expected_short_names=["01N", "45N", "01S", "45S"]
+            expected_long_names=["01N", "45N", "01S", "45S"]
         )
 
     def test_ltm_zone_lps_corner(self) -> None:
         self.check_query(
             latitude=-80, longitude=-180, inclusive_bounds=True,
-            expected_short_names=["S", "01S", "45S"]
+            expected_long_names=["S", "01S", "45S"]
         )
 
     def test_ltm_extensions(self) -> None:
         # 81 degrees.
         self.check_query(
             latitude=81, longitude=0,
-            expected_short_names=["N"]
+            expected_long_names=["N"]
         )
         self.check_query(
             latitude=81, longitude=0, extended_ltm=True,
-            expected_short_names=["N", "23N*"]
+            expected_long_names=["N", "23N*"]
         )
         self.check_query(
             latitude=81, longitude=0, extended_ltm=True, polar_ltm=True,
-            expected_short_names=["N", "23N*", "23N**"]
+            expected_long_names=["N", "23N*", "23N**"]
         )
         self.check_query(
             latitude=81, longitude=0, extended_ltm=False, polar_ltm=True,
-            expected_short_names=["N", "23N**"]
+            expected_long_names=["N", "23N**"]
         )
         self.check_query(
             latitude=81, longitude=0,
             primary_ltm=False, extended_ltm=False, polar_ltm=True,
-            expected_short_names=["23N**"]
+            expected_long_names=["23N**"]
         )
 
         # 83 degrees.
         self.check_query(
             latitude=83, longitude=0,
-            expected_short_names=["N"]
+            expected_long_names=["N"]
         )
         self.check_query(
             latitude=83, longitude=0, extended_ltm=True,
-            expected_short_names=["N", "N*"]
+            expected_long_names=["N", "N*"]
         )
         self.check_query(
             latitude=83, longitude=0, extended_ltm=True, polar_ltm=True,
-            expected_short_names=["N", "N*", "23N**"]
+            expected_long_names=["N", "N*", "23N**"]
         )
         self.check_query(
             latitude=83, longitude=0, extended_ltm=False, polar_ltm=True,
-            expected_short_names=["N", "23N**"]
+            expected_long_names=["N", "23N**"]
         )
         self.check_query(
             latitude=83, longitude=0,
             primary_ltm=False, extended_ltm=False, polar_ltm=True,
-            expected_short_names=["23N**"]
+            expected_long_names=["23N**"]
         )
 
         # 90 degrees.
         self.check_query(
             latitude=90, longitude=0, extended_ltm=True, polar_ltm=True,
-            expected_short_names=["N", "N*", "23N**"]
+            expected_long_names=["N", "N*", "23N**"]
         )
         self.check_query(
             latitude=-90, longitude=0, extended_ltm=True, polar_ltm=True,
-            expected_short_names=["S", "S*", "23S**"]
+            expected_long_names=["S", "S*", "23S**"]
         )
-        short_name_formatters = [f"{i:02}{{}}**".format
+        long_name_formatters = [f"{i:02}{{}}**".format
                                   for i in range(1, 46)]
-        short_name_formatters[:0] = ["{}".format, "{}*".format]
-        north_pole_short_names = [formatter("N")
-                                  for formatter in short_name_formatters]
+        long_name_formatters[:0] = ["{}".format, "{}*".format]
+        north_pole_long_names = [formatter("N")
+                                  for formatter in long_name_formatters]
         self.check_query(
             latitude=90, longitude=0, extended_ltm=True, polar_ltm=True,
             inclusive_bounds=True,
-            expected_short_names=north_pole_short_names
+            expected_long_names=north_pole_long_names
         )
-        south_pole_short_names = [formatter("S")
-                                  for formatter in short_name_formatters]
+        south_pole_long_names = [formatter("S")
+                                  for formatter in long_name_formatters]
         self.check_query(
             latitude=-90, longitude=0, extended_ltm=True, polar_ltm=True,
             inclusive_bounds=True,
-            expected_short_names=south_pole_short_names
+            expected_long_names=south_pole_long_names
         )
-        both_pole_short_names = (
-            north_pole_short_names[:2]
-            + south_pole_short_names[:2]
-            + north_pole_short_names[2:]
-            + south_pole_short_names[2:]
+        both_pole_long_names = (
+            north_pole_long_names[:2]
+            + south_pole_long_names[:2]
+            + north_pole_long_names[2:]
+            + south_pole_long_names[2:]
         )
         self.check_query(
             latitude=[-90, 90], longitude=[0, 0],
             extended_ltm=True, polar_ltm=True,
             inclusive_bounds=True,
-            expected_short_names=both_pole_short_names
+            expected_long_names=both_pole_long_names
         )
 
     def test_contains(self) -> None:
@@ -177,29 +177,29 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=[0, 0, 82, 82], longitude=[-4, 4, 4, -4],
             extended_ltm=True,
             inclusive_bounds=True, contains=True,
-            expected_short_names=["23N*"]
+            expected_long_names=["23N*"]
         )
         self.check_query(
             latitude=[0, 0], longitude=[-180, -171],
             contains=True,
-            expected_short_names=[]
+            expected_long_names=[]
         )
         self.check_query(
             latitude=[0, 0], longitude=[-180, -171],
             inclusive_bounds=True, contains=True,
-            expected_short_names=[]
+            expected_long_names=[]
         )
         self.check_query(
             latitude=[-90, 90], longitude=[0, 0],
             extended_ltm=True, polar_ltm=True,
             inclusive_bounds=True, contains=True,
-            expected_short_names=[]
+            expected_long_names=[]
         )
         self.check_query(
             latitude=[-90, 90], longitude=[0, 0],
             extended_ltm=True, polar_ltm=True,
             inclusive_bounds=True, contains=True,
-            expected_short_names=[]
+            expected_long_names=[]
         )
 
     def test_aoi(self) -> None:
@@ -210,7 +210,7 @@ class TestQueryDatabase(unittest.TestCase):
                 south_lat_degree=0, north_lat_degree=80,
             ),
             inclusive_bounds=True,
-            expected_short_names=["N", "22N", "23N", "24N", "22S", "23S", "24S"]
+            expected_long_names=["N", "22N", "23N", "24N", "22S", "23S", "24S"]
         )
         self.check_query(
             area_of_interest=pyproj.aoi.AreaOfInterest(
@@ -218,7 +218,7 @@ class TestQueryDatabase(unittest.TestCase):
                 south_lat_degree=0, north_lat_degree=80,
             ),
             inclusive_bounds=True, contains=True,
-            expected_short_names=["23N"]
+            expected_long_names=["23N"]
         )
 
     # TODO: Decide how we plan to deal with this test.
@@ -248,12 +248,12 @@ class TestQueryDatabase(unittest.TestCase):
                 area_of_interest=aoi,
                 extended_ltm=True, polar_ltm=True,
             )
-            aoi_short_names = [crs._short_name
+            aoi_long_names = [crs._long_name
                                for crs in aoi_crs_list]
             self.check_query(
                 latitude=dense_lats, longitude=dense_lons,
                 extended_ltm=True, polar_ltm=True,
-                expected_short_names=aoi_short_names
+                expected_long_names=aoi_long_names
             )
 
 
