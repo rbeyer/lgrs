@@ -10,6 +10,7 @@
 # External.
 from __future__ import annotations
 import dataclasses as _dataclasses
+import functools as _functools
 import pyproj as _pyproj
 import re as _re
 
@@ -48,7 +49,7 @@ class _CrsParameters:
     def __post_init__(self, name: str | None) -> None:
         # Parse `name`, if specified.
         if name is not None:
-            if (self.proj, self.zone, self.south, self.ellps).count(None) != 4:
+            if self._spec_count:
                 raise TypeError(
                     "If `name` is specified, all other arguments, except for "
                     "`extended_ltm` and `polar_ltm`, must be `None`"
@@ -70,8 +71,13 @@ class _CrsParameters:
         else:
             self.zone = int(num)
         self.south = (match.group("n_or_s").upper() == "S")
+        del self._spec_count  # Force recalculation.
 
     def _resolve_and_validate(self) -> None:
+        # In special, minimal-call case, return immediately.
+        if not self._spec_count:
+            return
+
         # Check for required parameters.
         # Note: PROJ defaults to `south=False` for UTM, but that default
         # is intentionally avoided here in preference of explicitness
@@ -81,7 +87,7 @@ class _CrsParameters:
 
         # Apply defaults and standardize.
         if self.ellps is None:
-            self.ellps = "IAU_2015:30100"
+            self.ellps = _wkt.DATUM_NAME
         else:
             self.ellps = self.ellps.upper()
         if self.proj is None:
@@ -108,10 +114,19 @@ class _CrsParameters:
                 f"If `proj` is {self.proj!r}, `zone` must be specified."
             )
 
+    @_functools.cached_property
+    def _spec_count(self) -> int:
+        spec_vals = (self.proj, self.zone, self.south, self.ellps)
+        unspec_count = spec_vals.count(None)
+        spec_count = len(spec_vals) - unspec_count
+        return spec_count
+
     # Note: Caching this method ensures that equivalent `_CrsParameters`
     # instances return the same `CRS` instance.
     @_caching._optionally_cache
     def make_crs(self) -> CRS:
+        if not self._spec_count:
+            return _pyproj.CRS(_wkt.DATUM_NAME)
         match self.proj:
             case "LPS":
                 type_ = _wkt.LpsZone
@@ -169,7 +184,8 @@ def make_lunar_crs(
     """
     Return LPS or LTM zone `CRS` using UTM-like `proj.CRS()` arguments.
 
-    See Examples section below.
+    As a convenience, `make_lunar_crs()` returns the underlying geographic
+    `CRS`. See Examples section below.
 
     Parameters
     ----------
@@ -184,7 +200,7 @@ def make_lunar_crs(
         The LTM zone. Should not be specified for LPS.
     south : bool, optional
         Whether `crs` is in the Southern Hemisphere. Must be specified,
-        unless `name` is specified.
+        unless `name` is specified or all arguments are defaulted.
     ellps : str, default="IAU_2015:30100"
         The name of the `crs` ellipsoid. Only "IAU_2015:30100" is supported.
     extended_ltm : bool, default=False
@@ -226,6 +242,14 @@ def make_lunar_crs(
     >>> ltm_crs4 = make_lunar_crs("23N")
     >>> lps_crs4.is_exact_same(lps_crs)
     >>> ltm_crs4.is_exact_same(lps_crs)
+    Finally, as a convenience, a default call returns the underlying
+    geographic `CRS`.
+    >>> geo_crs = make_lunar_crs()
+    >>> geo_crs2 = pyproj.CRS("IAU_2015:30100")
+    >>> geo_crs.is_exact_same(geo_crs2)
+    True
+    >>> geo_crs.is_exact_same(ltm_crs4.geodetic_crs)
+    True
     """
     # TODO: Determine whether to align `crs.name` with `name`. Instead,
     #  `crs.name` may be "Moon (2015) - Sphere / Ocentric..."
