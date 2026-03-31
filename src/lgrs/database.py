@@ -548,10 +548,10 @@ def query_lunar_crs_info(
             )
         case 2:
             if area_of_interest:
-                raw_lats = (area_of_interest.north_lat_degree,
-                            area_of_interest.south_lat_degree)
-                raw_lons = (area_of_interest.east_lon_degree,
-                            area_of_interest.west_lon_degree)
+                raw_lats = (area_of_interest.south_lat_degree,
+                            area_of_interest.north_lat_degree)
+                raw_lons = (area_of_interest.west_lon_degree,
+                            area_of_interest.east_lon_degree)
                 if not contains:
                     # Note: This grid sampling is guaranteed to sample
                     # all relevant LPS and LTM zones for all inputs.
