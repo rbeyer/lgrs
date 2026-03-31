@@ -127,7 +127,8 @@ def _get_lunar_crs_short_names(
         *, conformed_latitudes: _FloatIterable,
         conformed_longitudes: _FloatIterable,
         extended_ltm: bool = False, polar_ltm: bool = False,
-        prefer_ltm: bool = False, prefer_west_ltm: bool = False
+        prefer_ltm: bool = False, prefer_south_ltm: bool = False,
+        prefer_west_ltm: bool = False
 ) -> list[str]:
     # Determine LTM vs. LPS condition.
     if polar_ltm:
@@ -145,8 +146,11 @@ def _get_lunar_crs_short_names(
     # Evaluate each lat-lon pair.
     lunar_crs_short_names = []
     for lat, lon in zip(conformed_latitudes, conformed_longitudes):
-        # Note: This inequality is from M2025 code.
-        hemi = ("N" if lat >= 0 else "S")
+        if prefer_south_ltm:
+            hemi = ("N" if lat > 0 else "S")
+        else:
+            # Note: This inequality is from M2025 code.
+            hemi = ("N" if lat >= 0 else "S")
         if is_in_ltm(lat):
             # Below: Eq. 13 of M2025. Zones are 1-indexed.
             zone_float = (lon + 180) / (2 * _wkt.LTM_ZONE_HALF_WIDTH)
@@ -578,19 +582,26 @@ def query_lunar_crs_info(
         ltm_kwargs_list.append({"extended_ltm": False, "polar_ltm": True})
     if inclusive_bounds:
         prefer_ltms = (False, True)
+        prefer_south_ltms = (False, True)
         prefer_west_ltms = (False, True)
     else:
         prefer_ltms = (False,)
+        prefer_south_ltms = (False,)
         prefer_west_ltms = (False,)
 
     # Determine CRS short names.
     cum_crs_short_names = []
     for ltm_kwargs in ltm_kwargs_list:
         inner_crs_short_names = []
-        for this_prefer_ltm in prefer_ltms:
+        # Note: `prefer_ltm` and `prefer_south_ltm` can be iterated in
+        # parallel, because they apply at disjoint latitudes: the LTM/
+        # LPS boundary and the equator, respectively.
+        for this_prefer_ltm, this_prefer_south_ltm in zip(prefer_ltms,
+                                                          prefer_south_ltms):
             for this_prefer_west_ltm in prefer_west_ltms:
                 crs_short_names = get_lunar_crs_short_names(
                     prefer_ltm=this_prefer_ltm,
+                    prefer_south_ltm=this_prefer_south_ltm,
                     prefer_west_ltm=this_prefer_west_ltm,
                     **latlon_kwargs, **ltm_kwargs
                 )
