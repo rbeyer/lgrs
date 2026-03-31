@@ -470,6 +470,7 @@ class SRSInfo(_pyproj_database.CRSInfo):
 # `.ltm`, and `.ltm_extended`.
 def query_lunar_crs_info(
         datum_name: str | None = _wkt.DATUM_NAME,
+        pj_types: _pyproj.enums.PJType | _collections.abc.Iterable[_pyproj.enums.PJType] | None = None,
         area_of_interest: _pyproj_aoi.AreaOfInterest | None = None,
         contains: bool = False, *,
         primary_ltm: bool = True, extended_ltm: bool = False,
@@ -483,7 +484,10 @@ def query_lunar_crs_info(
     Parameters
     ----------
     datum_name : str, default="IAU_2015:30100"
-        The name of the datum.
+        The name of the datum. Only "IAU_2015:30100" is supported.
+    pj_types : pyproj.enums.PJType or iterable of that type, default=None
+        The type(s) of `CRS` for which information should be returned. If
+        `None`, no filter is applied.
     area_of_interest : AreaOfInterest, optional
         Filter `infos` by `area_of_interest`. Not compatible with `latitude`
         and `longitude`.
@@ -667,6 +671,12 @@ def query_lunar_crs_info(
     # Gather unique `CRSInfo` instances and return.
     unique_crs_short_name_set = set(cum_crs_short_names)
     infos = list(map(LunarCrsInfo._from_short_name, unique_crs_short_name_set))
+    if pj_types is not None:
+        pj_type_set = set(pj_types)
+        # *REASSIGNMENT*
+        infos = [info
+                 for info in infos
+                 if info.type in pj_type_set]
     infos.sort(key=LunarCrsInfo.sorter)
     return infos
 
