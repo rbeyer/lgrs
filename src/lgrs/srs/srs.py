@@ -276,7 +276,7 @@ class GRS:
     domain: _typing.Literal["LPS", "LTM", "BOTH", "INFER"] = "INFER"
     multi_zone: bool = False
     extended_ltm: bool = False
-    area25k: str | None = None
+    prefix: str = ""
 
     @classmethod
     def from_user_input(cls, *args, **kwargs) -> _typing.Self:
@@ -300,10 +300,12 @@ class GRS:
             determined by the first coordinate.
         extended_ltm : bool, default=False
             Whether to extend the LTM/LPS boundary to 82 degrees N and S.
-        area25k : str, optional
-            The string identifying the 25-km-grid area, which is the first
-            3-5 characters of an LGRS coordinate. Required if `form` is
-            "ACC".
+        prefix : str, default=""
+            Any number of characters that are guaranteed to start each
+            coordinate. For example, for `form="LGRS"`, `prefix="S"` would
+            constrain coordinates to the Southern Hemisphere. For `form="ACC"`,
+            `prefix` is required and must identify the 25-km-grid area, which is
+            the first 3-5 characters of an LGRS coordinate.
 
         Returns
         -------
