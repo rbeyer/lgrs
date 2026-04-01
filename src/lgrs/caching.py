@@ -27,8 +27,9 @@ def _query_cache(
         func_or_cls: _collections.abc.Callable | type, *args, **kwargs
 ) -> tuple[_collections.abc.Hashable, _typing.Any]:
     # Abort if caching is disabled.
+    default_result = (None, _NOT_FOUND)
     if not _CACHING_IS_ENABLED:
-        return (None, _NOT_FOUND)
+        return default_result
 
     # Generate cache key.
     kwargs_list = list(kwargs.items())
@@ -37,7 +38,17 @@ def _query_cache(
     key = (func_or_cls, args, kwargs_tuple)
 
     # Return cached instance or `None`.
-    cached = _cache.get(key, _NOT_FOUND)
+    try:
+        cached = _cache.get(key, _NOT_FOUND)
+    except TypeError as e:
+        # Note: If `key` is unhashable, return as though caching were
+        # disabled.
+        try:
+            hash(key)
+        except TypeError:
+            return default_result
+        else:
+            raise e
     return (key, cached)
 
 def _store_to_cache(key: _collections.abc.Hashable, value: _typing.Any) -> None:
