@@ -273,8 +273,9 @@ class GRS:
     intended as inputs to `LunarTransformer.from_srs()`.
     """
     form: _typing.Literal["ACC", "ACC_FULL", "LGRS"]
-    domain: _typing.Literal["LPS", "LTM", "BOTH", "INFER"] = "INFER"
+    digits : int | None = None
     multi_zone: bool = False
+    domain: _typing.Literal["LPS", "LTM", "BOTH", "INFER"] = "INFER"
     extended_ltm: bool = False
     prefix: str = ""
 
@@ -289,15 +290,25 @@ class GRS:
             The form of the gridded reference. "ACC_FULL" includes the LGRS
             prefix, that is, the first 3-5 characters of an LGRS coordinate
             which identifies the 25-km-grid area.
-        domain : {"LPS", "LTM", "BOTH", "INFER"}, default="INFER"
-            Whether the GRS supports the LPS or LTM domain, or both. If
-            "INFER", `LunarTransformer.transform()` infers "LPS" or "LTM" on
-            each call, from the first coordinate.
+        digits : int, optional
+            The number of digits in each northing and easting. If not specified,
+            instance supports all possible digit counts.
+                `digits`    precision
+                --------    ---------
+                0           25 km
+                2           1 km
+                3           100 m
+                4           10 m
+                5           1 m
         multi_zone : bool, default=False
             Whether to support multiple zones, where a zone is an LTM zone or
             an LPS-LGRS zone, which spans half of either pole. If `False`, on
             each call of `LunarTransformer.transform()`, the single zone used is
             determined by the first coordinate.
+        domain : {"LPS", "LTM", "BOTH", "INFER"}, default="INFER"
+            Whether the GRS supports the LPS or LTM domain, or both. If
+            "INFER", `LunarTransformer.transform()` infers "LPS" or "LTM" on
+            each call, from the first coordinate.
         extended_ltm : bool, default=False
             Whether to extend the LTM/LPS boundary to 82 degrees N and S.
         prefix : str, default=""
@@ -315,6 +326,10 @@ class GRS:
         # TODO: Revisit and finalize these arguments. (The current
         #  arguments and docs above are initial ideas only. These will
         #  likely change and some may be moved to `LunarTransformer`.)
+        # TODO: Decide whether all arguments should default to the most
+        #  general, even when such generality is unlikely to be used and
+        #  has performance cost. (For example, default `multi_zone` to
+        #  `True` and `domain` to `"BOTH"`?)
         return cls(*args, **kwargs)
 
 
