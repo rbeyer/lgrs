@@ -295,8 +295,8 @@ class GRS:
             each call, from the first coordinate.
         multi_zone : bool, default=False
             Whether to support multiple zones, where a zone is an LTM zone or
-            an LPS zone, which spans half of either pole. If `False`, on each
-            call of `LunarTransformer.transform()`, the single zone used is
+            an LPS-LGRS zone, which spans half of either pole. If `False`, on
+            each call of `LunarTransformer.transform()`, the single zone used is
             determined by the first coordinate.
         extended_ltm : bool, default=False
             Whether to extend the LTM/LPS boundary to 82 degrees N and S.
