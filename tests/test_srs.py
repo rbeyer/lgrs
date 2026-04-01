@@ -137,6 +137,3 @@ class TestCrsCaching(unittest.TestCase):
 
 
 # endregion
-
-if __name__ == "__main__":
-    unittest.main()
