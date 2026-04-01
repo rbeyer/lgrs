@@ -13,6 +13,7 @@ import dataclasses as _dataclasses
 import functools as _functools
 import pyproj as _pyproj
 import re as _re
+import typing as _typing
 
 # Internal.
 import lgrs.caching as _caching
@@ -263,23 +264,56 @@ def make_lunar_crs(
 ##############################################################################
 # region> GRIDDED REFERENCE SYSTEMS
 ##############################################################################
-class GRS(metaclass=_caching._MetaMultiton):
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class GRS:
     """
     Class for gridded reference systems, analogous to `pyproj.CRS`.
+
+    Instances are not especially useful on their own. They are primarily
+    intended as inputs to `LunarTransformer.from_srs()`.
     """
+    form: _typing.Literal["ACC", "ACC_FULL", "LGRS"]
+    domain: _typing.Literal["LPS", "LTM", "BOTH", "INFER"] = "INFER"
+    multi_zone: bool = False
+    extended_ltm: bool = False
+    area25k: str | None = None
 
-    def __init__(self, ) -> None:
-        # Support instantiation by "LGRS:" and "ACC:", or maybe drop the
-        # colons?
-        # Note: Use of custom authorities is explicitly recommended in
-        # the PROJ docs
-        # (https://proj.org/en/stable/apps/projinfo.html#cmdoption-projinfo-output-id).
-        # Note: We could test "LGRS" and "ACC" against
-        # `pyproj.database.get_authorities()` at startup and issue a
-        # warning if there is a collision, as future-proofing
-        # precaution.
-        ...
+    @classmethod
+    def from_user_input(cls, *args, **kwargs) -> _typing.Self:
+        """
+        Create a representation of a gridded reference system.
 
+        Parameters
+        ----------
+        form : {"LGRS", "ACC", "ACC_FULL"}
+            The form of the gridded reference. "ACC_FULL" includes the LGRS
+            prefix, that is, the first 3-5 characters of an LGRS coordinate
+            which identifies the 25-km-grid area.
+        domain : {"LPS", "LTM", "BOTH", "INFER"}, default="INFER"
+            Whether the GRS supports the LPS or LTM domain, or both. If
+            "INFER", `LunarTransformer.transform()` infers "LPS" or "LTM" on
+            each call, from the first coordinate.
+        multi_zone : bool, default=False
+            Whether to support multiple zones, where a zone is an LTM zone or
+            an LPS zone, which spans half of either pole. If `False`, on each
+            call of `LunarTransformer.transform()`, the single zone used is
+            determined by the first coordinate.
+        extended_ltm : bool, default=False
+            Whether to extend the LTM/LPS boundary to 82 degrees N and S.
+        area25k : str, optional
+            The string identifying the 25-km-grid area, which is the first
+            3-5 characters of an LGRS coordinate. Required if `form` is
+            "ACC".
+
+        Returns
+        -------
+        transformer : LunarTransformer
+            A new transformer, with the useful `.transform()` method.
+        """
+        # TODO: Revisit and finalize these arguments. (The current
+        #  arguments and docs above are initial ideas only. These will
+        #  likely change and some may be moved to `LunarTransformer`.)
+        return cls(*args, **kwargs)
 
 
 # endregion
