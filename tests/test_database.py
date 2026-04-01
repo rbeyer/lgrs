@@ -259,6 +259,3 @@ class TestQueryDatabase(unittest.TestCase):
 
 
 # endregion
-
-if __name__ == "__main__":
-    unittest.main()
