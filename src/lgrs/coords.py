@@ -25,7 +25,7 @@ from __future__ import annotations
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
-import re as _re
+import re as _regex
 import types as _types
 import typing as _typing
 
@@ -168,11 +168,11 @@ class Ltm(BaseCoordinate):
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class _GriddedCoordinate(BaseCoordinate):
     # TODO: Add `.truncate_to()`.
-    _pattern: _typing.ClassVar[_re.Pattern]
+    _pattern: _typing.ClassVar[_regex.Pattern]
 
     @_functools.cached_property
-    def _pattern_bytes(self) -> _re.Pattern:
-        return _re.compile(self._pattern.pattern.encode())
+    def _pattern_bytes(self) -> _regex.Pattern:
+        return _regex.compile(self._pattern.pattern.encode())
 
     @classmethod
     def from_string(cls, string: str) -> _typing.Self:
@@ -208,7 +208,7 @@ class _GriddedCoordinate(BaseCoordinate):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsAcc(_GriddedCoordinate):
-    _pattern = _re.compile(
+    _pattern = _regex.compile(
         "^"
         "(?P<longitudinal_band>[ABYZ])"
         "(?P<easting_area>[A-HJ-NP-Z])"
@@ -229,7 +229,7 @@ class LpsAcc(_GriddedCoordinate):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsLgrs(_GriddedCoordinate):
-    _pattern = _re.compile(
+    _pattern = _regex.compile(
         "^"
         "(?P<longitudinal_band>[ABYZ])"
         "(?P<easting_area>[A-HJ-NP-Z])"
@@ -245,7 +245,7 @@ class LpsLgrs(_GriddedCoordinate):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmAcc(_GriddedCoordinate):
-    _pattern = _re.compile(
+    _pattern = _regex.compile(
         "^"
         "(?P<longitudinal_band>[0-9]{1,2})"
         "(?P<latitudinal_band>[C-HJ-NP-X])"
@@ -268,7 +268,7 @@ class LtmAcc(_GriddedCoordinate):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmLgrs(_GriddedCoordinate):
-    _pattern = _re.compile(
+    _pattern = _regex.compile(
         "^"
         "(?P<longitudinal_band>[0-9]{1,2})"
         "(?P<latitudinal_band>[C-HJ-NP-X])"
