@@ -48,7 +48,7 @@ def _get_field_name_to_type(typ: type) -> dict[str, type]:
         name_to_type[name] = typ
     return name_to_type
 
-def _iter_value_strings(coords: _BaseCoordinate) -> _typing.Iterator[str]:
+def _iter_value_strings(coords: BaseCoordinate) -> _typing.Iterator[str]:
     for value in coords:
         match value:
             case None:
@@ -65,7 +65,7 @@ def _iter_value_strings(coords: _BaseCoordinate) -> _typing.Iterator[str]:
 # region> NON-GRIDDED COORDINATE TYPES
 ###############################################################################
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class _BaseCoordinate:
+class BaseCoordinate:
     _template: _typing.ClassVar[str | None] = None
 
     def __iter__(self) -> _collections.abc.Iterable:
@@ -138,21 +138,21 @@ class _BaseCoordinate:
         return True
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class LatLon(_BaseCoordinate):
+class LatLon(BaseCoordinate):
     # TODO: Should `._template` use N/S and E/W?
     _template = "{latitude!r}° {longitude!r}°"
     latitude: float
     longitude: float
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class Lps(_BaseCoordinate):
+class Lps(BaseCoordinate):
     _template = "{hemisphere}{easting!r}E{northing!r}N"
     hemisphere: str
     easting: float
     northing: float
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class Ltm(_BaseCoordinate):
+class Ltm(BaseCoordinate):
     _template = "{zone_number}{hemisphere}{easting!r}E{northing!r}N"
     zone_number: int
     hemisphere: str
@@ -166,7 +166,7 @@ class Ltm(_BaseCoordinate):
 # region> GRIDDED COORDINATE TYPES
 ###############################################################################
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class _GriddedCoordinate(_BaseCoordinate):
+class _GriddedCoordinate(BaseCoordinate):
     # TODO: Add `.truncate_to()`.
     _pattern: _typing.ClassVar[_re.Pattern]
 
@@ -230,7 +230,7 @@ class LpsLgrs(_GriddedCoordinate):
         "(?P<longitudinal_band>[ABYZ])"
         "(?P<easting_area>[A-HJ-NP-Z])"
         "(?P<northing_area>[-A-HJ-NP-Z+])"
-        "(?P<e_and_n>[0-9]+)?"
+        "(?P<e_and_n>[0-9]+)?"  # TODO: Change to explicit `easting` and `northing` with |'d 1, 2, or 3 length
         "$"
     )
     longitudinal_band: str
@@ -270,7 +270,7 @@ class LtmLgrs(_GriddedCoordinate):
         "(?P<latitudinal_band>[C-HJ-NP-X])"
         "(?P<easting_area>[A-HJK])"
         "(?P<northing_area>[A-HJ-NP-V])"
-        "(?P<e_and_n>[0-9]+)?"
+        "(?P<e_and_n>[0-9]+)?"  # TODO: Change to explicit `easting` and `northing` with |'d 1, 2, or 3 length
         "$"
     )
     longitudinal_band: int  # LTM zone
