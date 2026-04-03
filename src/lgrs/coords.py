@@ -25,7 +25,7 @@ from __future__ import annotations
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
-import re as _regex
+import regex as _regex
 import types as _types
 import typing as _typing
 
