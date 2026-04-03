@@ -22,6 +22,7 @@ Examples
 ###############################################################################
 # External.
 from __future__ import annotations
+import builtins as _builtins
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
@@ -79,6 +80,9 @@ class BaseCoordinate:
         return (getattr(self, field.name)
                 for field in _dataclasses.fields(self))
 
+    def __bytes__(self) -> _builtins.bytes:
+        return self.bytes
+
     def __str__(self) -> str:
         return self.string
 
@@ -101,6 +105,10 @@ class BaseCoordinate:
             for part, (name, typ) in zip(parts, field_name_to_type.items())
         }
         return cls(**init_kwargs)
+
+    @_functools.cached_property
+    def bytes(self) -> _builtins.bytes:
+        return self.string.encode()
 
     @_functools.cached_property
     def string(self) -> str:
@@ -175,22 +183,38 @@ class Ltm(BaseCoordinate):
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class _GriddedCoordinate(BaseCoordinate):
     # TODO: Add `.truncate_to()`.
+    __pattern_bytes: _typing.ClassVar[_regex.Pattern]
     _pattern: _typing.ClassVar[_regex.Pattern]
 
-    @_functools.cached_property
-    def _pattern_bytes(self) -> _regex.Pattern:
-        return _regex.compile(self._pattern.pattern.encode())
+    @classmethod
+    def _get_pattern_bytes(cls) -> _regex.Pattern:
+        try:
+            return cls.__pattern_bytes
+        except AttributeError:
+            cls.__pattern_bytes = _regex.compile(cls._pattern.pattern.encode())
+            return cls.__pattern_bytes
 
     @classmethod
-    def from_string(cls, string: str) -> _typing.Self:
+    def from_string(cls, string: str | bytes) -> _typing.Self:
+        # Determine pattern.
+        string_is_bytes = isinstance(string, bytes)
+        if string_is_bytes:
+            pattern = cls._get_pattern_bytes()
+        else:
+            pattern = cls._pattern
+
         # Match to pattern.
-        match = cls._pattern.search(string)
+        match = pattern.search(string)
         if match is None:
             raise TypeError(
                 f"`string` {string!r} is not in the supported format: "
-                f"{cls._pattern.pattern!r}"
+                f"{pattern.pattern!r}"
             )
         match_dict = match.groupdict()
+        if string_is_bytes:
+            # *REASSIGNMENT*
+            match_dict = {k: v.decode()
+                          for k, v in match_dict.items()}
 
         # Coerce each argument to the correct type.
         field_name_to_type = _get_field_name_to_type(cls)
