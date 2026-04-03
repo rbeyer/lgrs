@@ -58,6 +58,13 @@ def _iter_value_strings(coords: BaseCoordinate) -> _typing.Iterator[str]:
             case _:
                 yield repr(value)
 
+def _make_ne_pattern(*digit_count: int) -> str:
+    pattern = "|".join(
+        f"((?P<northing>[0-9]{{{i}}})(?P<easting>[0-9]{{{i}}}))"
+        for i in sorted(digit_count, reverse=True)
+    )
+    return pattern
+
 
 
 # endregion
@@ -185,18 +192,6 @@ class _GriddedCoordinate(BaseCoordinate):
             )
         match_dict = match.groupdict()
 
-        # Distinguish easting and northing, if necessary.
-        e_and_n = match_dict.pop("e_and_n", None)
-        if e_and_n is not None:
-            if len(e_and_n) % 2:
-                raise TypeError(
-                    "`easting` and `northing` components must each "
-                    "have the same number of digits"
-                )
-            digit_count = len(e_and_n) // 2
-            match_dict["easting"] = e_and_n[:digit_count]
-            match_dict["northing"] = e_and_n[digit_count:]
-
         # Coerce each argument to the correct type.
         field_name_to_type = _get_field_name_to_type(cls)
         init_kwargs = {
@@ -234,7 +229,7 @@ class LpsLgrs(_GriddedCoordinate):
         "(?P<longitudinal_band>[ABYZ])"
         "(?P<easting_area>[A-HJ-NP-Z])"
         "(?P<northing_area>[-A-HJ-NP-Z+])"
-        "(?P<e_and_n>[0-9]+)?"  # TODO: Change to explicit `easting` and `northing` with |'d 1, 2, or 3 length
+        f"({_make_ne_pattern(5, 4, 3, 2)})?"
         "$"
     )
     longitudinal_band: str
@@ -274,7 +269,7 @@ class LtmLgrs(_GriddedCoordinate):
         "(?P<latitudinal_band>[C-HJ-NP-X])"
         "(?P<easting_area>[A-HJK])"
         "(?P<northing_area>[A-HJ-NP-V])"
-        "(?P<e_and_n>[0-9]+)?"  # TODO: Change to explicit `easting` and `northing` with |'d 1, 2, or 3 length
+        f"({_make_ne_pattern(5, 4, 3, 2)})?"
         "$"
     )
     longitudinal_band: int  # LTM zone
