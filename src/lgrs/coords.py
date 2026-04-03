@@ -170,6 +170,10 @@ class _GriddedCoordinate(BaseCoordinate):
     # TODO: Add `.truncate_to()`.
     _pattern: _typing.ClassVar[_re.Pattern]
 
+    @_functools.cached_property
+    def _pattern_bytes(self) -> _re.Pattern:
+        return _re.compile(self._pattern.pattern.encode())
+
     @classmethod
     def from_string(cls, string: str) -> _typing.Self:
         # Match to pattern.
