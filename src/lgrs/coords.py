@@ -59,9 +59,9 @@ def _iter_value_strings(coords: BaseCoordinate) -> _typing.Iterator[str]:
             case _:
                 yield repr(value)
 
-def _make_ne_pattern(*digit_count: int) -> str:
+def _make_en_pattern(*digit_count: int) -> str:
     pattern = "|".join(
-        f"((?P<northing>[0-9]{{{i}}})(?P<easting>[0-9]{{{i}}}))"
+        f"((?P<easting>[0-9]{{{i}}})(?P<northing>[0-9]{{{i}}}))"
         for i in sorted(digit_count, reverse=True)
     )
     return pattern
@@ -253,7 +253,7 @@ class LpsLgrs(_GriddedCoordinate):
         "(?P<longitudinal_band>[ABYZ])"
         "(?P<easting_area>[A-HJ-NP-Z])"
         "(?P<northing_area>[-A-HJ-NP-Z+])"
-        f"({_make_ne_pattern(5, 4, 3, 2)})?"
+        f"({_make_en_pattern(5, 4, 3, 2)})?"
         "$"
     )
     longitudinal_band: str
@@ -293,7 +293,7 @@ class LtmLgrs(_GriddedCoordinate):
         "(?P<latitudinal_band>[C-HJ-NP-X])"
         "(?P<easting_area>[A-HJK])"
         "(?P<northing_area>[A-HJ-NP-V])"
-        f"({_make_ne_pattern(5, 4, 3, 2)})?"
+        f"({_make_en_pattern(5, 4, 3, 2)})?"
         "$"
     )
     longitudinal_band: int  # LTM zone
