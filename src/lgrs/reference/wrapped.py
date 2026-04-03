@@ -45,9 +45,9 @@ _cconv.initialize_LGRS_function_globals()
 # region> UTILITIES
 ##############################################################################
 def _execute_coordinate_conversion(
-        method_name: str, value: _coords._BaseCoordinate, trunc_val: int,
-        return_type: type[_coords._BaseCoordinate]
-) -> _coords._BaseCoordinate:
+        method_name: str, value: _coords.BaseCoordinate, trunc_val: int,
+        return_type: type[_coords.BaseCoordinate]
+) -> _coords.BaseCoordinate:
     # Execute script, capturing stdout.
     orig_sys_argv = _sys.argv
     _sys.argv = ["", method_name, *_coords._iter_value_strings(value)]
