@@ -6,7 +6,6 @@ __version__ = "0.1.0"
 
 # Note: Analogous to `pyproj`:
 from lgrs.srs.srs import CRS, GRS, make_lunar_crs
-from lgrs.transformer import BaseTransformer, GriddedTransformer
 
 # Note: Unlike in `pyproj`:
 from lgrs.caching import enable_caching
