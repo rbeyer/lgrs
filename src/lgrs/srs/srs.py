@@ -143,7 +143,7 @@ class _CrsParameters:
         )
         crs = CRS.from_wkt(zone_instance.wkt)
         # TODO: Retain? Document? Or `CRS` -> `LunarCrs` and share
-        #  convenience attribute generation (from `._short_name`) with
+        #  convenience attribute generation (from `._long_name`) with
         #  `database.LunarCrsInfo`?
         if self.proj == "LPS":
             crs.lps_hemisphere = hemisphere
