@@ -36,6 +36,16 @@ import typing as _typing
 ###############################################################################
 # region> UTILITIES
 ###############################################################################
+def _compile_regex_without_i_and_o(pattern: str) -> _regex.Pattern:
+    clean_pattern = _regex.sub("[A-Z]-[A-Z]", _remove_i_and_o, pattern)
+    return _regex.compile(clean_pattern)
+
+def _expand_char_range(char_range: str) -> list[str]:
+    start_char, end_char = char_range.split("-")
+    chars = [chr(i)
+             for i in range(ord(start_char), ord(end_char) + 1)]
+    return chars
+
 @_functools.cache
 def _get_field_name_to_type(typ: type) -> dict[str, type]:
     name_to_type = {}
@@ -65,6 +75,15 @@ def _make_en_pattern(*digit_count: int) -> str:
         for i in sorted(digit_count, reverse=True)
     )
     return pattern
+
+def _remove_i_and_o(match: _regex.Match) -> str:
+    expanded = _expand_char_range(match.group())
+    for char in ("I", "O"):
+        try:
+            expanded.remove(char)
+        except ValueError:
+            continue
+    return "".join(expanded)
 
 
 
@@ -227,14 +246,14 @@ class _GriddedCoordinate(BaseCoordinate):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsAcc(_GriddedCoordinate):
-    _pattern = _regex.compile(
+    _pattern = _compile_regex_without_i_and_o(
         "^"
         "(?P<longitudinal_band>[ABYZ])"
-        "(?P<easting_area>[A-HJ-NP-Z])"
-        "(?P<northing_area>[-A-HJ-NP-Z+])"
-        "(?P<easting_1k>[A-Z-])"
+        "(?P<easting_area>[A-Z])"
+        "(?P<northing_area>[-A-Z+])"
+        "(?P<easting_1k>[-A-Z])"
         "(?P<easting>[0-9]{1,3})?"
-        "(?P<northing_1k>[A-HJ-NP-Z-])"
+        "(?P<northing_1k>[-A-Z])"
         "(?P<northing>[0-9]{1,3})?"
         "$"
     )
@@ -248,11 +267,11 @@ class LpsAcc(_GriddedCoordinate):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsLgrs(_GriddedCoordinate):
-    _pattern = _regex.compile(
+    _pattern = _compile_regex_without_i_and_o(
         "^"
         "(?P<longitudinal_band>[ABYZ])"
-        "(?P<easting_area>[A-HJ-NP-Z])"
-        "(?P<northing_area>[-A-HJ-NP-Z+])"
+        "(?P<easting_area>[A-Z])"
+        "(?P<northing_area>[-A-Z+])"
         f"({_make_en_pattern(5, 4, 3, 2)})?"
         "$"
     )
@@ -264,15 +283,15 @@ class LpsLgrs(_GriddedCoordinate):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmAcc(_GriddedCoordinate):
-    _pattern = _regex.compile(
+    _pattern = _compile_regex_without_i_and_o(
         "^"
         "(?P<longitudinal_band>[0-9]{1,2})"
-        "(?P<latitudinal_band>[C-HJ-NP-X])"
-        "(?P<easting_area>[A-HJK])"
-        "(?P<northing_area>[A-HJ-NP-V])"
-        "(?P<easting_1k>[A-Z-])"
+        "(?P<latitudinal_band>[C-X])"
+        "(?P<easting_area>[A-K])"
+        "(?P<northing_area>[A-V])"
+        "(?P<easting_1k>[-A-Z])"
         "(?P<easting>[0-9]{1,3})?"
-        "(?P<northing_1k>[A-HJ-NP-Z-])"
+        "(?P<northing_1k>[-A-Z])"
         "(?P<northing>[0-9]{1,3})?"
         "$"
     )
@@ -287,12 +306,12 @@ class LtmAcc(_GriddedCoordinate):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmLgrs(_GriddedCoordinate):
-    _pattern = _regex.compile(
+    _pattern = _compile_regex_without_i_and_o(
         "^"
         "(?P<longitudinal_band>[0-9]{1,2})"
-        "(?P<latitudinal_band>[C-HJ-NP-X])"
-        "(?P<easting_area>[A-HJK])"
-        "(?P<northing_area>[A-HJ-NP-V])"
+        "(?P<latitudinal_band>[C-X])"
+        "(?P<easting_area>[A-K])"
+        "(?P<northing_area>[A-V])"
         f"({_make_en_pattern(5, 4, 3, 2)})?"
         "$"
     )
