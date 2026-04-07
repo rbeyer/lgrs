@@ -59,6 +59,23 @@ def _get_field_name_to_type(typ: type) -> dict[str, type]:
         name_to_type[name] = typ
     return name_to_type
 
+def _index_char_set(
+        pattern: _regex.Pattern | None = None, name: str | None = None, *,
+        chars: str | None = None, start:int
+) -> tuple[dict[str, int], dict[int, str]]:
+    # Expand character set, if necessary.
+    # Note: Not general (e.g., does not accommodate escaped ")").
+    if chars is None:
+        chars = _regex.search(
+            rf"\(\?P<{name}>\[(?P<gpattern>.*?)]\)", pattern.pattern
+        ).group("gpattern")
+
+    # Convert to mappings.
+    indices = range(start, len(chars) + start)
+    char_to_idx = dict(zip(chars, indices))
+    idx_to_char = dict(zip(indices, chars))
+    return (char_to_idx, idx_to_char)
+
 def _iter_value_strings(coords: BaseCoordinate) -> _typing.Iterator[str]:
     for value in coords:
         match value:
@@ -202,6 +219,11 @@ class Ltm(BaseCoordinate):
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class _GriddedCoordinate(BaseCoordinate):
     # TODO: Add `.truncate_to()`.
+
+    easting: str | None = None
+    northing: str | None = None
+
+    #* Instantiation from string. ---------------------------------------------
     __pattern_bytes: _typing.ClassVar[_regex.Pattern]
     _pattern: _typing.ClassVar[_regex.Pattern]
 
@@ -244,6 +266,22 @@ class _GriddedCoordinate(BaseCoordinate):
         }
         return cls(**init_kwargs)
 
+    #* Coordinate transformation. ---------------------------------------------
+    @_functools.cached_property
+    def _easting_int(self) -> int | None:
+        if self.easting is None:
+            return None
+        else:
+            return int(self.easting)
+
+    @_functools.cached_property
+    def _northing_int(self) -> int | None:
+        if self.easting is None:
+            return None
+        else:
+            return int(self.northing)
+
+
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsAcc(_GriddedCoordinate):
     _pattern = _compile_regex_without_i_and_o(
@@ -265,6 +303,21 @@ class LpsAcc(_GriddedCoordinate):
     northing_1k: str
     northing: str | None = None
 
+    #* Coordinate transformation. ---------------------------------------------
+    _easting_area__char_to_idx, _easting_area__idx_to_char = _index_char_set(
+        _pattern, "easting_area", start=1
+    )
+    _northing_area__char_to_idx, _northing_area__idx_to_char = _index_char_set(
+        _pattern, "northing_area", start=0
+    )
+    _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
+        _pattern, "easting_1k", start=0
+    )
+    _northing_1k__char_to_idx, _northing_1k__idx_to_char = _index_char_set(
+        _pattern, "northing_1k", start=0
+    )
+
+
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsLgrs(_GriddedCoordinate):
     _pattern = _compile_regex_without_i_and_o(
@@ -280,6 +333,13 @@ class LpsLgrs(_GriddedCoordinate):
     northing_area: str
     easting: str | None = None
     northing: str | None = None
+
+    #* Coordinate transformation. ---------------------------------------------
+    _easting_area__char_to_idx = LpsAcc._easting_area__char_to_idx
+    _easting_area__idx_to_char = LpsAcc._easting_area__idx_to_char
+    _northing_area__char_to_idx = LpsAcc._northing_area__char_to_idx
+    _northing_area__idx_to_char = LpsAcc._northing_area__idx_to_char
+
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmAcc(_GriddedCoordinate):
@@ -304,6 +364,43 @@ class LtmAcc(_GriddedCoordinate):
     northing_1k: str
     northing: str | None = None
 
+    #* Coordinate transformation. ---------------------------------------------
+    _easting_area__char_to_idx, _easting_area__idx_to_char = _index_char_set(
+        _pattern, "easting_area", start=0
+    )
+    _northing_area__char_to_idx_0, _northing_area__idx_to_char_0 = _index_char_set(
+        chars="ABCDEFGHJKLMNPQRSTUV", start=0
+    )
+    _northing_area__char_to_idx_1, _northing_area__idx_to_char_1 = _index_char_set(
+        chars="FGHJKLMNPQRSTUVABCDE", start=0
+    )
+    _northing_area__char_to_idx_2, _northing_area__idx_to_char_2 = _index_char_set(
+        chars="LMNPQRSTUVABCDEFGHJK", start=0
+    )
+    _northing_area__letterset_char_to_idx = {
+        0: _northing_area__char_to_idx_0,
+        1: _northing_area__char_to_idx_1,
+        2: _northing_area__char_to_idx_2
+    }
+    _northing_area__letterset_to_idx_to_char = {
+        0: _northing_area__idx_to_char_0,
+        1: _northing_area__idx_to_char_1,
+        2: _northing_area__idx_to_char_2
+    }
+    del _northing_area__char_to_idx_0
+    del _northing_area__char_to_idx_1
+    del _northing_area__char_to_idx_2
+    del _northing_area__idx_to_char_0
+    del _northing_area__idx_to_char_1
+    del _northing_area__idx_to_char_2
+    _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
+        _pattern, "easting_1k", start=0
+    )
+    _northing_1k__char_to_idx, _northing_1k__idx_to_char = _index_char_set(
+        _pattern, "northing_1k", start=0
+    )
+
+
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmLgrs(_GriddedCoordinate):
     _pattern = _compile_regex_without_i_and_o(
@@ -321,6 +418,12 @@ class LtmLgrs(_GriddedCoordinate):
     northing_area: str
     easting: str | None = None
     northing: str | None = None
+
+    #* Coordinate transformation. ---------------------------------------------
+    _easting_area__char_to_idx = LtmAcc._easting_area__char_to_idx
+    _easting_area__idx_to_char = LtmAcc._easting_area__idx_to_char
+    _northing_area__letterset_char_to_idx = LtmAcc._northing_area__letterset_char_to_idx
+    _northing_area__letterset_to_idx_to_char = LtmAcc._northing_area__letterset_to_idx_to_char
 
 
 
