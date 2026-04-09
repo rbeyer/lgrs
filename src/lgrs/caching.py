@@ -11,6 +11,7 @@ import abc as _abc
 import collections as _collections
 import functools as _functools
 import typing as _typing
+import weakref as _weakref
 
 
 
@@ -22,6 +23,7 @@ _CACHING_IS_ENABLED: bool = True
 _NOT_FOUND = object()
 
 _cache: dict = {}
+_weak_cache: _weakref.WeakKeyDictionary[_typing.Any, dict[str, _typing.Any]] = _weakref.WeakKeyDictionary()
 
 def _query_cache(
         func_or_cls: _collections.abc.Callable | type, *args, **kwargs
@@ -51,9 +53,34 @@ def _query_cache(
             raise e
     return (key, cached)
 
+def _query_weak_cache(
+        instance: _collections.abc.Hashable, *,
+        key: str, default: _typing.Any = _NOT_FOUND
+) -> _typing.Any:
+    if _CACHING_IS_ENABLED:
+        cached_dict = _weak_cache.get(instance, default)
+        if cached_dict is default:
+            return default
+        cached_val = cached_dict.get(key, default)
+        return cached_val
+    else:
+        return default
+
 def _store_to_cache(key: _collections.abc.Hashable, value: _typing.Any) -> None:
     if key is not None:
         _cache[key] = value
+
+def _store_to_weak_cache(
+        instance: _collections.abc.Hashable, *,
+        key: str, value: _typing.Any
+) -> None:
+    if not _CACHING_IS_ENABLED:
+        return
+    cached_dict = _weak_cache.get(instance)
+    if cached_dict is None:
+        cached_dict = {}
+        _weak_cache[instance] = cached_dict
+    cached_dict[key] = value
 
 
 
@@ -166,6 +193,7 @@ def enable_caching(enable: bool = True, *, clear: bool = False) -> None:
     _CACHING_IS_ENABLED = enable
     if clear:
         _cache.clear()
+        _weak_cache.clear()
 
 
 
