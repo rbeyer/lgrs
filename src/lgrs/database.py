@@ -391,6 +391,11 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         return self._long_name_parsed.zone_number
 
     #* Public methods. ------------------------------------------------
+    # TODO: Seriously consider exposing "long name" (by another name,
+    #  perhaps "nickname" or "shorthand") as an attribute of `CRS` and
+    #  also support some way for user to use in instantiation, such as
+    #  `make_lunar_crs(shorthand=...)`,
+    #  `make_lunar_crs_from_shorthand()`, or `CRS.from_shorthand()`.
     # Note: Added because instantiating a `pyproj.CRS` from a
     # `pyproj.CRSInfo` relies on `pyproj.CRS.from_authority()`, which we
     # cannot independently support.
