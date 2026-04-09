@@ -60,9 +60,19 @@ LTM_S_FALSE_NORTHING: float = 2_500_000.  # `F_N` in M2025 (meters)
 LUNAR_RADIUS: float = 1_737_400.  # `a` in M2025 (meters)
 
 # Other parameters.
-LTM_CENTRAL_SCALE_FACTOR: float = 0.999  # `k_0` in M2025 (exact,  unitless)
+LTM_CENTRAL_SCALE_FACTOR: float = 0.999  # `k_0` in M2025 (exact, unitless)
 LTM_LATITUDE_OF_PROJECTION_AXIS: float = 0.  # `phi_0` in M2025 (degrees)
 LTM_ZONE_HALF_WIDTH: float = 4.  # `W` in M2025 (degrees)
+
+# Note: See Table 5 of M2025 for most of these variables.
+LPS_CENTRAL_SCALE_FACTOR: float = 0.994  # `k_0` in M2025 (exact, unitless)
+LPS_N_LATITUDE_OF_PROJECTION_ORIGIN: float = +90.  # `phi_0` in M2025 (degrees)
+LPS_S_LATITUDE_OF_PROJECTION_ORIGIN: float = -90.  # `phi_0` in M2025 (degrees)
+LPS_LONGITUDE_OF_PROJECTION_ORIGIN: float = 0.  # `lambda_0` in M2025 (degrees)
+LPS_FALSE_EASTING: float = 500_000.  # `F_E` in M2025 (meters)
+LPS_FALSE_NORTHING: float = 500_000.  # `F_N` in M2025 (meters)
+LPS_N_ID = 7190092
+LPS_S_ID = 7190091
 
 
 
@@ -77,7 +87,7 @@ _format_lps_wkt = f"""
 PROJCRS[“Moon (2015) - Sphere / Ocentric / {{north_or_south}} Polar”,
   BASEGEOGCRS[“Moon (2015) - Sphere / Ocentric”,
     DATUM[“Moon (2015) - Sphere”,
-      ELLIPSOID[“Moon (2015) - Sphere”,1737400,0,
+      ELLIPSOID[“Moon (2015) - Sphere”,{LUNAR_RADIUS},0,
         LENGTHUNIT[“metre”,1]]],
     PRIMEM[“Reference Meridian”,0,
       ANGLEUNIT[“degree”,0.0174532925199433]],
@@ -85,19 +95,19 @@ PROJCRS[“Moon (2015) - Sphere / Ocentric / {{north_or_south}} Polar”,
   CONVERSION[“{{north_or_south}} Polar”,
     METHOD[“Polar Stereographic (variant A)”,
       ID[“EPSG”,9810]],
-    PARAMETER[“Latitude of natural origin”,{{origin}},
+    PARAMETER[“Latitude of natural origin”,{{lat_origin}},
       ANGLEUNIT[“degree”,0.0174532925199433],
       ID[“EPSG”,8801]],
-    PARAMETER[“Longitude of natural origin”,0,
+    PARAMETER[“Longitude of natural origin”,{LPS_LONGITUDE_OF_PROJECTION_ORIGIN},
       ANGLEUNIT[“degree”,0.0174532925199433],
       ID[“EPSG”,8802]],
-    PARAMETER[“Scale factor at natural origin”,.994,
+    PARAMETER[“Scale factor at natural origin”,{LPS_CENTRAL_SCALE_FACTOR},
       SCALEUNIT[“unity”,1],
       ID[“EPSG”,8805]],
-    PARAMETER[“False easting”,500000,
+    PARAMETER[“False easting”,{LPS_FALSE_EASTING},
       LENGTHUNIT[“metre”,1],
       ID[“EPSG”,8806]],
-    PARAMETER[“False northing”,500000,
+    PARAMETER[“False northing”,{LPS_FALSE_NORTHING},
       LENGTHUNIT[“metre”,1],
       ID[“EPSG”,8807]]],
   CS[Cartesian,2],
@@ -137,7 +147,7 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
     PARAMETER["Scale factor at natural origin",{LTM_CENTRAL_SCALE_FACTOR},
       SCALEUNIT["unity",1],
       ID["EPSG",8805]],
-    PARAMETER["False easting",{{false_easting}},
+    PARAMETER["False easting",{LTM_FALSE_EASTING},
       LENGTHUNIT["metre",1],
       ID["EPSG",8806]],
     PARAMETER["False northing",{{false_northing}},
@@ -265,12 +275,12 @@ class LpsZone(BaseZone):
         hemisphere = self.hemisphere
         if hemisphere == "S":
             north_or_south = "South"
-            origin = -90
-            id_num = 7190091
+            lat_origin = LPS_S_LATITUDE_OF_PROJECTION_ORIGIN
+            id_num = LPS_S_ID
         else:
             north_or_south = "North"
-            origin = 90
-            id_num = 7190092
+            origin = LPS_N_LATITUDE_OF_PROJECTION_ORIGIN
+            id_num = LPS_N_ID
         bbox_string = self._get_bbox_string()
         wkt = _format_lps_wkt(**locals())
         return wkt
@@ -300,10 +310,6 @@ class LtmZone(BaseZone):
                    - 180
                    + LTM_ZONE_HALF_WIDTH)
         return ctr_lon
-
-    @_functools.cached_property
-    def false_easting(self) -> float:
-        return LTM_FALSE_EASTING
 
     @_functools.cached_property
     def false_northing(self) -> float:
@@ -345,7 +351,6 @@ class LtmZone(BaseZone):
         zone_number = self.number
         hemisphere = self.hemisphere
         center_longitude = self.center_longitude
-        false_easting = self.false_easting
         false_northing = self.false_northing
         bbox_string = self._get_bbox_string()
         wkt = _format_ltm_wkt(**locals())
