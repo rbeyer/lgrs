@@ -165,7 +165,9 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     >>> crs_utm2 = CRS.from_user_input(32615)
     >>> crs_utm2 is crs_utm
     True
-    # However, equivalent arguments are not guaranteed to cache identically.
+
+    However, equivalent arguments are not guaranteed to cache identically.
+
     >>> crs_utm3 = CRS("WGS 84 / UTM zone 15N")
     >>> crs_utm3.is_exact_same(crs_utm)
     True
@@ -229,22 +231,30 @@ def make_lunar_crs(
     >>> ltm_crs2 = make_lunar_crs(
     ...    proj="ltm", zone=23, south=False, ellps="IAU_2015:30100"
     ...    )
+
     As a convenience, LPS is also supported.
+
     >>> lps_crs = make_lunar_crs("IAU_2015:30100 / LPS S")
     >>> lps_crs2 = make_lunar_crs(
     ...    proj="lps", south=True, ellps="IAU_2015:30100"
     ...    )
+
     As a further convenience, `ellps` defaults to "IAU_2015:30100" and,
     as with `pyproj.CRS` UTM support, the word "zone" is optional.
+
     >>> lps_crs3 = make_lunar_crs("LPS S")
     >>> ltm_crs3 = make_lunar_crs("LTM 23N")
+
     Additionally, `proj` will be inferred if not specified.
+
     >>> lps_crs4 = make_lunar_crs("S")
     >>> ltm_crs4 = make_lunar_crs("23N")
     >>> lps_crs4.is_exact_same(lps_crs)
     >>> ltm_crs4.is_exact_same(lps_crs)
+
     Finally, as a convenience, a default call returns the underlying
     geographic `CRS`.
+
     >>> geo_crs = make_lunar_crs()
     >>> geo_crs2 = pyproj.CRS("IAU_2015:30100")
     >>> geo_crs.is_exact_same(geo_crs2)
