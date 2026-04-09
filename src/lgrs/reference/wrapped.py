@@ -8,10 +8,12 @@ Examples
 >>> polar_lps = LatLon2LPS(polar_latlon)
 >>> polar_latlon_recovered = LPS2LatLon(polar_lps)
 >>> polar_latlon_recovered.is_equal_to(polar_latlon, error=True)
+
 Note: Below call would error because recovery is not exact:
 strict_result = polar_latlon_recovered.is_equal_to(
     polar_latlon, error=True, max_float_difference=0.
 )
+
 >>> lps_lgrs = coords.LpsLgrs.from_string("AZS1359008480")
 >>> lps_acc = PolarLGRS2PolarLGRS_ACC(lps_lgrs)
 >>> lps_lgrs_recovered = PolarLGRS_ACC2PolarLGRS(lps_acc)
