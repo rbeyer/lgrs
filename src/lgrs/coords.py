@@ -8,7 +8,7 @@ Examples
 ...     easting="13590", northing="08480"
 ... )
 >>> alt_lps_lgrs = LpsLgrs.from_string("AZS1359008480")
->>> alt_lps_lgrs.is_equal_to(lps_lgrs, error=True))
+>>> alt_lps_lgrs.is_equal_to(lps_lgrs, error=True)
 """
 
 # Copyright 2026, Ethan I. Schafer (eschaefer@seti.org)
