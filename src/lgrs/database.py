@@ -596,7 +596,7 @@ def query_lunar_crs_info(
         prefer_south_ltms = (False,)
         prefer_west_ltms = (False,)
 
-    # Determine CRS short names.
+    # Determine CRS long names.
     cum_crs_long_names = []
     for ltm_kwargs in ltm_kwargs_list:
         inner_crs_long_names = []
