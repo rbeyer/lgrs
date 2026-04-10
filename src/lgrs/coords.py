@@ -512,7 +512,6 @@ class _NonGriddedCoordinate(BaseCoordinate):
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LatLon(_NonGriddedCoordinate):
     # TODO: Should `._template` use N/S and E/W?
-    _idx = 0
 
     #* Fields, initialization, and related. -----------------------------------
     _template = "{latitude!r}° {longitude!r}°"
@@ -600,7 +599,6 @@ class _LpsAndLtm(_NonGriddedCoordinate):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class Lps(_LpsAndLtm):
-    _idx = -1
 
     #* Fields, initialization, and related. -----------------------------------
     _template = "{hemisphere}{easting!r}E{northing!r}N"
@@ -657,7 +655,6 @@ class Lps(_LpsAndLtm):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class Ltm(_LpsAndLtm):
-    _idx = +1
 
     #* Fields, initialization, and related. -----------------------------------
     _template = "{zone_number}{hemisphere}{easting!r}E{northing!r}N"
@@ -834,7 +831,6 @@ class _LtmLgrs(_GriddedCoordinate):
 ###############################################################################
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsAcc(_LpsLgrs):
-    _idx = -4
 
     #* Fields, initialization, and related. -----------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -867,12 +863,11 @@ class LpsAcc(_LpsLgrs):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsLgrs(_LpsLgrs):
-    _idx = -3
+    pass
 
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmAcc(_LtmLgrs):
-    _idx = +4
 
     #* Fields, initialization, and related. -----------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -907,7 +902,30 @@ class LtmAcc(_LtmLgrs):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmLgrs(_LtmLgrs):
-    _idx = +3
+    pass
+
+
+
+# endregion
+###############################################################################
+# region> PROCESSING CHAIN INDICES
+###############################################################################
+# Note: Used by `_redirect()` (via `._get_best_cousin()`) to determine
+# best related coordinate instance from which to start a transformation.
+
+# `LatLon` is 0, because logical starting point for both LPS and LTM
+# chains is `LatLon`.
+LatLon._idx = 0
+
+# LPS chain is increasingly negative.
+Lps._idx = -1
+LpsLgrs._idx = -3  # Not -2, to favor LGRS <--> ACC over LPS <--> LGRS.
+LpsAcc._idx = -4
+
+# LTM chain is increasingly positive.
+Ltm._idx = +1
+LtmLgrs._idx = +3  # Not +2, to favor LGRS <--> ACC over LTM <--> LGRS.
+LtmAcc._idx = +4
 
 
 
