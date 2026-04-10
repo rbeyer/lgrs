@@ -37,6 +37,7 @@ import typing as _typing
 # Internal.
 import lgrs.caching as _caching
 import lgrs.database as _database
+import lgrs.exceptions as _exceptions
 import lgrs.srs.srs as _srs
 import lgrs.srs.wkt as _wkt
 
@@ -252,13 +253,14 @@ class _BaseCoordinate(_abc.ABC):
         return {field.name: getattr(self, field.name)
                 for field in _dataclasses.fields(self)}
 
+    # TODO: Check that `._validate()` is complete in all subclasses.
     @_abc.abstractmethod
     def _validate(self) -> None:
-        # TODO: Document what errors may be raised on invalid arguments.
         ...
 
 
 class BaseCoordinate(_BaseCoordinate):
+    # TODO: Document that `MalformedCoordinate` may be raised.
     _idx: int
     _template: _typing.ClassVar[str | None] = None
 
@@ -716,8 +718,15 @@ class Ltm(_LpsAndLtm):
 class _GriddedCoordinate(BaseCoordinate):
     # TODO: Add `.truncate_to()`.
 
+    #* Fields, initialization, and related. -----------------------------------
     easting:  str | None
     northing: str | None
+
+    def _validate_against_pattern(self) -> None:
+        if self._pattern.search(self.string) is None:
+            raise _exceptions.MalformedCoordinate(
+                f"`.string` does not have the form: {self._pattern.pattern!r}"
+            )
 
     #* Instantiation from string. ---------------------------------------------
     __pattern_bytes: _typing.ClassVar[_regex.Pattern]
@@ -743,7 +752,7 @@ class _GriddedCoordinate(BaseCoordinate):
         # Match to pattern.
         match = pattern.search(string)
         if match is None:
-            raise TypeError(
+            raise _exceptions.MalformedCoordinate(
                 f"`string` {string!r} is not in the supported format: "
                 f"{pattern.pattern!r}"
             )
@@ -844,8 +853,18 @@ class _LtmLgrs(_GriddedCoordinate):
 ###############################################################################
 # region> GRIDDED COORDINATE TYPES
 ###############################################################################
+class _Acc(_GriddedCoordinate):
+
+    def _validate_acc(self) -> None:
+        if (self.easting is None) != (self.northing is None):
+            raise TypeError(
+                "`easting` and `northing` must both be specified "
+                "or both be `None`."
+            )
+
+
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class LpsAcc(_LpsLgrs):
+class LpsAcc(_LpsLgrs, _Acc):
 
     #* Fields, initialization, and related. -----------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -853,23 +872,23 @@ class LpsAcc(_LpsLgrs):
         "(?P<longitudinal_band>[ABYZ])"
         "(?P<easting_area>[A-Z])"
         "(?P<northing_area>[-A-Z+])"
-        "(?P<easting_1k>[-A-Z])"
+        "((?P<easting_1k>[-A-Z])"
         "(?P<easting>[0-9]{1,3})?"
         "(?P<northing_1k>[-A-Z])"
-        "(?P<northing>[0-9]{1,3})?"
+        "(?P<northing>[0-9]{1,3})?)?"
         "$"
     )
     longitudinal_band: str
     easting_area: str
     northing_area: str
-    easting_1k: str
+    easting_1k: str | None = None
     easting: str | None = None
-    northing_1k: str
+    northing_1k: str | None = None
     northing: str | None = None
 
     def _validate(self) -> None:
-        # TODO: Implement.
-        ...
+        self._validate_against_pattern()
+        self._validate_acc()
 
     #* Coordinate transformation. ---------------------------------------------
     _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
@@ -882,16 +901,18 @@ class LpsAcc(_LpsLgrs):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsLgrs(_LpsLgrs):
-    pass
 
     #* Validation. ------------------------------------------------------------
     def _validate(self) -> None:
-        # TODO: Implement.
+        self._validate_against_pattern()
+
+    #* Coordinate transformation. ---------------------------------------------
+    def _to_acc(self, **kwargs) -> LpsAcc:
         ...
 
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
-class LtmAcc(_LtmLgrs):
+class LtmAcc(_LtmLgrs, _Acc):
 
     #* Fields, initialization, and related. -----------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -900,10 +921,10 @@ class LtmAcc(_LtmLgrs):
         "(?P<latitudinal_band>[C-X])"
         "(?P<easting_area>[A-K])"
         "(?P<northing_area>[A-V])"
-        "(?P<easting_1k>[-A-Z])"
+        "((?P<easting_1k>[-A-Z])"
         "(?P<easting>[0-9]{1,3})?"
         "(?P<northing_1k>[-A-Z])"
-        "(?P<northing>[0-9]{1,3})?"
+        "(?P<northing>[0-9]{1,3})?)?"
         "$"
     )
     longitudinal_band: int
@@ -916,8 +937,8 @@ class LtmAcc(_LtmLgrs):
     northing: str | None = None
 
     def _validate(self) -> None:
-        # TODO: Implement.
-        ...
+        self._validate_against_pattern()
+        self._validate_acc()
 
     #* Coordinate transformation. ---------------------------------------------
     _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
@@ -932,8 +953,7 @@ class LtmAcc(_LtmLgrs):
 class LtmLgrs(_LtmLgrs):
 
     def _validate(self) -> None:
-        # TODO: Implement.
-        ...
+        self._validate_against_pattern()
 
 
 
