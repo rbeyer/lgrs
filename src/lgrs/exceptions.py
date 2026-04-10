@@ -16,6 +16,12 @@ import pyproj as _pyproj
 # region> EXCEPTIONS
 ##############################################################################
 # TODO: Delete unused exception classes.
+class MalformedCoordinate(Exception):
+    """
+    Raised when a coordinate is malformed.
+    """
+    pass
+
 class NonGriddedError(_pyproj.exceptions.CRSError):
     """
     Raised when a non-gridded object is unexpectedly encountered.

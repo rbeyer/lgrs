@@ -21,6 +21,7 @@ import typing as _typing
 
 # Internal.
 import lgrs.caching as _caching
+import lgrs.exceptions as _exceptions
 import lgrs.srs.srs as _srs
 import lgrs.srs.wkt as _wkt
 
@@ -45,7 +46,9 @@ def _conform_latitudes(latitudes: _FloatIterable) -> list[float]:
     conformed = []
     for lat in latitudes:
         if abs(lat) > 90:
-            raise TypeError("`latitude` must be in [-90, 90] interval")
+            raise _exceptions.MalformedCoordinate(
+                "`latitude` must be in [-90, 90] interval"
+            )
         conformed.append(lat)
     return conformed
 
@@ -54,7 +57,9 @@ def _conform_longitudes(longitudes: _FloatIterable) -> list[float]:
     for lon in longitudes:
         # TODO: Decide acceptable input range.
         if abs(lon) > 360:
-            raise TypeError("`longitude` must be in [-360, 360] interval")
+            raise _exceptions.MalformedCoordinate(
+                "`longitude` must be in [-360, 360] interval"
+            )
         # Note: Conformity to [-180, 180) interval required by Eq. 13 of
         # M2025 and by WKT.
         lon %= 360  # Conforms to [0, 360) interval.
