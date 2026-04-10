@@ -741,7 +741,9 @@ class _GriddedCoordinate(BaseCoordinate):
             return cls.__pattern_bytes
 
     @classmethod
-    def from_string(cls, string: str | bytes) -> _typing.Self:
+    def from_string(
+            cls, string: str | bytes, *, validate: bool = True
+    ) -> _typing.Self:
         # Determine pattern.
         string_is_bytes = isinstance(string, bytes)
         if string_is_bytes:
@@ -769,7 +771,7 @@ class _GriddedCoordinate(BaseCoordinate):
             for name, value_string in match_dict.items()
             if value_string is not None
         }
-        return cls(**init_kwargs)
+        return cls(**init_kwargs, validate=validate)
 
     #* Coordinate transformation. ---------------------------------------------
     @_functools.cached_property
