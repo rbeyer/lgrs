@@ -53,7 +53,6 @@ type ToMethod = _collections.abc.Callable[..., BaseCoordinate]
 ###############################################################################
 # region> UTILITIES: REDIRECTION & CACHING
 ###############################################################################
-# TODO: Maybe split this section into smaller, more focused sections.
 def _cache(func: ToMethod) -> ToMethod:
     public_func = getattr(BaseCoordinate, func.__name__.removeprefix("_"))
     @_functools.wraps(public_func)
@@ -238,6 +237,11 @@ def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
 # accidentally implying dataclass fields).
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class _BaseCoordinate(_abc.ABC):
+    validate: _dataclasses.InitVar[bool] = True
+
+    def __post_init__(self, validate: bool) -> None:
+        if validate:
+            self._validate()
 
     def __iter__(self) -> _collections.abc.Iterable:
         return (getattr(self, field.name)
@@ -247,6 +251,11 @@ class _BaseCoordinate(_abc.ABC):
     def _init_kwargs(self) -> dict[str, _typing.Any]:
         return {field.name: getattr(self, field.name)
                 for field in _dataclasses.fields(self)}
+
+    @_abc.abstractmethod
+    def _validate(self) -> None:
+        # TODO: Document what errors may be raised on invalid arguments.
+        ...
 
 
 class BaseCoordinate(_BaseCoordinate):
@@ -518,9 +527,7 @@ class LatLon(_NonGriddedCoordinate):
     latitude: float
     longitude: float
 
-    def __post_init__(self):
-        # TODO: Add checks for valid arguments in sibling classes.
-        # TODO: Document what errors may be raised on invalid arguments.
+    def _validate(self) -> None:
         conformed_lat, = _database._conform_latitudes((self.latitude,))
         object.__setattr__(self, "latitude", conformed_lat)
         conformed_lon, = _database._conform_longitudes((self.longitude,))
@@ -606,6 +613,10 @@ class Lps(_LpsAndLtm):
     easting: float
     northing: float
 
+    def _validate(self) -> None:
+        # TODO: Implement.
+        ...
+
     #* Coordinate transformation. ---------------------------------------------
     def _get_proj_crs(self) -> _srs.CRS:
         return _srs.make_lunar_crs(self.hemisphere)
@@ -662,6 +673,10 @@ class Ltm(_LpsAndLtm):
     hemisphere: str
     easting: float
     northing: float
+
+    def _validate(self) -> None:
+        # TODO: Implement.
+        ...
 
     #* Coordinate transformation. ---------------------------------------------
     def _get_proj_crs(self) -> _srs.CRS:
@@ -852,6 +867,10 @@ class LpsAcc(_LpsLgrs):
     northing_1k: str
     northing: str | None = None
 
+    def _validate(self) -> None:
+        # TODO: Implement.
+        ...
+
     #* Coordinate transformation. ---------------------------------------------
     _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
         _pattern, "easting_1k", start=0
@@ -864,6 +883,11 @@ class LpsAcc(_LpsLgrs):
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsLgrs(_LpsLgrs):
     pass
+
+    #* Validation. ------------------------------------------------------------
+    def _validate(self) -> None:
+        # TODO: Implement.
+        ...
 
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
@@ -891,6 +915,10 @@ class LtmAcc(_LtmLgrs):
     northing_1k: str
     northing: str | None = None
 
+    def _validate(self) -> None:
+        # TODO: Implement.
+        ...
+
     #* Coordinate transformation. ---------------------------------------------
     _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
         _pattern, "easting_1k", start=0
@@ -902,7 +930,10 @@ class LtmAcc(_LtmLgrs):
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmLgrs(_LtmLgrs):
-    pass
+
+    def _validate(self) -> None:
+        # TODO: Implement.
+        ...
 
 
 
