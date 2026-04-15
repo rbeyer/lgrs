@@ -57,8 +57,8 @@ type ToMethod = _collections.abc.Callable[..., BaseCoordinate]
 def _cache(func: ToMethod) -> ToMethod:
     public_func = getattr(BaseCoordinate, func.__name__.removeprefix("_"))
     @_functools.wraps(public_func)
-    def wrapped(self: BaseCoordinate) -> BaseCoordinate:
-        new = func(self)
+    def wrapped(self: BaseCoordinate, **kwargs) -> BaseCoordinate:
+        new = func(self, **kwargs)
         self._register_cousin(new)
         return new
     return wrapped
@@ -343,6 +343,7 @@ class BaseCoordinate(_BaseCoordinate):
     # TODO: Document that `MalformedCoordinate` may be raised.
     _idx: int
     _template: str | None = None
+    _was_validated: bool = False
 
     #* Basic behavior. --------------------------------------------------------
     def __bytes__(self) -> _builtins.bytes:
@@ -398,7 +399,9 @@ class BaseCoordinate(_BaseCoordinate):
             f", not {getattr(self, attr_name)!r}"
         )
 
-    def _validate(self) -> None:
+    def _validate(self, *, revalidate: bool = False) -> None:
+        if self._was_validated and not revalidate:
+            return
         for field in self._fields:
             result = getattr(self, f"_validate_{field.name}")()
             if result is not None:
@@ -453,10 +456,14 @@ class BaseCoordinate(_BaseCoordinate):
         return string
 
     #* General public methods. --------------------------------------------------------
-    def copy(self) -> _typing.Self:
+    def copy(self, *, validate: bool = False) -> _typing.Self:
         # Note: `self` can only exist if validated or explicitly not
-        # validated. Either way, `validate=False` is appropriate.
-        return type(self)(**self._init_kwargs, validate=False)
+        # validated. Either way, defaulting `validate` to `False` is
+        # appropriate.
+        new = type(self)(
+            **self._init_kwargs, validate=(validate and not self._was_validated)
+        )
+        return new
 
     def is_equal_to(
             self, other: _typing.Self, *,
@@ -491,6 +498,16 @@ class BaseCoordinate(_BaseCoordinate):
                 f"    {self_val!r} vs. {other_val!r}"
            )
         return True
+
+    def replace(
+            self, *, validate: bool = True, copy: bool = True, **overrides
+    ) -> _typing.Self:
+        if not copy and not overrides:
+            return self.copy()
+        init_kwargs = self._init_kwargs.copy()
+        init_kwargs.update(overrides)
+        return type(self)(**init_kwargs, validate=validate)
+
 
     #* Transformation caching. ------------------------------------------------
     @property
@@ -550,6 +567,11 @@ class BaseCoordinate(_BaseCoordinate):
         if _caching._CACHING_IS_ENABLED:
             object.__setattr__(cousin, "_root", self._root)
             self._cousins.appendleft(cousin)
+
+    def _unregister_cousins(self, *cousins: BaseCoordinate) -> None:
+        if _caching._CACHING_IS_ENABLED:
+            for cousin in cousins:
+                self._cousins.remove(cousin)
 
     @_functools.cached_property
     def _root(self) -> BaseCoordinate:
@@ -646,26 +668,52 @@ class LatLon(_NonGriddedCoordinate):
         crs = crs_info.get_crs()
         return crs
 
-    # Note: Simplifies code in non-caching case. Generally, identity
-    # "transformation" methods need not be defined, whether caching or
-    # not.
-    def _to_latlon(self, **kwargs) -> LatLon:
-        return self
-
     @_cache
-    def _to_lps_or_ltm(self) -> Lps | Ltm:
-        proj_crs = self._get_proj_crs()
+    def _to_lps_or_ltm(
+            self, *, allow_lps: bool = True
+    ) -> Lps | Ltm:
+        # Determine projected CRS.
+        if self.prefer_lps and allow_lps:
+            # TODO: Determine minimum absolute latitude for which
+            #  conversion to LPS should be attempted.
+            proj_crs = _srs.make_lunar_crs("S" if self.latitude < 0 else "N")
+        else:
+            proj_crs = self._get_proj_crs(
+                extended_ltm=self.extended_ltm,
+                polar_ltm=self.polar_ltm
+            )
+
+        # Transform.
         transformer = self._get_transformer(
             to_geographic=False, proj_crs=proj_crs
         )
         e, n = transformer.transform(self.latitude, self.longitude)
+
+        # Create and return instance.
         if proj_crs.ltm_zone is None:
-            lps = Lps(hemisphere=proj_crs.lps_hemisphere, easting=e, northing=n)
+            lps = Lps(
+                hemisphere=proj_crs.lps_hemisphere, easting=e, northing=n,
+                validate=False
+            )
+            # In special case that LPS was forced, validate LGRS
+            # equivalent.
+            if self.prefer_lps:
+                lgrs = lps.to_lgrs()
+                try:
+                    lgrs._validate()
+                except _exceptions.MalformedCoordinate:
+                    # LGRS equivalent is invalid, so unregister invalid
+                    # cousins and return `Ltm` instance instead.
+                    self._unregister_cousins(lps, lgrs)
+                    return self._to_lps_or_ltm(allow_lps=False)
             return lps
         else:
             zone = int(proj_crs.ltm_zone[:-1])
             hemi = proj_crs.ltm_zone[-1]
-            ltm = Ltm(zone_number=zone, hemisphere=hemi, easting=e, northing=n)
+            ltm = Ltm(
+                zone_number=zone, hemisphere=hemi, easting=e, northing=n,
+                validate=False
+            )
             return ltm
 
     def _to_lgrs(self, **kwargs) -> LpsLgrs | LtmLgrs:
@@ -686,11 +734,11 @@ class Lps(_NonGriddedCoordinate):
     # Note: `._validate_hemisphere()` is defined on base class.
 
     def _validate_easting(self) -> None:
-        # TODO: Implement.
+        # TODO: Implement, with consideration of `.prefer_lps`, etc.
         ...
 
     def _validate_northing(self) -> None:
-        # TODO: Implement.
+        # TODO: Implement, with consideration of `.prefer_lps`, etc.
         ...
 
     #* Coordinate transformation. ---------------------------------------------
