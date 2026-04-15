@@ -366,8 +366,11 @@ class BaseCoordinate(_BaseCoordinate):
 
     #* Validation. ------------------------------------------------------------
     @staticmethod
-    def _expect_error(func: _collections.abc.Callable) -> _typing.NoReturn:
-        func()
+    def _expect_error(
+            func: _collections.abc.Callable | None = None
+    ) -> _typing.NoReturn:
+        if func is not None:
+            func()
         raise TypeError("An unknown error occurred.")
 
     def _raise_malformed_coordinate(
@@ -512,6 +515,9 @@ class BaseCoordinate(_BaseCoordinate):
             return cached_cousins
 
     def _get_best_cousin(self, func: ToMethod) -> tuple[BaseCoordinate, bool]:
+        # TODO: Likely simplify to return targeted type or `None`.
+        #  (Current approach is needlessly general, because the chain
+        #  will never skip a type nor (now) jump to the opposite side.)
         # Resolve out types.
         out_types = _resolve_out_types(func)
 
@@ -564,6 +570,10 @@ class BaseCoordinate(_BaseCoordinate):
         # Note: Overridden when instantiated by transformation.
         return self
 
+    @_functools.cached_property
+    def constraints(self) -> _types.MappingProxyType[str, bool]:
+        return _types.MappingProxyType(dict(tuple(self._init_kwargs.items())[-3:]))
+
     #* Coordinate transformation. ---------------------------------------------
     @_redirect
     def to_acc(self) -> LpsAcc | LtmAcc:
@@ -602,12 +612,14 @@ class BaseCoordinate(_BaseCoordinate):
     def _iter_value_strings(self) -> _typing.Iterator[str]:
         for value in self:
             match value:
-                case None:
-                    continue
                 case str():
                     yield value
-                case _:
+                case bool() | None:
+                    continue
+                case int() | float():
                     yield repr(value)
+                case _:
+                    self._expect_error()
 
 
 
@@ -690,7 +702,7 @@ class LatLon(_NonGriddedCoordinate):
         if proj_crs.ltm_zone is None:
             lps = Lps(
                 hemisphere=proj_crs.lps_hemisphere, easting=e, northing=n,
-                validate=False
+                validate=False, **self._root.constraints
             )
             # In special case that LPS was forced, validate LGRS
             # equivalent.
@@ -709,7 +721,7 @@ class LatLon(_NonGriddedCoordinate):
             hemi = proj_crs.ltm_zone[-1]
             ltm = Ltm(
                 zone_number=zone, hemisphere=hemi, easting=e, northing=n,
-                validate=False
+                validate=False, **self._root.constraints
             )
             return ltm
 
@@ -753,7 +765,10 @@ class Lps(_NonGriddedCoordinate):
     def _to_latlon(self, **kwargs) -> LatLon:
         transformer = self._get_transformer(to_geographic=True)
         lat, lon = transformer.transform(self.easting, self.northing)
-        latlon = LatLon(latitude=lat, longitude=lon)
+        latlon = LatLon(
+            latitude=lat, longitude=lon,
+            validate=False, **self._root.constraints
+        )
         return latlon
 
     @_cache
@@ -792,7 +807,8 @@ class Lps(_NonGriddedCoordinate):
             easting_area=ea,
             northing_area=na,
             easting=_format_as_five_digit_int(e),
-            northing=_format_as_five_digit_int(n)
+            northing=_format_as_five_digit_int(n),
+            validate=False, **self._root.constraints
         )
         return lps_lrgs
 
@@ -866,7 +882,8 @@ class Ltm(_NonGriddedCoordinate):
             easting_area=ea,
             northing_area=na,
             easting=_format_as_five_digit_int(e),
-            northing=_format_as_five_digit_int(n)
+            northing=_format_as_five_digit_int(n),
+            validate=False, **self._root.constraints
         )
         return ltm_lgrs
 
@@ -1062,8 +1079,29 @@ class LpsLgrs(_GriddedCoordinate):
     _northing_area__char_to_idx = LpsAcc._northing_area__char_to_idx
     _northing_area__idx_to_char = LpsAcc._northing_area__idx_to_char
 
-    def _to_acc(self, **kwargs) -> LpsAcc:
-        ...
+    @_cache
+    def _to_acc(self, **kwargs) -> LpsAcc | LtmAcc:
+        kwargs = {
+            "longitudinal_band": self.longitudinal_band,
+            "easting_area": self.easting_area,
+            "northing_area": self.northing_area,
+        }
+        if self.easting is not None:
+            kwargs["easting_1k"] = LpsAcc._easting_1k__idx_to_char[
+                int(self.easting[:2])
+            ]
+            kwargs["northing_1k"] = LpsAcc._northing_1k__idx_to_char[
+                int(self.northing[:2])
+            ]
+            if len(self.easting) > 2:
+                kwargs["easting"] = self.easting[2:]
+                kwargs["northing"] = self.northing[2:]
+        if isinstance(self, LpsLgrs):
+            acc_type = LpsAcc
+        else:
+            acc_type = LtmAcc
+        acc = acc_type(**kwargs, validate=False, **self._root.constraints)
+        return acc
 
 
 @_easy_dataclass
@@ -1175,6 +1213,8 @@ class LtmLgrs(_GriddedCoordinate):
     _northing_area__letterset_to_char_to_idx = LtmAcc._northing_area__letterset_to_char_to_idx
     _northing_area__letterset_to_idx_to_char = LtmAcc._northing_area__letterset_to_idx_to_char
 
+    _to_acc = LpsLgrs._to_acc
+
 
 
 # endregion
@@ -1222,7 +1262,7 @@ lat_lon3 = LatLon(latitude=-81.13048481, longitude=96.48515138, extended_ltm=Fal
 lps_or_ltm3 = lat_lon3.to_lps_or_ltm()
 lgrs3 = lps_or_ltm3.to_lgrs()
 
-lat_lon4 = LatLon(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53
+lat_lon4 = LatLon(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
 lps_or_ltm4 = lat_lon4.to_lps_or_ltm()
 lgrs4 = lps_or_ltm4.to_lgrs()
 
