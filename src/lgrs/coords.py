@@ -231,32 +231,6 @@ def _easy_dataclass(cls: type) -> type:
     dataclass = _dataclasses.dataclass(kw_only=True, frozen=True)(twin_cls)
     return dataclass
 
-
-@_functools.cache
-def _get_field_name_to_type(typ: type[BaseCoordinate]) -> dict[str, type]:
-    name_to_type = {}
-    field_name_set = {field.name
-                       for field in typ._get_fields()}
-    for name, typ in _typing.get_type_hints(typ).items():
-        if name not in field_name_set:
-            continue
-        if isinstance(typ, _types.UnionType):
-            types = list(_typing.get_args(typ))
-            types.remove(type(None))
-            typ, = types  # *REASSIGNMENT*
-        name_to_type[name] = typ
-    return name_to_type
-
-def _iter_value_strings(coords: BaseCoordinate) -> _typing.Iterator[str]:
-    for value in coords:
-        match value:
-            case None:
-                continue
-            case str():
-                yield value
-            case _:
-                yield repr(value)
-
 def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
     # TODO: Determine whether `tolerance` is a good choice. Code
     #  mimics `check_decimal_round()` of reference code and presumably
@@ -318,25 +292,37 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     @_functools.cached_property
     def _init_kwargs(self) -> dict[str, _typing.Any]:
         return {field.name: getattr(self, field.name)
-                for field in self._fields}
+                for field in self._get_fields()}
 
     #* Field support. ---------------------------------------------------------
     def __iter__(self) -> _collections.abc.Iterable:
-        return (getattr(self, field.name)
-                for field in self._fields)
-
-    @_functools.cached_property
-    def _fields(self) -> tuple[_dataclasses.Field, ...]:
-        return self._get_fields()
+        return (
+            getattr(self, field.name)
+            for field in self._get_fields()
+        )
 
     @classmethod
+    @_functools.cache
     def _get_fields(cls) -> tuple[_dataclasses.Field, ...]:
-        try:
-            return cls._fields_cached
-        except AttributeError:
-            fields = _dataclasses.fields(cls)
-            cls._fields = cls._fields_cached = fields
-            return fields
+        return _dataclasses.fields(cls)
+
+    @classmethod
+    @_functools.cache
+    def _get_field_name_to_type(cls) -> dict[str, type]:
+        name_to_type = {}
+        field_name_set = {
+            field.name
+            for field in cls._get_fields()
+        }
+        for name, cls in _typing.get_type_hints(cls).items():
+            if name not in field_name_set:
+                continue
+            if isinstance(cls, _types.UnionType):
+                types = list(_typing.get_args(cls))
+                types.remove(type(None))
+                cls, = types  # *REASSIGNMENT*
+            name_to_type[name] = cls
+        return name_to_type
 
 
 class BaseCoordinate(_BaseCoordinate):
@@ -366,7 +352,7 @@ class BaseCoordinate(_BaseCoordinate):
             raise _exceptions.MalformedCoordinate(
                 "`string` must be space-delimited"
             )
-        field_name_to_type = _get_field_name_to_type(cls)
+        field_name_to_type = cls._get_field_name_to_type()
         if len(parts) > len(field_name_to_type):
             raise _exceptions.MalformedCoordinate(
                 "`string` contains too many space-delimited "
@@ -402,7 +388,7 @@ class BaseCoordinate(_BaseCoordinate):
     def _validate(self, *, revalidate: bool = False) -> None:
         if self._was_validated and not revalidate:
             return
-        for field in self._fields:
+        for field in self._get_fields():
             result = getattr(self, f"_validate_{field.name}")()
             if result is not None:
                 # Note: Cannot assign directly, because `self` is a
@@ -450,7 +436,7 @@ class BaseCoordinate(_BaseCoordinate):
     @_functools.cached_property
     def string(self) -> str:
         if self._template is None:
-            string = "".join(_iter_value_strings(self))
+            string = "".join(self._iter_value_strings())
         else:
             string = self._template.format(**self.__dict__)
         return string
@@ -484,7 +470,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         # Compare.
         for field, self_val, other_val in zip(
-                self._fields, self, other, strict=True
+                self._get_fields(), self, other, strict=True
         ):
             if self_val == other_val:
                 continue
@@ -611,6 +597,17 @@ class BaseCoordinate(_BaseCoordinate):
     # @_abc.abstractmethod
     # def _to_lps_or_ltm(self, **kwargs) -> Lps | Ltm:
     #     ...
+
+    #* Utilities. -------------------------------------------------------------
+    def _iter_value_strings(self) -> _typing.Iterator[str]:
+        for value in self:
+            match value:
+                case None:
+                    continue
+                case str():
+                    yield value
+                case _:
+                    yield repr(value)
 
 
 
@@ -933,7 +930,7 @@ class _GriddedCoordinate(BaseCoordinate):
                           for k, v in match_dict.items()}
 
         # Coerce each argument to the correct type.
-        field_name_to_type = _get_field_name_to_type(cls)
+        field_name_to_type = cls._get_field_name_to_type()
         init_kwargs = {
             name: field_name_to_type[name](value_string)
             for name, value_string in match_dict.items()
