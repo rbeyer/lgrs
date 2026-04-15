@@ -279,7 +279,7 @@ class LpsZone(BaseZone):
             id_num = LPS_S_ID
         else:
             north_or_south = "North"
-            origin = LPS_N_LATITUDE_OF_PROJECTION_ORIGIN
+            lat_origin = LPS_N_LATITUDE_OF_PROJECTION_ORIGIN
             id_num = LPS_N_ID
         bbox_string = self._get_bbox_string()
         wkt = _format_lps_wkt(**locals())
