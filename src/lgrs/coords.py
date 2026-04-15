@@ -57,11 +57,15 @@ type ToMethod = _collections.abc.Callable[..., BaseCoordinate]
 def _cache(func: ToMethod) -> ToMethod:
     public_func = getattr(BaseCoordinate, func.__name__.removeprefix("_"))
     @_functools.wraps(public_func)
-    def wrapped(self: BaseCoordinate, **kwargs) -> BaseCoordinate:
-        new = func(self, **kwargs)
+    def wrapped(self: BaseCoordinate) -> BaseCoordinate:
+        new = func(self)
         self._register_cousin(new)
         return new
     return wrapped
+
+def _calc_na_letterset(zone_number: int) -> int:
+    na_letterset = (zone_number - 1) % 3  # Eq. 83
+    return na_letterset
 
 def _redirect(func: ToMethod) -> ToMethod:
     """
@@ -69,19 +73,15 @@ def _redirect(func: ToMethod) -> ToMethod:
 
     A method decorated with this function will never be called (and
     therefore can be empty). Rather, a "cousin" `BaseCoordinate` instance
-    is found and its (hidden) `._to_*()` counterpart is called instead, with
-    the same keyword arguments. The result of that call is returned.
-    Specifically, that cousin is used whose `._to_*()` is the most
-    performant among those of available cousins.
+    is found and its (hidden) `._to_*()` counterpart is called instead. The
+    result of that call is returned. Specifically, that cousin is used whose
+    `._to_*()` is the most performant among those of available cousins.
 
-    A "cousin" is another `BaseCoordinate` whose constraints are a (non-
-    strict) subset of those that apply to `self`. For example, if an
-    `LtmLgrs` instance was created (by transformation) with the constraint
-    that it use extended LTM zones, then any cousin of that instance must
-    also be compatible with this constraint and cannot add new constraints.
-    Cousins are often generated during intermediate calculations, whether
-    internal or external (i.e., by the user), so caching them into
-    cousin groups improves efficiency.
+    A "cousin" is another `BaseCoordinate` whose location (after
+    transformation) and constraints are the same as those of `self`. Cousins
+    are often generated during intermediate calculations, whether internal
+    or external (i.e., by the user), so caching them into cousin groups
+    improves efficiency.
 
     Parameters
     ----------
@@ -94,12 +94,12 @@ def _redirect(func: ToMethod) -> ToMethod:
     coordinate : BaseCoordinate
         The output of the `._to_*(**kwargs)` call.
     """
-    def wrapped(self: BaseCoordinate, **kwargs) -> BaseCoordinate:
+    def wrapped(self: BaseCoordinate) -> BaseCoordinate:
         # Note: `func` itself is only used for its return type and name.
-        best_cousin, is_resolved = self._get_best_cousin(func, **kwargs)
+        best_cousin, is_resolved = self._get_best_cousin(func)
         if is_resolved:
             return best_cousin
-        new = getattr(best_cousin, f"_{func.__name__}")(**kwargs)
+        new = getattr(best_cousin, f"_{func.__name__}")()
         return new
     return wrapped
 
@@ -111,6 +111,9 @@ def _resolve_out_types(func: _collections.abc.Callable) -> tuple[type, ...]:
     else:
         out_types = (out_hint,)
     return out_types
+
+def _return_none(self: BaseCoordinate) -> None:
+    return None
 
 
 
@@ -192,11 +195,50 @@ def _remove_i_and_o(match: _regex.Match) -> str:
 ###############################################################################
 # region> UTILITIES: OTHER
 ###############################################################################
+def _easy_dataclass(cls: type) -> type:
+    # Isolate non-universal fields.
+    naive_dataclass = _dataclasses.dataclass(cls, frozen=True, kw_only=True)
+    univ_field_name_set = {
+        field.name
+        for field in _dataclasses.fields(_BaseCoordinate)
+    }
+    non_univ_fields = [
+        field
+        for field in _dataclasses.fields(naive_dataclass)
+        if field.name not in univ_field_name_set
+    ]
+
+    # Insert "shadow" `dataclass` in inheritance, to push non-universal
+    # fields to end.
+    field_annotations = {
+        field.name: field.type
+        for field in non_univ_fields
+    }
+    shadow_cls = type(
+        f"_Shadow{cls.__name__}", (_AbstractBaseCoordinate,),
+        {"__annotations__": field_annotations}
+    )
+    shadow_dataclass = _dataclasses.dataclass(
+        shadow_cls, kw_only=True, frozen=True
+    )
+    mro = (
+        *cls.__mro__[:cls.__mro__.index(_AbstractBaseCoordinate)],
+        *shadow_dataclass.__mro__,
+    )
+    twin_cls = type(cls.__name__, mro, {"__module__": cls.__module__})
+
+    # Create and return outer dataclass.
+    dataclass = _dataclasses.dataclass(kw_only=True, frozen=True)(twin_cls)
+    return dataclass
+
+
 @_functools.cache
-def _get_field_name_to_type(typ: type) -> dict[str, type]:
+def _get_field_name_to_type(typ: type[BaseCoordinate]) -> dict[str, type]:
     name_to_type = {}
+    field_name_set = {field.name
+                       for field in typ._get_fields()}
     for name, typ in _typing.get_type_hints(typ).items():
-        if name[0] == "_":
+        if name not in field_name_set:
             continue
         if isinstance(typ, _types.UnionType):
             types = list(_typing.get_args(typ))
@@ -232,37 +274,75 @@ def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
 ###############################################################################
 # region> COORDINATE BASE TYPES
 ###############################################################################
+class _AbstractBaseCoordinate(_abc.ABC):
+    pass
+
 # Note: `_BaseCoordinate` is useful for defining behavior that depends
 # on the class being a dataclass. Conversely, `BaseCoordinate` and its
 # hidden subclasses are useful for defining all other behavior (without
 # accidentally implying dataclass fields).
-@_dataclasses.dataclass(kw_only=True, frozen=True)
-class _BaseCoordinate(_abc.ABC):
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class _BaseCoordinate(_AbstractBaseCoordinate):
+
+    #* Fields and validation. -------------------------------------------------
+    _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
+    polar_ltm: bool | None = None
+    prefer_lps: bool | None = None
+    extended_ltm: bool | None = None
     validate: _dataclasses.InitVar[bool] = True
 
-    def __post_init__(self, validate: bool) -> None:
-        if validate:
-            self._validate()
+    def _validate_polar_ltm(self) -> bool | None:
+        if self.polar_ltm:
+            if (self.prefer_lps or self.extended_ltm):
+                raise _exceptions.MalformedCoordinate(
+                    "If `polar_ltm` is `True`, `prefer_lps` and `extended_ltm` "
+                    "must be `False` (or `None`)."
+                )
+        elif self.polar_ltm is None:
+            return False
 
-    def __iter__(self) -> _collections.abc.Iterable:
-        return (getattr(self, field.name)
-                for field in _dataclasses.fields(self))
+    def _validate_prefer_lps(self) -> bool | None:
+        if self.prefer_lps is None:
+            return False
+
+    def _validate_extended_ltm(self) -> bool | None:
+        if self.extended_ltm is None:
+            return False
+
+    #* Initialization. --------------------------------------------------------
+    def __post_init__(self, validate: bool) -> None:
+        if validate:  # TODO: Uncomment after testing.
+        # if validate and False:  # TODO: Comment after testing.
+            self._validate()
 
     @_functools.cached_property
     def _init_kwargs(self) -> dict[str, _typing.Any]:
         return {field.name: getattr(self, field.name)
-                for field in _dataclasses.fields(self)}
+                for field in self._fields}
 
-    # TODO: Check that `._validate()` is complete in all subclasses.
-    @_abc.abstractmethod
-    def _validate(self) -> None:
-        ...
+    #* Field support. ---------------------------------------------------------
+    def __iter__(self) -> _collections.abc.Iterable:
+        return (getattr(self, field.name)
+                for field in self._fields)
+
+    @_functools.cached_property
+    def _fields(self) -> tuple[_dataclasses.Field, ...]:
+        return self._get_fields()
+
+    @classmethod
+    def _get_fields(cls) -> tuple[_dataclasses.Field, ...]:
+        try:
+            return cls._fields_cached
+        except AttributeError:
+            fields = _dataclasses.fields(cls)
+            cls._fields = cls._fields_cached = fields
+            return fields
 
 
 class BaseCoordinate(_BaseCoordinate):
     # TODO: Document that `MalformedCoordinate` may be raised.
     _idx: int
-    _template: _typing.ClassVar[str | None] = None
+    _template: str | None = None
 
     #* Basic behavior. --------------------------------------------------------
     def __bytes__(self) -> _builtins.bytes:
@@ -282,10 +362,12 @@ class BaseCoordinate(_BaseCoordinate):
         # `LGRS_Coordinate_Conversion`.
         parts = tuple(string.split(" "))
         if len(parts) == 1:
-            raise TypeError("`string` must be space-delimited")
+            raise _exceptions.MalformedCoordinate(
+                "`string` must be space-delimited"
+            )
         field_name_to_type = _get_field_name_to_type(cls)
         if len(parts) > len(field_name_to_type):
-            raise TypeError(
+            raise _exceptions.MalformedCoordinate(
                 "`string` contains too many space-delimited "
                 f"components: {string!r}"
             )
@@ -294,6 +376,68 @@ class BaseCoordinate(_BaseCoordinate):
             for part, (name, typ) in zip(parts, field_name_to_type.items())
         }
         return cls(**init_kwargs)
+
+    #* Validation. ------------------------------------------------------------
+    @staticmethod
+    def _expect_error(func: _collections.abc.Callable) -> _typing.NoReturn:
+        func()
+        raise TypeError("An unknown error occurred.")
+
+    def _raise_malformed_coordinate(
+            self, middle: str, *,
+            attr_name: str, if_attr_name: str | None = None,
+    ) -> _typing.NoReturn:
+        if if_attr_name is None:
+            prefix = ""
+        else:
+            prefix = f"For `{if_attr_name}={getattr(self, if_attr_name)!r}`, "
+        raise _exceptions.MalformedCoordinate(
+            f"{prefix}"
+            f"`{attr_name}` must be "
+            f"{middle}"
+            f", not {getattr(self, attr_name)!r}"
+        )
+
+    def _validate(self) -> None:
+        for field in self._fields:
+            result = getattr(self, f"_validate_{field.name}")()
+            if result is not None:
+                # Note: Cannot assign directly, because `self` is a
+                # frozen dataclass.
+                object.__setattr__(self, field.name, result)
+
+    def _validate_against_closed_interval(
+        self, *, attr_name: str, minimum: _typing.Any, maximum: _typing.Any,
+        if_attr_name: str | None = None
+    ) -> None:
+        val = getattr(self, attr_name)
+        if not (minimum <= val <= maximum):
+            self._raise_malformed_coordinate(
+                f"between {minimum} and {maximum}, inclusive",
+                **locals()
+            )
+
+    def _validate_against_sequence(
+        self, *,
+        attr_name: str, sequence: _collections.abc.Sequence,
+        if_attr_name: str | None = None
+    ) -> None:
+        val = getattr(self, attr_name)
+        if val not in sequence:
+            if len(sequence) == 2:
+                item_1, item_2 = sequence
+                middle = f"{item_1!r} or {item_2!r}"
+            else:
+                middle = (
+                    f"one of {', '.join(map(repr, sequence[:-1]))}, "
+                    f"or {sequence[-1]!r}"
+                )
+            self._raise_malformed_coordinate(**locals())
+
+    def _validate_hemisphere(self) -> None:
+        self._validate_against_sequence(
+            attr_name="hemisphere", sequence=("N", "S")
+        )
 
     #* Public data. -----------------------------------------------------------
     @_functools.cached_property
@@ -310,7 +454,9 @@ class BaseCoordinate(_BaseCoordinate):
 
     #* General public methods. --------------------------------------------------------
     def copy(self) -> _typing.Self:
-        return type(self)(**self._init_kwargs)
+        # Note: `self` can only exist if validated or explicitly not
+        # validated. Either way, `validate=False` is appropriate.
+        return type(self)(**self._init_kwargs, validate=False)
 
     def is_equal_to(
             self, other: _typing.Self, *,
@@ -331,7 +477,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         # Compare.
         for field, self_val, other_val in zip(
-                _dataclasses.fields(self), self, other, strict=True
+                self._fields, self, other, strict=True
         ):
             if self_val == other_val:
                 continue
@@ -362,27 +508,24 @@ class BaseCoordinate(_BaseCoordinate):
         else:
             return cached_cousins
 
-    def _get_best_cousin(
-            self, func: ToMethod, **kwargs: bool | None
-    ) -> tuple[BaseCoordinate, bool]:
-        # Resolve root and out types.
-        root = self._get_compatible_root()
+    def _get_best_cousin(self, func: ToMethod) -> tuple[BaseCoordinate, bool]:
+        # Resolve out types.
         out_types = _resolve_out_types(func)
 
         # Find best starting point for conversion.
-        # Note: `._idx` on each public `BaseCoordinate` subclass indexes
-        # the processing chains:
+        # Note: `._idx` on each public `BaseCoordinate` subclass
+        # indexes the processing chains:
         #   LatLon -> Lps --> LpsLgrs -> LpsAcc  (`._idx` <= 0)
         #   LatLon -> Ltm --> LtmLgrs -> LtmAcc  (`._idx` >= 0)
-        # where index magnitudes are set so that interconversion between
-        # LGRS and ACC is preferred over (slower) interconversion
-        # between LPS/LTM and LGRS.
+        # where index magnitudes are set so that interconversion
+        # between LGRS and ACC is preferred over (slower)
+        # interconversion between LPS/LTM and LGRS.
         min_abs_diff = float("inf")  # Initialize.
         closest_cousin = None  # Initialize.
         for out_type in out_types:
             targ_idx = out_type._idx
             abs_targ_idx = abs(targ_idx)
-            for cousin in root._cousins:
+            for cousin in self._cousins:
                 abs_diff = abs(targ_idx - cousin._idx)
                 if abs_diff > min_abs_diff:
                     continue
@@ -393,71 +536,29 @@ class BaseCoordinate(_BaseCoordinate):
                 closest_cousin = cousin
                 if min_abs_diff == 0:
                     return (closest_cousin, True)
+
+        # Characterize (or create) best cousin and return.
         if closest_cousin is None:
-            best = root._to_latlon(**kwargs)
+            best = self._to_latlon()
             is_resolved = isinstance(best, out_types)
         else:
             best = closest_cousin
             is_resolved = False
         return (best, is_resolved)
 
-    def _get_compatible_root(self, **kwargs: bool | None) -> BaseCoordinate:
-        if not _caching._CACHING_IS_ENABLED:
-            return self._to_latlon(**kwargs)
-        cur_root = self._root
-        kwarg_set = {(k, v)
-                     for k, v in kwargs.items()
-                     if v is not None}
-        if cur_root._constraint_kwarg_set is None:
-            # Note: Special `LatLon` case where root is universally
-            # compatible. However, with this call, its constraints will
-            # be resolved and set. (`LatLon.to_latlon()` does not call
-            # the current method.)
-            new_root = cur_root
-        elif kwarg_set.issubset(cur_root._constraint_kwarg_set):
-            # Note: `cur_root` satisfies all specified constraints.
-            return cur_root
-        else:
-            new_root = self._to_latlon(**kwargs).copy()
-        object.__setattr__(new_root, "_constraint_kwarg_set", kwarg_set)
-        return new_root
-
     def _register_cousin(self, cousin: BaseCoordinate) -> None:
         if _caching._CACHING_IS_ENABLED:
-            _caching._store_to_weak_cache(cousin, key="root", value=self._root)
-            self._root._cousins.appendleft(cousin)
-
-    @property
-    def _root(self) -> BaseCoordinate:
-        # Note: When an instance is the result of transformation, this
-        # attribute is overwritten to point to the known root.
-        # Otherwise, when instantiation is direct, `self` is its own
-        # root.
-        cached = _caching._query_weak_cache(self, key="root", default=None)
-        if cached is None:
-            _caching._store_to_weak_cache(self, key="root", value=self)
-            return self
-        else:
-            return cached
+            object.__setattr__(cousin, "_root", self._root)
+            self._cousins.appendleft(cousin)
 
     @_functools.cached_property
-    def _constraint_kwarg_set(self) -> set[tuple[str, bool]] | None:
-        # Note: When an instance is created by transformation, this
-        # value is overwritten (on the root) to represent the explicit
-        # constraints. Otherwise, when instantiation is direct, the
-        # default empty set indicates that the constraints on the
-        # instance are unknown (but may exist). For example, an
-        # `LtmLgrs` instance from the extended LTM region is not
-        # equivalent to an `LtmLgrs` with no (non-defaulted)
-        # constraints, since the extended LTM region is a constraint.
-        # See also `LatLon._constraint_kwarg_set()`, which returns
-        # `None`.
-        assert _caching._CACHING_IS_ENABLED
-        return set()
+    def _root(self) -> BaseCoordinate:
+        # Note: Overridden when instantiated by transformation.
+        return self
 
     #* Coordinate transformation. ---------------------------------------------
     @_redirect
-    def to_acc(self, *, extended_ltm: bool | None = None) -> LpsAcc | LtmAcc:
+    def to_acc(self) -> LpsAcc | LtmAcc:
         ...
 
     @_redirect
@@ -465,14 +566,11 @@ class BaseCoordinate(_BaseCoordinate):
         ...
 
     @_redirect
-    def to_lgrs(self, *, extended_ltm: bool | None = None) -> LpsLgrs | LtmLgrs:
+    def to_lgrs(self) -> LpsLgrs | LtmLgrs:
         ...
 
     @_redirect
-    def to_lps_or_ltm(
-            self, *,
-            extended_ltm: bool | None = None, polar_ltm: bool | None = None
-    ) -> Lps | Ltm:
+    def to_lps_or_ltm(self) -> Lps | Ltm:
         ...
 
     # TODO: Uncomment abstract methods after implementation.
@@ -520,29 +618,22 @@ class _NonGriddedCoordinate(BaseCoordinate):
         return transformer
 
 
-@_dataclasses.dataclass(kw_only=True, frozen=True)
+@_easy_dataclass
 class LatLon(_NonGriddedCoordinate):
     # TODO: Should `._template` use N/S and E/W?
 
-    #* Fields, initialization, and related. -----------------------------------
+    #* Fields and validation. -------------------------------------------------
     _template = "{latitude!r}° {longitude!r}°"
     latitude: float
     longitude: float
 
-    def _validate(self) -> None:
+    def _validate_latitude(self) -> float:
         conformed_lat, = _database._conform_latitudes((self.latitude,))
-        object.__setattr__(self, "latitude", conformed_lat)
-        conformed_lon, = _database._conform_longitudes((self.longitude,))
-        object.__setattr__(self, "longitude",conformed_lon)
+        return conformed_lat
 
-    #* Transformation caching. ------------------------------------------------
-    @_functools.cached_property
-    def _constraint_kwarg_set(self) -> set[tuple[str, bool]] | None:
-        # Note: `LatLon` is a special case for which no constraints can
-        # be applied. Therefore, if `LatLon` is the root, treat its
-        # constraints as unknown but universally compatible, using the
-        # special value `None`.
-        return None
+    def _validate_longitude(self) -> float:
+        conformed_lon, = _database._conform_longitudes((self.longitude,))
+        return conformed_lon
 
     #* Coordinate transformation. ---------------------------------------------
     def _get_proj_crs(self, **kwargs) -> _srs.CRS:
@@ -562,8 +653,8 @@ class LatLon(_NonGriddedCoordinate):
         return self
 
     @_cache
-    def _to_lps_or_ltm(self, **kwargs) -> Lps | Ltm:
-        proj_crs = self._get_proj_crs(**kwargs)
+    def _to_lps_or_ltm(self) -> Lps | Ltm:
+        proj_crs = self._get_proj_crs()
         transformer = self._get_transformer(
             to_geographic=False, proj_crs=proj_crs
         )
@@ -582,18 +673,33 @@ class LatLon(_NonGriddedCoordinate):
         lgrs = lps_or_ltm._to_lgrs(**kwargs)
         return lgrs
 
-    # Note: Required to retain `._constrain_kwarg_set` as `None`.
-    def to_latlon(self) -> LatLon:
-        return self
 
+@_easy_dataclass
+class Lps(_NonGriddedCoordinate):
 
-class _LpsAndLtm(_NonGriddedCoordinate):
+    #* Fields and validation. -------------------------------------------------
+    _template = "{hemisphere}{easting!r}E{northing!r}N"
+    hemisphere: str
     easting: float
     northing: float
 
+    # Note: `._validate_hemisphere()` is defined on base class.
+
+    def _validate_easting(self) -> None:
+        # TODO: Implement.
+        ...
+
+    def _validate_northing(self) -> None:
+        # TODO: Implement.
+        ...
+
+    #* Coordinate transformation. ---------------------------------------------
+    def _get_proj_crs(self) -> _srs.CRS:
+        return _srs.make_lunar_crs(self.hemisphere)
+
     def _get_transformer(self, *, to_geographic: bool) -> _pyproj.Transformer:
         proj_crs = self._get_proj_crs()
-        transformer = super()._get_transformer(
+        transformer = LatLon._get_transformer(
             to_geographic=to_geographic, proj_crs=proj_crs
         )
         return transformer
@@ -604,24 +710,6 @@ class _LpsAndLtm(_NonGriddedCoordinate):
         lat, lon = transformer.transform(self.easting, self.northing)
         latlon = LatLon(latitude=lat, longitude=lon)
         return latlon
-
-
-@_dataclasses.dataclass(kw_only=True, frozen=True)
-class Lps(_LpsAndLtm):
-
-    #* Fields, initialization, and related. -----------------------------------
-    _template = "{hemisphere}{easting!r}E{northing!r}N"
-    hemisphere: str
-    easting: float
-    northing: float
-
-    def _validate(self) -> None:
-        # TODO: Implement.
-        ...
-
-    #* Coordinate transformation. ---------------------------------------------
-    def _get_proj_crs(self) -> _srs.CRS:
-        return _srs.make_lunar_crs(self.hemisphere)
 
     @_cache
     def _to_lgrs(self, **kwargs) -> LpsLgrs:
@@ -636,9 +724,7 @@ class Lps(_LpsAndLtm):
             case ("N", False):  # Eq. 101
                 lon_band = "Z"
             case _:
-                raise TypeError(
-                    f"`.hemisphere` is not recognized: {self.hemisphere}"
-                )
+                self._expect_error(self._validate_hemisphere)
         e_adj = self.easting - _wkt.LPS_FALSE_EASTING  # Eq. 109
         n_adj = self.northing - _wkt.LPS_FALSE_NORTHING  # Eq. 110
         if is_in_west_half:
@@ -666,23 +752,53 @@ class Lps(_LpsAndLtm):
         return lps_lrgs
 
 
-@_dataclasses.dataclass(kw_only=True, frozen=True)
-class Ltm(_LpsAndLtm):
+@_easy_dataclass
+class Ltm(_NonGriddedCoordinate):
 
-    #* Fields, initialization, and related. -----------------------------------
+    #* Fields and validation. -------------------------------------------------
     _template = "{zone_number}{hemisphere}{easting!r}E{northing!r}N"
     zone_number: int
     hemisphere: str
     easting: float
     northing: float
 
-    def _validate(self) -> None:
-        # TODO: Implement.
-        ...
+    def _validate_zone_number(self) -> None:
+        return self._validate_against_closed_interval(
+            attr_name="zone_number", minimum=1, maximum=45
+        )
+
+    _validate_hemisphere = Lps._validate_hemisphere
+
+    def _validate_easting(self) -> None:
+        # TODO: Confirm limits empirically.
+        # Note: Limits from p. 47 of M2025.
+        return self._validate_against_closed_interval(
+            attr_name="easting", minimum=125_000, maximum=375_000
+        )
+
+    def _validate_northing(self) -> None:
+        # TODO: Confirm limits empirically, including for extended LTM.
+        # Note: Limits from p. 47 of M2025.
+        match self.hemisphere:
+            case "N":
+                minimum = 0
+                maximum = 2_487_500
+            case "S":
+                minimum = 12_500
+                maximum = 2_500_000
+            case _:
+                self._expect_error(self._validate_hemisphere)
+        return self._validate_against_closed_interval(
+            attr_name="northing", minimum=minimum, maximum=maximum
+        )
 
     #* Coordinate transformation. ---------------------------------------------
     def _get_proj_crs(self) -> _srs.CRS:
         return _srs.make_lunar_crs(f"{self.zone_number}{self.hemisphere}")
+
+    _get_transformer = Lps._get_transformer
+
+    _to_latlon = Lps._to_latlon
 
     @_cache
     def _to_lgrs(self, **kwargs) -> LtmLgrs:
@@ -694,7 +810,7 @@ class Ltm(_LpsAndLtm):
         ea = LtmLgrs._easting_area__idx_to_char[ea_idx]  # Table 7
         # TODO: Determine if the "- 1" (which appears in the reference
         #  code but not in Eq. 83) is correct.
-        na_letterset = (self.zone_number - 1) % 3  # Eq. 83
+        na_letterset = _calc_na_letterset(self.zone_number)  # Eq. 83
         na_idx = _floor(self.northing // 25_000) % 20  # Eq. 84
         na = LtmLgrs._northing_area__letterset_to_idx_to_char[na_letterset][na_idx]  # Tables 8, 9, 10
         e = self.easting % 25_000  # Eq. 85
@@ -718,9 +834,13 @@ class Ltm(_LpsAndLtm):
 class _GriddedCoordinate(BaseCoordinate):
     # TODO: Add `.truncate_to()`.
 
-    #* Fields, initialization, and related. -----------------------------------
+    #* Fields and validation. -------------------------------------------------
     easting:  str | None
     northing: str | None
+
+    def _validate(self) -> None:
+        self._validate_against_pattern()
+        super()._validate()
 
     def _validate_against_pattern(self) -> None:
         if self._pattern.search(self.string) is None:
@@ -729,8 +849,8 @@ class _GriddedCoordinate(BaseCoordinate):
             )
 
     #* Instantiation from string. ---------------------------------------------
-    __pattern_bytes: _typing.ClassVar[_regex.Pattern]
-    _pattern: _typing.ClassVar[_regex.Pattern]
+    __pattern_bytes: _regex.Pattern
+    _pattern: _regex.Pattern
 
     @classmethod
     def _get_pattern_bytes(cls) -> _regex.Pattern:
@@ -789,86 +909,15 @@ class _GriddedCoordinate(BaseCoordinate):
             return int(self.northing)
 
 
-@_dataclasses.dataclass(kw_only=True, frozen=True)
-class _LpsLgrs(_GriddedCoordinate):
-    #* Fields, initialization, and related. -----------------------------------
-    _pattern = _compile_regex_without_i_and_o(
-        "^"
-        "(?P<longitudinal_band>[ABYZ])"
-        "(?P<easting_area>[A-Z])"
-        "(?P<northing_area>[-A-Z+])"
-        f"({_make_en_pattern(5, 4, 3, 2)})?"
-        "$"
-    )
-    longitudinal_band: str
-    easting_area: str
-    northing_area: str
-    easting: str | None = None
-    northing: str | None = None
-
-    #* Coordinate transformation. ---------------------------------------------
-    _easting_area__char_to_idx, _easting_area__idx_to_char = _index_char_set(
-        _pattern, "easting_area", start=1
-    )
-    _northing_area__char_to_idx, _northing_area__idx_to_char = _index_char_set(
-        _pattern, "northing_area", start=0
-    )
-
-
-@_dataclasses.dataclass(kw_only=True, frozen=True)
-class _LtmLgrs(_GriddedCoordinate):
-    #* Fields, initialization, and related. -----------------------------------
-    _pattern = _compile_regex_without_i_and_o(
-        "^"
-        "(?P<longitudinal_band>[0-9]{1,2})"
-        "(?P<latitudinal_band>[C-X])"
-        "(?P<easting_area>[A-K])"
-        "(?P<northing_area>[A-V])"
-        f"({_make_en_pattern(5, 4, 3, 2)})?"
-        "$"
-    )
-    longitudinal_band: int  # LTM zone
-    latitudinal_band: str
-    easting_area: str
-    northing_area: str
-    easting: str | None = None
-    northing: str | None = None
-
-    #* Coordinate transformation. ---------------------------------------------
-    _latitudinal_band__char_to_idx, _latitudinal_band__idx_to_char = _index_char_set(
-        _pattern, "latitudinal_band", start=-10, C=-11, X=10
-    )
-    _easting_area__char_to_idx, _easting_area__idx_to_char = _index_char_set(
-        _pattern, "easting_area", start=0
-    )
-    (
-        _northing_area__letterset_to_char_to_idx,
-        _northing_area__letterset_to_idx_to_char
-    ) = _map_index_char_sets(
-        "ABCDEFGHJKLMNPQRSTUV", "FGHJKLMNPQRSTUVABCDE", "LMNPQRSTUVABCDEFGHJK",
-        start=0
-    )
-
-
 
 # endregion
 ###############################################################################
 # region> GRIDDED COORDINATE TYPES
 ###############################################################################
-class _Acc(_GriddedCoordinate):
+@_easy_dataclass
+class LpsAcc(_GriddedCoordinate):
 
-    def _validate_acc(self) -> None:
-        if (self.easting is None) != (self.northing is None):
-            raise TypeError(
-                "`easting` and `northing` must both be specified "
-                "or both be `None`."
-            )
-
-
-@_dataclasses.dataclass(kw_only=True, frozen=True)
-class LpsAcc(_LpsLgrs, _Acc):
-
-    #* Fields, initialization, and related. -----------------------------------
+    #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
         "^"
         "(?P<longitudinal_band>[ABYZ])"
@@ -888,11 +937,43 @@ class LpsAcc(_LpsLgrs, _Acc):
     northing_1k: str | None = None
     northing: str | None = None
 
-    def _validate(self) -> None:
-        self._validate_against_pattern()
-        self._validate_acc()
+    _validate_longitudinal_band = _return_none  # `._pattern` is sufficient.
+
+    def _validate_easting_area(self) -> None:
+        match self.longitudinal_band:
+            case "A" | "Y":
+                minimum = "M"
+                maximum = "Z"
+            case "B" | "Z":
+                minimum = "A"
+                maximum = "N"
+            case _:
+                self._expect_error(self._validate_longitudinal_band)
+        self._validate_against_closed_interval(
+            attr_name="easting_area", minimum=minimum, maximum=maximum,
+            if_attr_name="longitudinal_band"
+        )
+
+    _validate_northing_area = _return_none  # `._pattern` is sufficient.
+    _validate_easting_1k = _return_none  # `._pattern` is sufficient.
+
+    def _validate_easting(self) -> None:
+        if (self.easting is None) != (self.northing is None):
+            raise _exceptions.MalformedCoordinate(
+                "`easting` and `northing` must both be specified "
+                "or both be `None`."
+            )
+
+    _validate_northing_1k = _return_none  # `._pattern` is sufficient.
+    _validate_northing = _return_none  # `._pattern` is sufficient.
 
     #* Coordinate transformation. ---------------------------------------------
+    _easting_area__char_to_idx, _easting_area__idx_to_char = _index_char_set(
+        _pattern, "easting_area", start=1
+    )
+    _northing_area__char_to_idx, _northing_area__idx_to_char = _index_char_set(
+        _pattern, "northing_area", start=0
+    )
     _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
         _pattern, "easting_1k", start=0
     )
@@ -901,22 +982,49 @@ class LpsAcc(_LpsLgrs, _Acc):
     )
 
 
-@_dataclasses.dataclass(kw_only=True, frozen=True)
-class LpsLgrs(_LpsLgrs):
+@_easy_dataclass
+class LpsLgrs(_GriddedCoordinate):
+    #* Fields and validation. -------------------------------------------------
+    _pattern = _compile_regex_without_i_and_o(
+        "^"
+        "(?P<longitudinal_band>[ABYZ])"
+        "(?P<easting_area>[A-Z])"
+        "(?P<northing_area>[-A-Z+])"
+        f"({_make_en_pattern(5, 4, 3, 2)})?"
+        "$"
+    )
+    longitudinal_band: str
+    easting_area: str
+    northing_area: str
+    easting: str | None = None
+    northing: str | None = None
 
-    #* Validation. ------------------------------------------------------------
-    def _validate(self) -> None:
-        self._validate_against_pattern()
+    _validate_longitudinal_band = LpsAcc._validate_longitudinal_band
+    _validate_easting_area = LpsAcc._validate_easting_area
+    _validate_northing_area = LpsAcc._validate_northing_area
+
+    def _validate_easting(self) -> None:
+        # TODO: Implement.
+        ...
+
+    def _validate_northing(self) -> None:
+        # TODO: Implement.
+        ...
 
     #* Coordinate transformation. ---------------------------------------------
+    _easting_area__char_to_idx = LpsAcc._easting_area__char_to_idx
+    _easting_area__idx_to_char = LpsAcc._easting_area__idx_to_char
+    _northing_area__char_to_idx = LpsAcc._northing_area__char_to_idx
+    _northing_area__idx_to_char = LpsAcc._northing_area__idx_to_char
+
     def _to_acc(self, **kwargs) -> LpsAcc:
         ...
 
 
-@_dataclasses.dataclass(kw_only=True, frozen=True)
-class LtmAcc(_LtmLgrs, _Acc):
+@_easy_dataclass
+class LtmAcc(_GriddedCoordinate):
 
-    #* Fields, initialization, and related. -----------------------------------
+    #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
         "^"
         "(?P<longitudinal_band>[0-9]{1,2})"
@@ -929,7 +1037,7 @@ class LtmAcc(_LtmLgrs, _Acc):
         "(?P<northing>[0-9]{1,3})?)?"
         "$"
     )
-    longitudinal_band: int
+    longitudinal_band: int  # LTM zone
     latitudinal_band: str
     easting_area: str
     northing_area: str
@@ -938,11 +1046,41 @@ class LtmAcc(_LtmLgrs, _Acc):
     northing_1k: str
     northing: str | None = None
 
-    def _validate(self) -> None:
-        self._validate_against_pattern()
-        self._validate_acc()
+    def _validate_longitudinal_band(self) -> None:
+        return self._validate_against_closed_interval(
+            attr_name="longitudinal_band", minimum=1, maximum=45
+        )
+
+    _validate_latitudinal_band = _return_none  # `._pattern` is sufficient.
+    _validate_easting_area = _return_none  # `._pattern` is sufficient.
+
+    def _validate_northing_area(self) -> None:
+        na_letterset = _calc_na_letterset(self.longitudinal_band)  # Eq. 83
+        na_chars = LtmLgrs._northing_area__letterset_to_char_to_idx[na_letterset]
+        self._validate_against_sequence(
+            attr_name="easting_area", sequence=na_chars,
+            if_attr_name="longitudinal_band"
+        )
+
+    _validate_easting_1k = LpsAcc._validate_easting_1k
+    _validate_easting = LpsAcc._validate_easting
+    _validate_northing_1k = LpsAcc._validate_northing_1k
+    _validate_northing = LpsAcc._validate_northing
 
     #* Coordinate transformation. ---------------------------------------------
+    _latitudinal_band__char_to_idx, _latitudinal_band__idx_to_char = _index_char_set(
+        _pattern, "latitudinal_band", start=-10, C=-11, X=10
+    )
+    _easting_area__char_to_idx, _easting_area__idx_to_char = _index_char_set(
+        _pattern, "easting_area", start=0
+    )
+    (
+        _northing_area__letterset_to_char_to_idx,
+        _northing_area__letterset_to_idx_to_char
+    ) = _map_index_char_sets(
+        "ABCDEFGHJKLMNPQRSTUV", "FGHJKLMNPQRSTUVABCDE", "LMNPQRSTUVABCDEFGHJK",
+        start=0
+    )
     _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
         _pattern, "easting_1k", start=0
     )
@@ -951,11 +1089,46 @@ class LtmAcc(_LtmLgrs, _Acc):
     )
 
 
-@_dataclasses.dataclass(kw_only=True, frozen=True)
-class LtmLgrs(_LtmLgrs):
+@_easy_dataclass
+class LtmLgrs(_GriddedCoordinate):
 
-    def _validate(self) -> None:
-        self._validate_against_pattern()
+    #* Fields and validation. -------------------------------------------------
+    _pattern = _compile_regex_without_i_and_o(
+        "^"
+        "(?P<longitudinal_band>[0-9]{1,2})"
+        "(?P<latitudinal_band>[C-X])"
+        "(?P<easting_area>[A-K])"
+        "(?P<northing_area>[A-V])"
+        f"({_make_en_pattern(5, 4, 3, 2)})?"
+        "$"
+    )
+    longitudinal_band: int  # LTM zone
+    latitudinal_band: str
+    easting_area: str
+    northing_area: str
+    easting: str | None = None
+    northing: str | None = None
+
+    _validate_longitudinal_band = LtmAcc._validate_longitudinal_band
+    _validate_latitudinal_band = LtmAcc._validate_latitudinal_band
+    _validate_easting_area = LtmAcc._validate_easting_area
+    _validate_northing_area = LtmAcc._validate_northing_area
+
+    def _validate_easting(self) -> None:
+        # TODO: Implement.
+        ...
+
+    def _validate_northing(self) -> None:
+        # TODO: Implement.
+        ...
+
+    #* Coordinate transformation. ---------------------------------------------
+    _latitudinal_band__char_to_idx = LtmAcc._latitudinal_band__char_to_idx
+    _latitudinal_band__idx_to_char = LtmAcc._latitudinal_band__idx_to_char
+    _easting_area__char_to_idx = LtmAcc._easting_area__char_to_idx
+    _easting_area__idx_to_char = LtmAcc._easting_area__idx_to_char
+    _northing_area__letterset_to_char_to_idx = LtmAcc._northing_area__letterset_to_char_to_idx
+    _northing_area__letterset_to_idx_to_char = LtmAcc._northing_area__letterset_to_idx_to_char
 
 
 
@@ -996,12 +1169,12 @@ lat_lon1 = LatLon(latitude=-81.13048481, longitude=96.48515138)
 lps_or_ltm1 = lat_lon1.to_lps_or_ltm()
 lgrs1 = lps_or_ltm1.to_lgrs()
 
-lat_lon2 = LatLon(latitude=-81.13048481, longitude=96.48515138)
-lps_or_ltm2 = lat_lon2.to_lps_or_ltm(extended_ltm=True)
+lat_lon2 = LatLon(latitude=-81.13048481, longitude=96.48515138, extended_ltm=True)
+lps_or_ltm2 = lat_lon2.to_lps_or_ltm()
 lgrs2 = lps_or_ltm2.to_lgrs()
 
-lat_lon3 = LatLon(latitude=-81.13048481, longitude=96.48515138)
-lps_or_ltm3 = lat_lon3.to_lps_or_ltm(extended_ltm=False)
+lat_lon3 = LatLon(latitude=-81.13048481, longitude=96.48515138, extended_ltm=False)
+lps_or_ltm3 = lat_lon3.to_lps_or_ltm()
 lgrs3 = lps_or_ltm3.to_lgrs()
 
 lat_lon4 = LatLon(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53
@@ -1010,3 +1183,6 @@ lgrs4 = lps_or_ltm4.to_lgrs()
 
 lat_lon5 = LatLon(latitude=-30.13048481, longitude=96.48515138)
 lat_lon5.to_latlon()
+
+lps = Lps(hemisphere="S", easting=197000, northing=197000)
+lps.to_lgrs()  # TODO: How is this an `LtmLgrs` instance?
