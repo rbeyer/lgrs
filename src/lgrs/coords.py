@@ -1203,6 +1203,7 @@ class LpsLgrs(_GriddedCoordinate):
             acc_type = LpsAcc
         else:
             acc_type = LtmAcc
+            init_kwargs["latitudinal_band"] = self.latitudinal_band
         acc = acc_type(**init_kwargs, **self._root.constraints, validate=False)
         return acc
 
@@ -1367,4 +1368,7 @@ lat_lon5 = LatLon(latitude=-30.13048481, longitude=96.48515138)
 lat_lon5.to_latlon()
 
 lps = Lps(hemisphere="S", easting=197000, northing=197000)
-lps.to_lgrs()
+extreme_lat_lon = lps.to_latlon()
+
+lps_acc = lgrs1.to_acc()
+ltm_acc = lgrs2.to_acc()
