@@ -427,15 +427,18 @@ class BaseCoordinate(_BaseCoordinate):
             f", not {getattr(self, attr_name)!r}"
         )
 
-    def _validate(self, *, revalidate: bool = False) -> None:
-        if self._was_validated and not revalidate:
-            return
+    def _validate(self) -> None:
         for field in self._get_fields():
             result = getattr(self, f"_validate_{field.name}")()
             if result is not None:
                 # Note: Cannot assign directly, because `self` is a
                 # frozen dataclass.
                 object.__setattr__(self, field.name, result)
+        # Note: `._init_kwargs` effectively freezes values, which may
+        # not be finalized until validation completes. It should not be
+        # assigned until after validation.
+        assert "_init_kwargs" not in self.__dict__
+        object.__setattr__(self, "_was_validated", True)
 
     def _validate_against_closed_interval(
         self, *, attr_name: str, minimum: _typing.Any, maximum: _typing.Any,
@@ -468,6 +471,26 @@ class BaseCoordinate(_BaseCoordinate):
     def _validate_hemisphere(self) -> None:
         self._validate_against_sequence(
             attr_name="hemisphere", sequence=("N", "S")
+        )
+
+    def validate(self, *, revalidate: bool = False) -> None:
+        if not revalidate and self._was_validated:
+            return
+        new = self.copy()
+        new._validate()
+        if new._init_kwargs == self._init_kwargs:
+            return
+        change_lines = []
+        for k, new_v in new._init_kwargs.items():
+            old_v = self._init_kwargs[k]
+            if new_v != old_v:
+                change_lines.append(
+                    f"    {k}: {old_v!r} --> {new_v!r}"
+                )
+        raise _exceptions.MalformedCoordinate(
+            "\n"
+            "  Validation conformed the following value(s):\n"
+            f"{'\n'.join(change_lines)}"
         )
 
     #* Public data. -----------------------------------------------------------
@@ -951,8 +974,8 @@ class _GriddedCoordinate(BaseCoordinate):
     northing: str | None
 
     def _validate(self) -> None:
-        self._validate_against_pattern()
         super()._validate()
+        self._validate_against_pattern()
 
     def _validate_against_pattern(self) -> None:
         if self._pattern.search(self.string) is None:
