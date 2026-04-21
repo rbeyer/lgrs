@@ -266,6 +266,9 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     extended_ltm: bool = False
     validate: _dataclasses.InitVar[bool] = True
 
+    def _register_validation(self) -> None:
+        object.__setattr__(self, "_was_validated", True)
+
     def _validate(self) -> None:
         for field in self._get_fields():
             result = getattr(self, f"_validate_{field.name}")()
@@ -277,7 +280,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         # not be finalized until validation completes. It should not be
         # assigned until after validation.
         assert "_init_kwargs" not in self.__dict__
-        object.__setattr__(self, "_was_validated", True)
+        self._register_validation()
 
     def _validate_polar_ltm(self) -> None:
         if self.polar_ltm:
@@ -480,10 +483,16 @@ class BaseCoordinate(_BaseCoordinate):
     def validate(self, *, revalidate: bool = False) -> None:
         if not revalidate and self._was_validated:
             return
-        new = self.copy()
-        new._validate()
+        new = self.copy(validate=False)
+        try:
+            new._validate()
+        except _exceptions.MalformedCoordinate:
+            self._unregister_cousins(*self._cousins)
+            raise
         if new._init_kwargs == self._init_kwargs:
+            self._register_validation()
             return
+        self._unregister_cousins(*self._cousins)
         change_lines = []
         for k, new_v in new._init_kwargs.items():
             old_v = self._init_kwargs[k]
