@@ -209,8 +209,8 @@ def _easy_dataclass(cls: type) -> type:
         if field.name not in univ_field_name_set
     ]
 
-    # Insert "shadow" `dataclass` in inheritance, to push non-universal
-    # fields to end.
+    # Insert "shadow" dataclass in inheritance, to push universal fields
+    # to end.
     field_annotations = {
         field.name: field.type
         for field in non_univ_fields
