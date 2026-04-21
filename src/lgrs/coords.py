@@ -94,6 +94,7 @@ def _redirect(func: ToMethod) -> ToMethod:
     coordinate : BaseCoordinate
         The output of the `._to_*(**kwargs)` call.
     """
+    @_functools.wraps(func)
     def wrapped(self: BaseCoordinate) -> BaseCoordinate:
         # Note: `func` itself is only used for its return type and name.
         best_cousin, is_resolved = self._get_best_cousin(func)
@@ -260,28 +261,21 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
-    polar_ltm: bool | None = None
-    prefer_lps: bool | None = None
-    extended_ltm: bool | None = None
+    polar_ltm: bool = False
+    prefer_lps: bool = False
+    extended_ltm: bool = False
     validate: _dataclasses.InitVar[bool] = True
 
-    def _validate_polar_ltm(self) -> bool | None:
+    def _validate_polar_ltm(self) -> None:
         if self.polar_ltm:
             if (self.prefer_lps or self.extended_ltm):
                 raise _exceptions.MalformedCoordinate(
                     "If `polar_ltm` is `True`, `prefer_lps` and `extended_ltm` "
                     "must be `False` (or `None`)."
                 )
-        elif self.polar_ltm is None:
-            return False
 
-    def _validate_prefer_lps(self) -> bool | None:
-        if self.prefer_lps is None:
-            return False
-
-    def _validate_extended_ltm(self) -> bool | None:
-        if self.extended_ltm is None:
-            return False
+    _validate_prefer_lps = _return_none
+    _validate_extended_ltm = _return_none
 
     #* Initialization. --------------------------------------------------------
     def __post_init__(self, validate: bool) -> None:
@@ -291,15 +285,52 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
 
     @_functools.cached_property
     def _init_kwargs(self) -> dict[str, _typing.Any]:
-        return {field.name: getattr(self, field.name)
-                for field in self._get_fields()}
+        return {
+            field.name: getattr(self, field.name)
+            for field in self._get_fields()
+        }
+
+    def with_constraints(
+            self, *,
+            polar_ltm: bool | None = None, prefer_lps: bool | None = None,
+            extended_ltm: bool | None = None, validate: bool = False,
+            copy: bool = False
+    ) -> _typing.Self:
+        # Resolve new initialization kwargs.
+        new_init_kwargs = self._init_kwargs.copy()
+        if polar_ltm is not None:
+            new_init_kwargs["polar_ltm"] = polar_ltm
+        if prefer_lps is not None:
+            new_init_kwargs["prefer_lps"] = prefer_lps
+        if extended_ltm is not None:
+            new_init_kwargs["extended_ltm"] = extended_ltm
+
+        # Return `self`, if possible and allowed.
+        if (
+            not copy
+            and not validate
+            and new_init_kwargs == self._init_kwargs
+        ):
+            return self
+
+        # Create and return copy, constrained as specified.
+        new = type(self)(**new_init_kwargs)
+        return new
 
     #* Field support. ---------------------------------------------------------
     def __iter__(self) -> _collections.abc.Iterable:
-        return (
-            getattr(self, field.name)
-            for field in self._get_fields()
+        return iter(self._init_kwargs.values())
+
+    @_functools.cached_property
+    def _constraint_keys(self) -> tuple[str, ...]:
+        # Note: Assumes that all fields of `_BaseCoordinate` are
+        # constraints, consistent with `_easy_dataclass()`.
+        constraint_keys = tuple(
+            field.name
+            for field in _BaseCoordinate._get_fields()
         )
+        _BaseCoordinate._constraint_keys = constraint_keys
+        return constraint_keys
 
     @classmethod
     @_functools.cache
@@ -323,6 +354,14 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
                 cls, = types  # *REASSIGNMENT*
             name_to_type[name] = cls
         return name_to_type
+
+    @_functools.cached_property
+    def _nonconstraint_kwargs(self) -> dict[str, _typing.Any]:
+        return {
+            field_name: field_val
+            for field_name, field_val in self._init_kwargs.items()
+            if field_name not in self._constraint_keys
+        }
 
 
 class BaseCoordinate(_BaseCoordinate):
@@ -444,7 +483,7 @@ class BaseCoordinate(_BaseCoordinate):
             string = self._template.format(**self.__dict__)
         return string
 
-    #* General public methods. --------------------------------------------------------
+    #* General public methods. ------------------------------------------------
     def copy(self, *, validate: bool = False) -> _typing.Self:
         # Note: `self` can only exist if validated or explicitly not
         # validated. Either way, defaulting `validate` to `False` is
@@ -453,6 +492,12 @@ class BaseCoordinate(_BaseCoordinate):
             **self._init_kwargs, validate=(validate and not self._was_validated)
         )
         return new
+
+    def equals(self, other: _typing.Self, *, constraints: bool = False) -> bool:
+        if constraints:
+            return self == other
+        else:
+            return self._nonconstraint_kwargs == other._nonconstraint_kwargs
 
     def is_equal_to(
             self, other: _typing.Self, *,
@@ -572,7 +617,12 @@ class BaseCoordinate(_BaseCoordinate):
 
     @_functools.cached_property
     def constraints(self) -> _types.MappingProxyType[str, bool]:
-        return _types.MappingProxyType(dict(tuple(self._init_kwargs.items())[-3:]))
+        return _types.MappingProxyType(
+            {
+                key: self._init_kwargs[key]
+                for key in self._constraint_keys
+            }
+        )
 
     #* Coordinate transformation. ---------------------------------------------
     @_redirect
@@ -1244,30 +1294,30 @@ LtmAcc._idx = +4
 
 
 # TODO: Remove after testing.
-_caching.enable_caching(False)  ####
+_caching.enable_caching(False)
 
 lat_lon = LatLon(latitude=-30.13048481, longitude=96.48515138)  # p. 45
 lps_or_ltm = lat_lon.to_lps_or_ltm()
 lgrs_ = lps_or_ltm.to_lgrs()
+assert lgrs_.equals(LtmLgrs.from_string("35JFJ1271112229"))
 
 lat_lon1 = LatLon(latitude=-81.13048481, longitude=96.48515138)
 lps_or_ltm1 = lat_lon1.to_lps_or_ltm()
 lgrs1 = lps_or_ltm1.to_lgrs()
+assert isinstance(lgrs1, LpsLgrs)
 
-lat_lon2 = LatLon(latitude=-81.13048481, longitude=96.48515138, extended_ltm=True)
+lat_lon2 = lat_lon1.with_constraints(extended_ltm=True)
 lps_or_ltm2 = lat_lon2.to_lps_or_ltm()
 lgrs2 = lps_or_ltm2.to_lgrs()
-
-lat_lon3 = LatLon(latitude=-81.13048481, longitude=96.48515138, extended_ltm=False)
-lps_or_ltm3 = lat_lon3.to_lps_or_ltm()
-lgrs3 = lps_or_ltm3.to_lgrs()
+assert isinstance(lgrs2, LtmLgrs)
 
 lat_lon4 = LatLon(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
 lps_or_ltm4 = lat_lon4.to_lps_or_ltm()
 lgrs4 = lps_or_ltm4.to_lgrs()
+assert lgrs4.equals(LpsLgrs.from_string("AZS1359008480"))
 
 lat_lon5 = LatLon(latitude=-30.13048481, longitude=96.48515138)
 lat_lon5.to_latlon()
 
 lps = Lps(hemisphere="S", easting=197000, northing=197000)
-lps.to_lgrs()  # TODO: How is this an `LtmLgrs` instance?
+lps.to_lgrs()
