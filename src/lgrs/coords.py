@@ -266,6 +266,19 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     extended_ltm: bool = False
     validate: _dataclasses.InitVar[bool] = True
 
+    def _validate(self) -> None:
+        for field in self._get_fields():
+            result = getattr(self, f"_validate_{field.name}")()
+            if result is not None:
+                # Note: Cannot assign directly, because `self` is a
+                # frozen dataclass.
+                object.__setattr__(self, field.name, result)
+        # Note: `._init_kwargs` effectively freezes values, which may
+        # not be finalized until validation completes. It should not be
+        # assigned until after validation.
+        assert "_init_kwargs" not in self.__dict__
+        object.__setattr__(self, "_was_validated", True)
+
     def _validate_polar_ltm(self) -> None:
         if self.polar_ltm:
             if (self.prefer_lps or self.extended_ltm):
@@ -305,7 +318,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         if extended_ltm is not None:
             new_init_kwargs["extended_ltm"] = extended_ltm
 
-        # Return `self`, if possible and allowed.
+        # Return `self`, if suitable and allowed.
         if (
             not copy
             and not validate
@@ -345,14 +358,14 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
             field.name
             for field in cls._get_fields()
         }
-        for name, cls in _typing.get_type_hints(cls).items():
+        for name, typ in _typing.get_type_hints(cls).items():
             if name not in field_name_set:
                 continue
-            if isinstance(cls, _types.UnionType):
-                types = list(_typing.get_args(cls))
+            if isinstance(typ, _types.UnionType):
+                types = list(_typing.get_args(typ))
                 types.remove(type(None))
-                cls, = types  # *REASSIGNMENT*
-            name_to_type[name] = cls
+                typ, = types  # *REASSIGNMENT*
+            name_to_type[name] = typ
         return name_to_type
 
     @_functools.cached_property
@@ -426,19 +439,6 @@ class BaseCoordinate(_BaseCoordinate):
             f"{middle}"
             f", not {getattr(self, attr_name)!r}"
         )
-
-    def _validate(self) -> None:
-        for field in self._get_fields():
-            result = getattr(self, f"_validate_{field.name}")()
-            if result is not None:
-                # Note: Cannot assign directly, because `self` is a
-                # frozen dataclass.
-                object.__setattr__(self, field.name, result)
-        # Note: `._init_kwargs` effectively freezes values, which may
-        # not be finalized until validation completes. It should not be
-        # assigned until after validation.
-        assert "_init_kwargs" not in self.__dict__
-        object.__setattr__(self, "_was_validated", True)
 
     def _validate_against_closed_interval(
         self, *, attr_name: str, minimum: _typing.Any, maximum: _typing.Any,
@@ -560,7 +560,7 @@ class BaseCoordinate(_BaseCoordinate):
             self, *, validate: bool = True, copy: bool = True, **overrides
     ) -> _typing.Self:
         if not copy and not overrides:
-            return self.copy()
+            return self
         init_kwargs = self._init_kwargs.copy()
         init_kwargs.update(overrides)
         return type(self)(**init_kwargs, validate=validate)
@@ -751,19 +751,22 @@ class LatLon(_NonGriddedCoordinate):
         return crs
 
     @_cache
-    def _to_lps_or_ltm(
-            self, *, allow_lps: bool = True
-    ) -> Lps | Ltm:
+    def _to_lps_or_ltm(self, *, allow_lps: bool = True) -> Lps | Ltm:
         # Determine projected CRS.
-        if self.prefer_lps and allow_lps:
-            # TODO: Determine minimum absolute latitude for which
-            #  conversion to LPS should be attempted.
+        proj_crs = self._get_proj_crs(
+            extended_ltm=self.extended_ltm,
+            polar_ltm=self.polar_ltm
+        )
+        # TODO: Determine minimum absolute latitude for which conversion
+        #  to LPS should be attempted.
+        force_lps_attempt = (
+                self.prefer_lps
+                and allow_lps
+                and proj_crs.lps_hemisphere is None
+        )
+        if force_lps_attempt:
+            # *REASSIGNMENT*
             proj_crs = _srs.make_lunar_crs("S" if self.latitude < 0 else "N")
-        else:
-            proj_crs = self._get_proj_crs(
-                extended_ltm=self.extended_ltm,
-                polar_ltm=self.polar_ltm
-            )
 
         # Transform.
         transformer = self._get_transformer(
@@ -773,28 +776,24 @@ class LatLon(_NonGriddedCoordinate):
 
         # Create and return instance.
         if proj_crs.ltm_zone is None:
-            lps = Lps(
-                hemisphere=proj_crs.lps_hemisphere, easting=e, northing=n,
-                validate=False, **self._root.constraints
-            )
-            # In special case that LPS was forced, validate LGRS
-            # equivalent.
-            if self.prefer_lps:
-                lgrs = lps.to_lgrs()
-                try:
-                    lgrs._validate()
-                except _exceptions.MalformedCoordinate:
-                    # LGRS equivalent is invalid, so unregister invalid
-                    # cousins and return `Ltm` instance instead.
-                    self._unregister_cousins(lps, lgrs)
+            try:
+                lps = Lps(
+                    hemisphere=proj_crs.lps_hemisphere, easting=e, northing=n,
+                    **self._root.constraints, validate=force_lps_attempt
+                )
+            except _exceptions.MalformedCoordinate:
+                if force_lps_attempt:
+                    # Note: `Lps` instance was invalid, so resort to
+                    # `Ltm`.
                     return self._to_lps_or_ltm(allow_lps=False)
+                raise
             return lps
         else:
             zone = int(proj_crs.ltm_zone[:-1])
             hemi = proj_crs.ltm_zone[-1]
             ltm = Ltm(
                 zone_number=zone, hemisphere=hemi, easting=e, northing=n,
-                validate=False, **self._root.constraints
+                **self._root.constraints, validate=False
             )
             return ltm
 
@@ -840,7 +839,7 @@ class Lps(_NonGriddedCoordinate):
         lat, lon = transformer.transform(self.easting, self.northing)
         latlon = LatLon(
             latitude=lat, longitude=lon,
-            validate=False, **self._root.constraints
+            **self._root.constraints, validate=False
         )
         return latlon
 
@@ -881,7 +880,7 @@ class Lps(_NonGriddedCoordinate):
             northing_area=na,
             easting=_format_as_five_digit_int(e),
             northing=_format_as_five_digit_int(n),
-            validate=False, **self._root.constraints
+            **self._root.constraints, validate=False
         )
         return lps_lrgs
 
@@ -911,7 +910,8 @@ class Ltm(_NonGriddedCoordinate):
         )
 
     def _validate_northing(self) -> None:
-        # TODO: Confirm limits empirically, including for extended LTM.
+        # TODO: Confirm limits empirically, including for extended and
+        #  polar LTM.
         # Note: Limits from p. 47 of M2025.
         match self.hemisphere:
             case "N":
@@ -956,7 +956,7 @@ class Ltm(_NonGriddedCoordinate):
             northing_area=na,
             easting=_format_as_five_digit_int(e),
             northing=_format_as_five_digit_int(n),
-            validate=False, **self._root.constraints
+            **self._root.constraints, validate=False
         )
         return ltm_lgrs
 
@@ -1139,11 +1139,11 @@ class LpsLgrs(_GriddedCoordinate):
     _validate_northing_area = LpsAcc._validate_northing_area
 
     def _validate_easting(self) -> None:
-        # TODO: Implement.
+        # TODO: Implement, with consideration of `.prefer_lps`, etc.
         ...
 
     def _validate_northing(self) -> None:
-        # TODO: Implement.
+        # TODO: Implement, with consideration of `.prefer_lps`, etc.
         ...
 
     #* Coordinate transformation. ---------------------------------------------
@@ -1154,26 +1154,26 @@ class LpsLgrs(_GriddedCoordinate):
 
     @_cache
     def _to_acc(self, **kwargs) -> LpsAcc | LtmAcc:
-        kwargs = {
+        init_kwargs = {
             "longitudinal_band": self.longitudinal_band,
             "easting_area": self.easting_area,
             "northing_area": self.northing_area,
         }
         if self.easting is not None:
-            kwargs["easting_1k"] = LpsAcc._easting_1k__idx_to_char[
+            init_kwargs["easting_1k"] = LpsAcc._easting_1k__idx_to_char[
                 int(self.easting[:2])
             ]
-            kwargs["northing_1k"] = LpsAcc._northing_1k__idx_to_char[
+            init_kwargs["northing_1k"] = LpsAcc._northing_1k__idx_to_char[
                 int(self.northing[:2])
             ]
             if len(self.easting) > 2:
-                kwargs["easting"] = self.easting[2:]
-                kwargs["northing"] = self.northing[2:]
+                init_kwargs["easting"] = self.easting[2:]
+                init_kwargs["northing"] = self.northing[2:]
         if isinstance(self, LpsLgrs):
             acc_type = LpsAcc
         else:
             acc_type = LtmAcc
-        acc = acc_type(**kwargs, validate=False, **self._root.constraints)
+        acc = acc_type(**init_kwargs, **self._root.constraints, validate=False)
         return acc
 
 
@@ -1271,11 +1271,11 @@ class LtmLgrs(_GriddedCoordinate):
     _validate_northing_area = LtmAcc._validate_northing_area
 
     def _validate_easting(self) -> None:
-        # TODO: Implement.
+        # TODO: Implement, with consideration of `.prefer_lps`, etc.
         ...
 
     def _validate_northing(self) -> None:
-        # TODO: Implement.
+        # TODO: Implement, with consideration of `.prefer_lps`, etc.
         ...
 
     #* Coordinate transformation. ---------------------------------------------
