@@ -437,18 +437,20 @@ class BaseCoordinate(_BaseCoordinate):
             f"{prefix}"
             f"`{attr_name}` must be "
             f"{middle}"
-            f", not {getattr(self, attr_name)!r}"
+            f", not: {getattr(self, attr_name)!r}"
         )
 
     def _validate_against_closed_interval(
         self, *, attr_name: str, minimum: _typing.Any, maximum: _typing.Any,
-        if_attr_name: str | None = None
+        if_attr_name: str | None = None, coerce_str: bool = False
     ) -> None:
         val = getattr(self, attr_name)
+        if coerce_str:
+            val = float(val)  # *REASSIGNMENT*
         if not (minimum <= val <= maximum):
             self._raise_malformed_coordinate(
                 f"between {minimum} and {maximum}, inclusive",
-                **locals()
+                attr_name=attr_name, if_attr_name=if_attr_name
             )
 
     def _validate_against_sequence(
@@ -466,7 +468,9 @@ class BaseCoordinate(_BaseCoordinate):
                     f"one of {', '.join(map(repr, sequence[:-1]))}, "
                     f"or {sequence[-1]!r}"
                 )
-            self._raise_malformed_coordinate(**locals())
+            self._raise_malformed_coordinate(
+                attr_name=attr_name, if_attr_name=if_attr_name
+            )
 
     def _validate_hemisphere(self) -> None:
         self._validate_against_sequence(
@@ -583,8 +587,8 @@ class BaseCoordinate(_BaseCoordinate):
             return cached_cousins
 
     def _get_best_cousin(self, func: ToMethod) -> tuple[BaseCoordinate, bool]:
-        # TODO: Likely simplify to return targeted type or `None`.
-        #  (Current approach is needlessly general, because the chain
+        # TODO: Maybe simplify to return targeted type or `None`.
+        #  (Current approach is unnecessarily general, because the chain
         #  will never skip a type nor (now) jump to the opposite side.)
         # Resolve out types.
         out_types = _resolve_out_types(func)
@@ -816,11 +820,17 @@ class Lps(_NonGriddedCoordinate):
 
     def _validate_easting(self) -> None:
         # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        ...
+        # Note: Limits from reference code, adapted from p. 54 of M2025.
+        return self._validate_against_closed_interval(
+            attr_name="easting", minimum=197_000, maximum=805_000
+        )
 
     def _validate_northing(self) -> None:
         # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        ...
+        # Note: Limits from reference code, adapted from p. 54 of M2025.
+        return self._validate_against_closed_interval(
+            attr_name="northing", minimum=197_000, maximum=805_000
+        )
 
     #* Coordinate transformation. ---------------------------------------------
     def _get_proj_crs(self) -> _srs.CRS:
@@ -911,7 +921,7 @@ class Ltm(_NonGriddedCoordinate):
 
     def _validate_northing(self) -> None:
         # TODO: Confirm limits empirically, including for extended and
-        #  polar LTM.
+        #  polar LTM. Note that reference code uses [0, 2_500_000].
         # Note: Limits from p. 47 of M2025.
         match self.hemisphere:
             case "N":
@@ -1140,7 +1150,18 @@ class LpsLgrs(_GriddedCoordinate):
 
     def _validate_easting(self) -> None:
         # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        ...
+        #  Should upper limit be 24_999?
+        # Note: Limits from reference code.
+        return self._validate_against_closed_interval(
+            attr_name="easting", minimum=0, maximum=25_000, coerce_str=True
+        )
+
+    def _validate_northing(self) -> None:
+        # TODO: Implement, with consideration of `.prefer_lps`, etc.
+        #  Should upper limit be 24_999?
+        return self._validate_against_closed_interval(
+            attr_name="northing", minimum=0, maximum=25_000, coerce_str=True
+        )
 
     def _validate_northing(self) -> None:
         # TODO: Implement, with consideration of `.prefer_lps`, etc.
@@ -1269,14 +1290,8 @@ class LtmLgrs(_GriddedCoordinate):
     _validate_latitudinal_band = LtmAcc._validate_latitudinal_band
     _validate_easting_area = LtmAcc._validate_easting_area
     _validate_northing_area = LtmAcc._validate_northing_area
-
-    def _validate_easting(self) -> None:
-        # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        ...
-
-    def _validate_northing(self) -> None:
-        # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        ...
+    _validate_easting = LpsLgrs._validate_easting
+    _validate_northing = LpsLgrs._validate_northing
 
     #* Coordinate transformation. ---------------------------------------------
     _latitudinal_band__char_to_idx = LtmAcc._latitudinal_band__char_to_idx
