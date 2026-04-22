@@ -1,6 +1,14 @@
 #!/bin/env python3
 #* Original file name: LGRS_Grid_Generation_mk7.2.py
 #* Version: 7.2
+#* Only changes relative to the original file are 
+#* (1) importing from `LGRS_Coordinate_Conversion` rather than
+#*     `LGRS_Coordinate_Conversion_mk7`
+#* (2) edits to the following escape sequences in some strings: 
+#*     "\{" --> "{" and "\}" --> "}".
+#* (3) `GridName` is now instantiated with equivalent code that avoids
+#*     direct use of `numpy.chararray()`, which is deprecated.
+
 # =====================================================================
 ''' PROGRAM INFORMATION
 Program:  LGRS_Grid_Generation_mk7.py
@@ -305,7 +313,7 @@ from osgeo import gdal,ogr,osr  # lib for rasters, vectors, and SRS
                                 # osgeo -> '3.7.1'
 osr.DontUseExceptions() # suppress GDAL versioning warnings
 
-from LGRS_Coordinate_Conversion_mk7 import *       
+from LGRS_Coordinate_Conversion import *
                                 # LGRS conversion lib for 
                                 # converting between 
                                 # LatLon, LTM, LPS, LGRS, LGRS_ACC
@@ -1388,7 +1396,7 @@ def Calc_LTM_prime_meridian(zone, type):
     """
     # safety checks
     if zone > 45:
-        raise ValueError ("LTM zone 46\{N|S\} of higher does not exist")
+        raise ValueError ("LTM zone 46{N|S} of higher does not exist")
     elif zone < 0:
         raise ValueError ("Negative LTM zones do not exist")
 
@@ -1400,7 +1408,7 @@ def Calc_LTM_prime_meridian(zone, type):
     else:
         raise ValueError ("LTM zone prime meridian could not be "
                           "calculated: place specify type "
-                          "\{\"rad\"|\"deg\"\}")
+                          "{\"rad\"|\"deg\"}")
 
     return lam0
 
@@ -2196,7 +2204,7 @@ def generate_LGRS_grid(Grid_Res,lonBand=None,
         if lonBand == None or h == None:
             raise ValueError ("LGRS 25km single global zone is projected "
                               "A LTM zone is required for plotting "
-                              "operation: Z\{1-45\} h\{N|S\}")
+                              "operation: Z{1-45} h{N|S}")
 
         # Calculate dimensions of the array
         # Top and bottom, 10° width subdivided by ResX covered twice (oversized)
@@ -2468,8 +2476,8 @@ def generate_LGRS_grid(Grid_Res,lonBand=None,
     else:
         raise ValueError("LGRS Generation Terminated: Grid type could"
                          "not be determined. Please specify:\n"
-                         "\{global,global_all,25km,25km_all,1km,100m, "
-                         "10m, or 1m \}")
+                         "{global,global_all,25km,25km_all,1km,100m, "
+                         "10m, or 1m }")
 
     # functionality to force the output grid into lunar LatLon 
     # (not recommended as the grid will not be tied to a PCRS)
@@ -3119,8 +3127,8 @@ def generate_PolarLGRS_grid(Grid_Res,h=None,
     else:
         raise ValueError("PolarLGRS Generation Terminated: Grid type could"
                     "not be determined. Please specify:\n"
-                    "\{global,global_all,25km,25km_all,1km,100m, "
-                    "10m, or 1m \}")
+                    "{global,global_all,25km,25km_all,1km,100m, "
+                    "10m, or 1m }")
     
     # functionality to force the output grid into lunar LatLon 
     # (not recommended as the grid will not be tied to a PCRS)
@@ -3452,10 +3460,10 @@ def main(form_in, form_out, Grid_Res,
 
                     except:
                         raise IndexError("Operation aborted: Number of inputs not correct."
-                            "\nInput for LTM: zone\{1-45\}, hemisphere \"S\" | \"N\"")
+                            "\nInput for LTM: zone{1-45}, hemisphere \"S\" | \"N\"")
                 else: 
                     raise IndexError("Operation aborted: Number of inputs not correct."
-                                    "\nInput for LTM: zone\{1-45\}, hemisphere \"S\" | \"N\"")
+                                    "\nInput for LTM: zone{1-45}, hemisphere \"S\" | \"N\"")
             elif Grid_Res in grid_format[5:]:
                     if len(sys.argv)-1 == 5:
                         try:
@@ -3469,8 +3477,8 @@ def main(form_in, form_out, Grid_Res,
                                           " converted to proper format correctly.")
                     else:
                         raise IndexError("Operation aborted: Number of inputs not correct."
-                            "\nInput for LTM: zone1\{1-45\}, hemisphere1\"S\"| \"N\" Easting 1, Northing 1"
-                            "\nInput for LTM: zone2\{1-45\}, hemisphere2\"S\"| \"N\" Easting 2, Northing 2")
+                            "\nInput for LTM: zone1{1-45}, hemisphere1\"S\"| \"N\" Easting 1, Northing 1"
+                            "\nInput for LTM: zone2{1-45}, hemisphere2\"S\"| \"N\" Easting 2, Northing 2")
             else:
                 raise IndexError("Operation aborted: Input Coordinates could not be read")
             # convert to proper data formats
@@ -3520,12 +3528,12 @@ def main(form_in, form_out, Grid_Res,
                     except:
                         
                         raise IndexError("Operation aborted: Number of inputs not correct."
-                            "Input for LGRS coarse grid (>=25km):\n Zone \{1-45\}"
+                            "Input for LGRS coarse grid (>=25km):\n Zone {1-45}"
                             " hemisphere \"S\" | \"N\"")
                 else: 
                     raise IndexError("Operation aborted: Number of inputs not correct."
                                     "Maybe try a smaller grid side.\n"
-                                    "Input for LGRS coarse grid (>=25km):\n Zone \{1-45\}"
+                                    "Input for LGRS coarse grid (>=25km):\n Zone {1-45}"
                                     " hemisphere \"S\" | \"N\"")
                 # convert to proper data formats
                 try:
@@ -4089,7 +4097,14 @@ def main(form_in, form_out, Grid_Res,
                 let_len = 3
 
             # create binary data for exporting name
-            GridName = np.chararray((GridX.shape[0],1),itemsize=let_len)
+            # Note: Commented-out line below is from original code. It
+            # is replaced with the following line which has equivalent
+            # output.
+            #GridName = np.chararray((GridX.shape[0],1),itemsize=let_len)
+            GridName = np.char.asarray(
+                np.empty((GridX.shape[0],1), dtype=f"|S{let_len}"),
+                itemsize=let_len
+            )
 
             # loop through all grid polygons
             for i in range(0,GridX.shape[0]):

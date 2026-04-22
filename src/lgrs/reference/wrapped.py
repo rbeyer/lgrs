@@ -3,7 +3,7 @@ Code to wrap reference scripts.
 
 Examples
 --------
->>> import lgrs.srs.coords as coords
+>>> import lgrs.coords as coords
 >>> polar_latlon = coords.LatLon(latitude=85, longitude=1)
 >>> polar_lps = LatLon2LPS(polar_latlon)
 >>> polar_latlon_recovered = LPS2LatLon(polar_lps)
@@ -20,11 +20,20 @@ strict_result = polar_latlon_recovered.is_equal_to(
 >>> lps_lgrs_recovered.is_equal_to(lps_lgrs, error=True)
 """
 
-# Copyright 2026, Ethan I. Schafer (eschaefer@seti.org)
+# Copyright © 2026, Ethan I. Schafer (eschaefer@seti.org) and
+# Ross A. Beyer (rbeyer@seti.org)
 #
-# Reuse is permitted under the terms of the license.
-# The AUTHORS file and the LICENSE file are at the
-# top level of this library.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 ##############################################################################
 # region> IMPORT
@@ -52,7 +61,7 @@ def _execute_coordinate_conversion(
 ) -> _coords.BaseCoordinate:
     # Execute script, capturing stdout.
     orig_sys_argv = _sys.argv
-    _sys.argv = ["", method_name, *_coords._iter_value_strings(value)]
+    _sys.argv = ["", method_name, *value._iter_value_strings()]
     f = _io.StringIO()
     with _contextlib.redirect_stdout(f):
         try:
