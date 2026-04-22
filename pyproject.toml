@@ -21,8 +21,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy", "pyproj"
+    "numpy", "pyproj", "regex", "typer"
 ]
+
+[project.optional-dependencies]
+reference = ["gdal"]
 
 [project.scripts]
 lgrs = "lgrs.cli:main"
