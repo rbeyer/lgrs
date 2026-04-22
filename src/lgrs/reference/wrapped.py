@@ -61,7 +61,7 @@ def _execute_coordinate_conversion(
 ) -> _coords.BaseCoordinate:
     # Execute script, capturing stdout.
     orig_sys_argv = _sys.argv
-    _sys.argv = ["", method_name, *_coords._iter_value_strings(value)]
+    _sys.argv = ["", method_name, *value._iter_value_strings()]
     f = _io.StringIO()
     with _contextlib.redirect_stdout(f):
         try:
