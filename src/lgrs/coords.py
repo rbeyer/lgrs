@@ -1186,10 +1186,6 @@ class LpsLgrs(_GriddedCoordinate):
             attr_name="northing", minimum=0, maximum=25_000, coerce_str=True
         )
 
-    def _validate_northing(self) -> None:
-        # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        ...
-
     #* Coordinate transformation. ---------------------------------------------
     _easting_area__char_to_idx = LpsAcc._easting_area__char_to_idx
     _easting_area__idx_to_char = LpsAcc._easting_area__idx_to_char
