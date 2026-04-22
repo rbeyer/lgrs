@@ -3,7 +3,7 @@ Code to wrap reference scripts.
 
 Examples
 --------
->>> import lgrs.srs.coords as coords
+>>> import lgrs.coords as coords
 >>> polar_latlon = coords.LatLon(latitude=85, longitude=1)
 >>> polar_lps = LatLon2LPS(polar_latlon)
 >>> polar_latlon_recovered = LPS2LatLon(polar_lps)
