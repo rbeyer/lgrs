@@ -529,15 +529,10 @@ class BaseCoordinate(_BaseCoordinate):
         )
         return new
 
-    def equals(self, other: _typing.Self, *, constraints: bool = False) -> bool:
-        if constraints:
-            return self == other
-        else:
-            return self._nonconstraint_kwargs == other._nonconstraint_kwargs
-
     def is_equal_to(
             self, other: _typing.Self, *,
-            max_float_difference: float | None = None, error: bool = False
+            max_float_difference: float | None = None, error: bool = False,
+            constraints: bool = False
     ) -> bool:
         # Validate and resolve arguments.
         if not isinstance(other, type(self)):
@@ -553,18 +548,26 @@ class BaseCoordinate(_BaseCoordinate):
                 max_float_difference = 1e-9
 
         # Compare.
-        for field, self_val, other_val in zip(
-                self._get_fields(), self, other, strict=True
-        ):
+        if constraints:
+            field_names = self._constraint_keys
+        else:
+            field_names = self._init_kwargs.keys()
+        field_name_to_type = self._get_field_name_to_type()
+        for field_name in field_names:
+            self_val = getattr(self, field_name)
+            other_val = getattr(other, field_name)
             if self_val == other_val:
                 continue
-            if (field.type == "float"
-                and abs(self_val - other_val) <= max_float_difference):
+            field_type = field_name_to_type[field_name]
+            if (
+                    field_type == "float"
+                    and abs(self_val - other_val) <= max_float_difference
+            ):
                 continue
             if not error:
                 return False
             raise TypeError(
-                f"{field.name!r} values differ:\n"
+                f"{field_name!r} values differ:\n"
                 f"    {self_val!r} vs. {other_val!r}"
            )
         return True
@@ -1346,7 +1349,7 @@ _caching.enable_caching(False)
 lat_lon = LatLon(latitude=-30.13048481, longitude=96.48515138)  # p. 45
 lps_or_ltm = lat_lon.to_lps_or_ltm()
 lgrs_ = lps_or_ltm.to_lgrs()
-assert lgrs_.equals(LtmLgrs.from_string("35JFJ1271112229"))
+assert lgrs_.is_equal_to(LtmLgrs.from_string("35JFJ1271112229"))
 
 lat_lon1 = LatLon(latitude=-81.13048481, longitude=96.48515138)
 lps_or_ltm1 = lat_lon1.to_lps_or_ltm()
@@ -1361,7 +1364,7 @@ assert isinstance(lgrs2, LtmLgrs)
 lat_lon4 = LatLon(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
 lps_or_ltm4 = lat_lon4.to_lps_or_ltm()
 lgrs4 = lps_or_ltm4.to_lgrs()
-assert lgrs4.equals(LpsLgrs.from_string("AZS1359008480"))
+assert lgrs4.is_equal_to(LpsLgrs.from_string("AZS1359008480"))
 
 lat_lon5 = LatLon(latitude=-30.13048481, longitude=96.48515138)
 lat_lon5.to_latlon()
