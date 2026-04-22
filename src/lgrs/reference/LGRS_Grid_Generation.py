@@ -1,6 +1,9 @@
 #!/bin/env python3
 #* Original file name: LGRS_Grid_Generation_mk7.2.py
 #* Version: 7.2
+#* Only change relative to the original file is importing from
+#* `LGRS_Coordinate_Conversion` rather than
+#* `LGRS_Coordinate_Conversion_mk7`.
 # =====================================================================
 ''' PROGRAM INFORMATION
 Program:  LGRS_Grid_Generation_mk7.py
@@ -305,7 +308,7 @@ from osgeo import gdal,ogr,osr  # lib for rasters, vectors, and SRS
                                 # osgeo -> '3.7.1'
 osr.DontUseExceptions() # suppress GDAL versioning warnings
 
-from LGRS_Coordinate_Conversion_mk7 import *       
+from LGRS_Coordinate_Conversion import *
                                 # LGRS conversion lib for 
                                 # converting between 
                                 # LatLon, LTM, LPS, LGRS, LGRS_ACC
