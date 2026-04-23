@@ -394,7 +394,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
 class BaseCoordinate(_BaseCoordinate):
     # TODO: Document that `MalformedCoordinate` may be raised.
     _idx: int
-    _template: str | None = None
+    _template: _collections.abc.Callable | str | None = None
     _was_validated: bool = False
 
     #* Basic behavior. --------------------------------------------------------
@@ -517,10 +517,13 @@ class BaseCoordinate(_BaseCoordinate):
     #* Public data. -----------------------------------------------------------
     @_functools.cached_property
     def string(self) -> str:
-        if self._template is None:
-            string = "".join(self._iter_value_strings())
-        else:
-            string = self._template.format(**self.__dict__)
+        match self._template:
+            case None:
+                string = "".join(self._iter_value_strings())
+            case str():
+                string = self._template.format(**self._init_kwargs)
+            case _:
+                string = self._template()
         return string
 
     #* General public methods. ------------------------------------------------
@@ -745,12 +748,24 @@ class _NonGriddedCoordinate(BaseCoordinate):
 
 @_easy_dataclass
 class LatLon(_NonGriddedCoordinate):
-    # TODO: Should `._template` use N/S and E/W? Ross: Yes.
 
     #* Fields and validation. -------------------------------------------------
-    _template = "{latitude!r}° {longitude!r}°"
     latitude: float
     longitude: float
+
+    def _template(self) -> str:
+        if self.latitude >= 0:
+            n_or_s = "N"
+        else:
+            n_or_s = "S"
+        if self.longitude >= 0:
+            e_or_w = "E"
+        else:
+            e_or_w = "W"
+        return (
+            f"{abs(self.latitude)!r}°{n_or_s} "
+            f"{abs(self.longitude)!r}°{e_or_w}"
+        )
 
     def _validate_latitude(self) -> float:
         conformed_lat, = _database._conform_latitudes((self.latitude,))
