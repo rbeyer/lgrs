@@ -398,9 +398,6 @@ class BaseCoordinate(_BaseCoordinate):
     _was_validated: bool = False
 
     #* Basic behavior. --------------------------------------------------------
-    def __bytes__(self) -> _builtins.bytes:
-        return self.bytes
-
     def __copy__(self) -> _typing.Self:
         return self.copy()
 
@@ -518,10 +515,6 @@ class BaseCoordinate(_BaseCoordinate):
         )
 
     #* Public data. -----------------------------------------------------------
-    @_functools.cached_property
-    def bytes(self) -> _builtins.bytes:
-        return self.string.encode()
-
     @_functools.cached_property
     def string(self) -> str:
         if self._template is None:
@@ -751,7 +744,7 @@ class _NonGriddedCoordinate(BaseCoordinate):
 
 @_easy_dataclass
 class LatLon(_NonGriddedCoordinate):
-    # TODO: Should `._template` use N/S and E/W?
+    # TODO: Should `._template` use N/S and E/W? Ross: Yes.
 
     #* Fields and validation. -------------------------------------------------
     _template = "{latitude!r}° {longitude!r}°"
@@ -1017,40 +1010,18 @@ class _GriddedCoordinate(BaseCoordinate):
             )
 
     #* Instantiation from string. ---------------------------------------------
-    __pattern_bytes: _regex.Pattern
     _pattern: _regex.Pattern
 
     @classmethod
-    def _get_pattern_bytes(cls) -> _regex.Pattern:
-        try:
-            return cls.__pattern_bytes
-        except AttributeError:
-            cls.__pattern_bytes = _regex.compile(cls._pattern.pattern.encode())
-            return cls.__pattern_bytes
-
-    @classmethod
-    def from_string(
-            cls, string: str | bytes, *, validate: bool = True
-    ) -> _typing.Self:
-        # Determine pattern.
-        string_is_bytes = isinstance(string, bytes)
-        if string_is_bytes:
-            pattern = cls._get_pattern_bytes()
-        else:
-            pattern = cls._pattern
-
+    def from_string(cls, string: str, *, validate: bool = True) -> _typing.Self:
         # Match to pattern.
-        match = pattern.search(string)
+        match = cls._pattern.search(string)
         if match is None:
             raise _exceptions.MalformedCoordinate(
                 f"`string` {string!r} is not in the supported format: "
-                f"{pattern.pattern!r}"
+                f"{cls._pattern.pattern!r}"
             )
         match_dict = match.groupdict()
-        if string_is_bytes:
-            # *REASSIGNMENT*
-            match_dict = {k: v.decode()
-                          for k, v in match_dict.items()}
 
         # Coerce each argument to the correct type.
         field_name_to_type = cls._get_field_name_to_type()
