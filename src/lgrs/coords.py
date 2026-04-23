@@ -154,6 +154,60 @@ def _compile_regex_without_i_and_o(pattern: str) -> _regex.Pattern:
     clean_pattern = _regex.sub("[A-Z]-[A-Z]", _remove_i_and_o, pattern)
     return _regex.compile(clean_pattern)
 
+def _easy_dataclass(cls: type[BaseCoordinate]) -> type:
+    """
+    Force constraints to end of call signature, string representation.
+    
+    Decorating a `BaseCoordinate` subclass with this function makes it a
+    frozen dataclass and ensures that field order has `_BaseCoordinate`
+    fields--assumed to be constraints--pushed to the end of both 
+    `cls.__init__()` call signatures and the output of `cls.__repr__()`. 
+    Since constraints are assumed to be less important to most users, 
+    pushing them to the end is preferable.  
+    
+    Parameters
+    ----------
+    cls : type
+        The `BaseCoordinate` subclass to decorate.
+
+    Returns
+    -------
+    decorated : type
+        The decorated `cls`.
+    """
+    # Isolate non-universal fields.
+    naive_dataclass = _dataclasses.dataclass(cls, frozen=True)
+    univ_field_name_set = {
+        field.name
+        for field in _dataclasses.fields(_BaseCoordinate)
+    }
+    non_univ_fields = [
+        field
+        for field in _dataclasses.fields(naive_dataclass)
+        if field.name not in univ_field_name_set
+    ]
+
+    # Insert "shadow" dataclass in inheritance, to push universal fields
+    # to end.
+    field_annotations = {
+        field.name: field.type
+        for field in non_univ_fields
+    }
+    shadow_cls = type(
+        f"_Shadow{cls.__name__}", (_AbstractBaseCoordinate,),
+        {"__annotations__": field_annotations}
+    )
+    shadow_dataclass = _dataclasses.dataclass(shadow_cls, frozen=True)
+    mro = (
+        *cls.__mro__[:cls.__mro__.index(_AbstractBaseCoordinate)],
+        *shadow_dataclass.__mro__,
+    )
+    twin_cls = type(cls.__name__, mro, {"__module__": cls.__module__})
+
+    # Create and return outer dataclass.
+    dataclass = _dataclasses.dataclass(frozen=True)(twin_cls)
+    return dataclass
+
 def _expand_char_range(char_range: str) -> list[str]:
     start_char, end_char = char_range.split("-")
     chars = [chr(i)
@@ -253,9 +307,9 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
-    polar_ltm: bool = False
     prefer_lps: bool = False
     extended_ltm: bool = False
+    polar_ltm: bool = False
     validate: _dataclasses.InitVar[bool] = True
 
     def _register_validation(self) -> None:
@@ -698,7 +752,7 @@ class _NonGriddedCoordinate(BaseCoordinate):
         return transformer
 
 
-@_dataclasses.dataclass(frozen=True)
+@_easy_dataclass
 class LatLon(_NonGriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -791,7 +845,7 @@ class LatLon(_NonGriddedCoordinate):
         return lgrs
 
 
-@_dataclasses.dataclass(frozen=True)
+@_easy_dataclass
 class Lps(_NonGriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -879,7 +933,7 @@ class Lps(_NonGriddedCoordinate):
         return lps_lrgs
 
 
-@_dataclasses.dataclass(frozen=True)
+@_easy_dataclass
 class Ltm(_NonGriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -1021,7 +1075,7 @@ class _GriddedCoordinate(BaseCoordinate):
 ###############################################################################
 # region> GRIDDED COORDINATE TYPES
 ###############################################################################
-@_dataclasses.dataclass(frozen=True)
+@_easy_dataclass
 class LpsAcc(_GriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -1089,7 +1143,7 @@ class LpsAcc(_GriddedCoordinate):
     )
 
 
-@_dataclasses.dataclass(frozen=True)
+@_easy_dataclass
 class LpsLgrs(_GriddedCoordinate):
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -1157,7 +1211,7 @@ class LpsLgrs(_GriddedCoordinate):
         return acc
 
 
-@_dataclasses.dataclass(frozen=True)
+@_easy_dataclass
 class LtmAcc(_GriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -1225,7 +1279,7 @@ class LtmAcc(_GriddedCoordinate):
     )
 
 
-@_dataclasses.dataclass(frozen=True)
+@_easy_dataclass
 class LtmLgrs(_GriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -1290,7 +1344,7 @@ LtmAcc._idx = +4
 # endregion
 
 
-# TODO: Remove after testing.
+# TODO: Move to a proper test script.
 _caching.enable_caching(True)
 
 lat_lon = LatLon(latitude=-30.13048481, longitude=96.48515138)  # p. 45
