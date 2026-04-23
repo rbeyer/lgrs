@@ -206,42 +206,6 @@ def _remove_i_and_o(match: _regex.Match) -> str:
 ###############################################################################
 # region> UTILITIES: OTHER
 ###############################################################################
-def _easy_dataclass(cls: type) -> type:
-    # Isolate non-universal fields.
-    naive_dataclass = _dataclasses.dataclass(cls, frozen=True, kw_only=True)
-    univ_field_name_set = {
-        field.name
-        for field in _dataclasses.fields(_BaseCoordinate)
-    }
-    non_univ_fields = [
-        field
-        for field in _dataclasses.fields(naive_dataclass)
-        if field.name not in univ_field_name_set
-    ]
-
-    # Insert "shadow" dataclass in inheritance, to push universal fields
-    # to end.
-    field_annotations = {
-        field.name: field.type
-        for field in non_univ_fields
-    }
-    shadow_cls = type(
-        f"_Shadow{cls.__name__}", (_AbstractBaseCoordinate,),
-        {"__annotations__": field_annotations}
-    )
-    shadow_dataclass = _dataclasses.dataclass(
-        shadow_cls, kw_only=True, frozen=True
-    )
-    mro = (
-        *cls.__mro__[:cls.__mro__.index(_AbstractBaseCoordinate)],
-        *shadow_dataclass.__mro__,
-    )
-    twin_cls = type(cls.__name__, mro, {"__module__": cls.__module__})
-
-    # Create and return outer dataclass.
-    dataclass = _dataclasses.dataclass(kw_only=True, frozen=True)(twin_cls)
-    return dataclass
-
 def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
     # TODO: Determine whether `tolerance` is a good choice. Code
     #  mimics `check_decimal_round()` of reference code and presumably
@@ -350,7 +314,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     @_functools.cached_property
     def _constraint_keys(self) -> tuple[str, ...]:
         # Note: Assumes that all fields of `_BaseCoordinate` are
-        # constraints, consistent with `_easy_dataclass()`.
+        # constraints.
         constraint_keys = tuple(
             field.name
             for field in _BaseCoordinate._get_fields()
@@ -745,7 +709,7 @@ class _NonGriddedCoordinate(BaseCoordinate):
         return transformer
 
 
-@_easy_dataclass
+@_dataclasses.dataclass(frozen=True)
 class LatLon(_NonGriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -838,7 +802,7 @@ class LatLon(_NonGriddedCoordinate):
         return lgrs
 
 
-@_easy_dataclass
+@_dataclasses.dataclass(frozen=True)
 class Lps(_NonGriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -926,7 +890,7 @@ class Lps(_NonGriddedCoordinate):
         return lps_lrgs
 
 
-@_easy_dataclass
+@_dataclasses.dataclass(frozen=True)
 class Ltm(_NonGriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -1068,7 +1032,7 @@ class _GriddedCoordinate(BaseCoordinate):
 ###############################################################################
 # region> GRIDDED COORDINATE TYPES
 ###############################################################################
-@_easy_dataclass
+@_dataclasses.dataclass(frozen=True)
 class LpsAcc(_GriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -1136,7 +1100,7 @@ class LpsAcc(_GriddedCoordinate):
     )
 
 
-@_easy_dataclass
+@_dataclasses.dataclass(frozen=True)
 class LpsLgrs(_GriddedCoordinate):
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -1204,7 +1168,7 @@ class LpsLgrs(_GriddedCoordinate):
         return acc
 
 
-@_easy_dataclass
+@_dataclasses.dataclass(frozen=True)
 class LtmAcc(_GriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
@@ -1225,9 +1189,9 @@ class LtmAcc(_GriddedCoordinate):
     easting_area: str
     northing_area: str
     easting_1k: str
-    easting: str | None = None
+    easting: str | None
     northing_1k: str
-    northing: str | None = None
+    northing: str | None
 
     def _validate_longitudinal_band(self) -> None:
         return self._validate_against_closed_interval(
@@ -1272,7 +1236,7 @@ class LtmAcc(_GriddedCoordinate):
     )
 
 
-@_easy_dataclass
+@_dataclasses.dataclass(frozen=True)
 class LtmLgrs(_GriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
