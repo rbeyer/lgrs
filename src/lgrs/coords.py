@@ -38,8 +38,7 @@ import builtins as _builtins
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
-import math as _math
-_floor = _math.floor
+from math import floor as _floor
 import pyproj as _pyproj
 import regex as _regex
 import types as _types
