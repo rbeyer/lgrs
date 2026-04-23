@@ -1319,29 +1319,6 @@ class LtmLgrs(_GriddedCoordinate):
 
 
 # endregion
-###############################################################################
-# region> PROCESSING CHAIN INDICES
-###############################################################################
-# Note: Used by `_redirect()` (via `._get_cached_cousin()`) to determine
-# best related coordinate instance from which to start a transformation.
-
-# `LatLon` is 0, because logical starting point for both LPS and LTM
-# chains is `LatLon`.
-LatLon._idx = 0
-
-# LPS chain is increasingly negative.
-Lps._idx = -1
-LpsLgrs._idx = -3  # Not -2, to favor LGRS <--> ACC over LPS <--> LGRS.
-LpsAcc._idx = -4
-
-# LTM chain is increasingly positive.
-Ltm._idx = +1
-LtmLgrs._idx = +3  # Not +2, to favor LGRS <--> ACC over LTM <--> LGRS.
-LtmAcc._idx = +4
-
-
-
-# endregion
 
 
 # TODO: Move to a proper test script.
