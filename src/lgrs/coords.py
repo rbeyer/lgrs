@@ -10,7 +10,7 @@ Examples
 ...     easting="13590", northing="08480"
 ... )
 >>> alt_lps_lgrs = LpsLgrs.from_string("AZS1359008480")
->>> alt_lps_lgrs.is_equal_to(lps_lgrs, error=True)
+>>> alt_lps_lgrs.is_close_to(lps_lgrs, error=True)
 """
 
 # Copyright © 2026, Ethan I. Schafer (eschaefer@seti.org) and
@@ -533,7 +533,7 @@ class BaseCoordinate(_BaseCoordinate):
         )
         return new
 
-    def is_equal_to(
+    def is_close_to(
             self, other: _typing.Self, *,
             max_float_difference: float | None = None, error: bool = False,
             constraints: bool = False
@@ -557,6 +557,7 @@ class BaseCoordinate(_BaseCoordinate):
         else:
             field_names = self._init_kwargs.keys()
         field_name_to_type = self._get_field_name_to_type()
+        err_lines = []
         for field_name in field_names:
             self_val = getattr(self, field_name)
             other_val = getattr(other, field_name)
@@ -570,10 +571,10 @@ class BaseCoordinate(_BaseCoordinate):
                 continue
             if not error:
                 return False
-            raise TypeError(
-                f"{field_name!r} values differ:\n"
-                f"    {self_val!r} vs. {other_val!r}"
-           )
+            err_lines.append(f"  {field_name!r} values differ:")
+            err_lines.append(f"    {self_val!r} vs. {other_val!r}")
+        if err_lines:
+            raise TypeError("\n" + "\n".join(err_lines))
         return True
 
     def replace(
@@ -1328,7 +1329,7 @@ _caching.enable_caching(False)
 lat_lon = LatLon(latitude=-30.13048481, longitude=96.48515138)  # p. 45
 lps_or_ltm = lat_lon.to_lps_or_ltm()
 lgrs_ = lps_or_ltm.to_lgrs()
-assert lgrs_.is_equal_to(LtmLgrs.from_string("35JFJ1271112229"))
+assert lgrs_.is_close_to(LtmLgrs.from_string("35JFJ1271112229"))
 
 lat_lon1 = LatLon(latitude=-81.13048481, longitude=96.48515138)
 lps_or_ltm1 = lat_lon1.to_lps_or_ltm()
@@ -1343,7 +1344,7 @@ assert isinstance(lgrs2, LtmLgrs)
 lat_lon4 = LatLon(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
 lps_or_ltm4 = lat_lon4.to_lps_or_ltm()
 lgrs4 = lps_or_ltm4.to_lgrs()
-assert lgrs4.is_equal_to(LpsLgrs.from_string("AZS1359008480"))
+assert lgrs4.is_close_to(LpsLgrs.from_string("AZS1359008480"))
 
 lat_lon5 = LatLon(latitude=-30.13048481, longitude=96.48515138)
 lat_lon5.to_latlon()

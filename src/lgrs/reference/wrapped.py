@@ -7,7 +7,7 @@ Examples
 >>> polar_latlon = coords.LatLon(latitude=85, longitude=1)
 >>> polar_lps = LatLon2LPS(polar_latlon)
 >>> polar_latlon_recovered = LPS2LatLon(polar_lps)
->>> polar_latlon_recovered.is_equal_to(polar_latlon, error=True)
+>>> polar_latlon_recovered.is_close_to(polar_latlon, error=True)
 
 Note: Below call would error because recovery is not exact:
 strict_result = polar_latlon_recovered.is_equal_to(
@@ -17,7 +17,7 @@ strict_result = polar_latlon_recovered.is_equal_to(
 >>> lps_lgrs = coords.LpsLgrs.from_string("AZS1359008480")
 >>> lps_acc = PolarLGRS2PolarLGRS_ACC(lps_lgrs)
 >>> lps_lgrs_recovered = PolarLGRS_ACC2PolarLGRS(lps_acc)
->>> lps_lgrs_recovered.is_equal_to(lps_lgrs, error=True)
+>>> lps_lgrs_recovered.is_close_to(lps_lgrs, error=True)
 """
 
 # Copyright © 2026, Ethan I. Schafer (eschaefer@seti.org) and
