@@ -34,11 +34,9 @@ Examples
 # External.
 from __future__ import annotations
 import abc as _abc
-import builtins as _builtins
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
-import unittest.case
 from math import floor as _floor
 import pyproj as _pyproj
 import regex as _regex
