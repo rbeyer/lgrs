@@ -55,20 +55,28 @@ _cconv.initialize_LGRS_function_globals()
 ##############################################################################
 # region> UTILITIES
 ##############################################################################
+def _answer_yes(*args, **kwargs) -> str:
+    return "y"
+
 def _execute_coordinate_conversion(
         method_name: str, value: _coords.BaseCoordinate, trunc_val: int,
         return_type: type[_coords.BaseCoordinate]
 ) -> _coords.BaseCoordinate:
     # Execute script, capturing stdout.
     orig_sys_argv = _sys.argv
-    _sys.argv = ["", method_name, *value._iter_value_strings()]
-    f = _io.StringIO()
-    with _contextlib.redirect_stdout(f):
-        try:
-            _cconv.main(method_name, trunc_val, False)
-        except SystemExit:
-            raise TypeError(f.getvalue())
-    _sys.argv = orig_sys_argv
+    try:
+        _sys.argv = ["", method_name, *value._iter_value_strings()]
+        # Note: Prevent prompting and always answer with "y".
+        _cconv.main.__globals__["input"] = _answer_yes
+        f = _io.StringIO()
+        with _contextlib.redirect_stdout(f):
+            try:
+                _cconv.main(method_name, trunc_val, False)
+            except SystemExit:
+                raise TypeError(f.getvalue())
+    finally:
+        _sys.argv = orig_sys_argv
+        _cconv.main.__globals__.pop("input", None)
     stdout_str = f.getvalue()
 
     # Create and return instance.
