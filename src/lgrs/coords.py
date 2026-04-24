@@ -5,11 +5,11 @@ This module also supports coordinate transformations.
 
 Examples
 --------
->>> lps_lgrs = LpsLgrs(
+>>> lps_lgrs = LpsLgrsBox(
 ...     longitudinal_band="A", easting_area="Z", northing_area="S",
 ...     easting="13590", northing="08480"
 ... )
->>> alt_lps_lgrs = LpsLgrs.from_string("AZS1359008480")
+>>> alt_lps_lgrs = LpsLgrsBox.from_string("AZS1359008480")
 >>> alt_lps_lgrs.is_close_to(lps_lgrs, error=True)
 """
 
@@ -584,7 +584,7 @@ class BaseCoordinate(_BaseCoordinate):
         if max_float_difference is None:
             # Note: Expected difference is "very small" but exact
             # default magnitudes are not rigorous.
-            if isinstance(self, LatLon):
+            if isinstance(self, LatLonPoint):
                 max_float_difference = 1e-12
             else:
                 max_float_difference = 1e-9
@@ -679,19 +679,19 @@ class BaseCoordinate(_BaseCoordinate):
 
     #* Coordinate transformation. ---------------------------------------------
     @_redirect
-    def to_acc(self) -> LpsAcc | LtmAcc:
+    def to_acc(self) -> LpsAccBox | LtmAccBox:
         ...
 
     @_redirect
-    def to_latlon(self) -> LatLon:
+    def to_latlon(self) -> LatLonPoint:
         ...
 
     @_redirect
-    def to_lgrs(self) -> LpsLgrs | LtmLgrs:
+    def to_lgrs(self) -> LpsLgrsBox | LtmLgrsBox:
         ...
 
     @_redirect
-    def to_lps_or_ltm(self) -> Lps | Ltm:
+    def to_lps_or_ltm(self) -> LpsPoint | LtmPoint:
         ...
 
     # TODO: Uncomment abstract methods after implementation.
@@ -753,7 +753,7 @@ class _NonGriddedCoordinate(BaseCoordinate):
 
 
 @_easy_dataclass
-class LatLon(_NonGriddedCoordinate):
+class LatLonPoint(_NonGriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     latitude: float
@@ -793,7 +793,7 @@ class LatLon(_NonGriddedCoordinate):
         return crs
 
     @_cache_new_cousin
-    def _to_lps_or_ltm(self, *, allow_lps: bool = True) -> Lps | Ltm:
+    def _to_lps_or_ltm(self, *, allow_lps: bool = True) -> LpsPoint | LtmPoint:
         # Determine projected CRS.
         proj_crs = self._get_proj_crs(
             extended_ltm=self.extended_ltm,
@@ -819,7 +819,7 @@ class LatLon(_NonGriddedCoordinate):
         # Create and return instance.
         if proj_crs.ltm_zone is None:
             try:
-                lps = Lps(
+                lps = LpsPoint(
                     hemisphere=proj_crs.lps_hemisphere, easting=e, northing=n,
                     **self._root.constraints, validate=force_lps_attempt
                 )
@@ -833,20 +833,20 @@ class LatLon(_NonGriddedCoordinate):
         else:
             zone = int(proj_crs.ltm_zone[:-1])
             hemi = proj_crs.ltm_zone[-1]
-            ltm = Ltm(
+            ltm = LtmPoint(
                 zone_number=zone, hemisphere=hemi, easting=e, northing=n,
                 **self._root.constraints, validate=False
             )
             return ltm
 
-    def _to_lgrs(self, **kwargs) -> LpsLgrs | LtmLgrs:
+    def _to_lgrs(self, **kwargs) -> LpsLgrsBox | LtmLgrsBox:
         lps_or_ltm = self._to_lps_or_ltm(**kwargs)
         lgrs = lps_or_ltm._to_lgrs(**kwargs)
         return lgrs
 
 
 @_easy_dataclass
-class Lps(_NonGriddedCoordinate):
+class LpsPoint(_NonGriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     _template = "{hemisphere}{easting!r}E{northing!r}N"
@@ -876,23 +876,23 @@ class Lps(_NonGriddedCoordinate):
 
     def _get_transformer(self, *, to_geographic: bool) -> _pyproj.Transformer:
         proj_crs = self._get_proj_crs()
-        transformer = LatLon._get_transformer(
+        transformer = LatLonPoint._get_transformer(
             to_geographic=to_geographic, proj_crs=proj_crs
         )
         return transformer
 
     @_cache_new_cousin
-    def _to_latlon(self, **kwargs) -> LatLon:
+    def _to_latlon(self, **kwargs) -> LatLonPoint:
         transformer = self._get_transformer(to_geographic=True)
         lat, lon = transformer.transform(self.easting, self.northing)
-        latlon = LatLon(
+        latlon = LatLonPoint(
             latitude=lat, longitude=lon,
             **self._root.constraints, validate=False
         )
         return latlon
 
     @_cache_new_cousin
-    def _to_lgrs(self, **kwargs) -> LpsLgrs:
+    def _to_lgrs(self, **kwargs) -> LpsLgrsBox:
         is_in_west_half = self.easting < _wkt.LPS_FALSE_EASTING
         match (self.hemisphere, is_in_west_half):
             case ("S", True):  # Eq. 100
@@ -914,15 +914,15 @@ class Lps(_NonGriddedCoordinate):
             ea_idx = 24 - _floor(abs(e_adj) // 25_000)  # Eq. 103
         else:
             ea_idx = _floor(e_adj // 25_000)  # Eq. 102
-        ea = LpsLgrs._easting_area__idx_to_char[ea_idx]  # Tables 13, 14
+        ea = LpsLgrsBox._easting_area__idx_to_char[ea_idx]  # Tables 13, 14
         na_idx = _floor(n_adj // 25_000) + 13  # Eq. 104
-        na = LpsLgrs._northing_area__idx_to_char[na_idx]  # Tables 15, 16
+        na = LpsLgrsBox._northing_area__idx_to_char[na_idx]  # Tables 15, 16
         if is_in_west_half:
             e = 25_000 - (abs(e_adj) % 25_000)  # Eq. 105
         else:
             e = e_adj % 25_000  # Eq. 106
         n = n_adj % 25_000
-        lps_lrgs = LpsLgrs(
+        lps_lrgs = LpsLgrsBox(
             longitudinal_band=lon_band,
             easting_area=ea,
             northing_area=na,
@@ -934,7 +934,7 @@ class Lps(_NonGriddedCoordinate):
 
 
 @_easy_dataclass
-class Ltm(_NonGriddedCoordinate):
+class LtmPoint(_NonGriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     _template = "{zone_number}{hemisphere}{easting!r}E{northing!r}N"
@@ -948,7 +948,7 @@ class Ltm(_NonGriddedCoordinate):
             attr_name="zone_number", minimum=1, maximum=45
         )
 
-    _validate_hemisphere = Lps._validate_hemisphere
+    _validate_hemisphere = LpsPoint._validate_hemisphere
 
     def _validate_easting(self) -> None:
         # TODO: Confirm limits empirically.
@@ -978,26 +978,26 @@ class Ltm(_NonGriddedCoordinate):
     def _get_proj_crs(self) -> _srs.CRS:
         return _srs.make_lunar_crs(f"{self.zone_number}{self.hemisphere}")
 
-    _get_transformer = Lps._get_transformer
+    _get_transformer = LpsPoint._get_transformer
 
-    _to_latlon = Lps._to_latlon
+    _to_latlon = LpsPoint._to_latlon
 
     @_cache_new_cousin
-    def _to_lgrs(self, **kwargs) -> LtmLgrs:
+    def _to_lgrs(self, **kwargs) -> LtmLgrsBox:
         lon_band = self.zone_number
         lat_lon = self.to_latlon()
         lat_band_idx = _floor(lat_lon.latitude // 8)  # Eq. 81
-        lat_band = LtmLgrs._latitudinal_band__idx_to_char[lat_band_idx]  # Table 6
+        lat_band = LtmLgrsBox._latitudinal_band__idx_to_char[lat_band_idx]  # Table 6
         ea_idx = _floor(self.easting // 25_000) - 5  # Eq. 82
-        ea = LtmLgrs._easting_area__idx_to_char[ea_idx]  # Table 7
+        ea = LtmLgrsBox._easting_area__idx_to_char[ea_idx]  # Table 7
         # TODO: Determine if the "- 1" (which appears in the reference
         #  code but not in Eq. 83) is correct.
         na_letterset = _calc_na_letterset(self.zone_number)  # Eq. 83
         na_idx = _floor(self.northing // 25_000) % 20  # Eq. 84
-        na = LtmLgrs._northing_area__letterset_to_idx_to_char[na_letterset][na_idx]  # Tables 8, 9, 10
+        na = LtmLgrsBox._northing_area__letterset_to_idx_to_char[na_letterset][na_idx]  # Tables 8, 9, 10
         e = self.easting % 25_000  # Eq. 85
         n = self.northing % 25_000  # Eq. 86
-        ltm_lgrs = LtmLgrs(
+        ltm_lgrs = LtmLgrsBox(
             longitudinal_band=lon_band,
             latitudinal_band=lat_band,
             easting_area=ea,
@@ -1076,7 +1076,7 @@ class _GriddedCoordinate(BaseCoordinate):
 # region> GRIDDED COORDINATE TYPES
 ###############################################################################
 @_easy_dataclass
-class LpsAcc(_GriddedCoordinate):
+class LpsAccBox(_GriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -1144,7 +1144,7 @@ class LpsAcc(_GriddedCoordinate):
 
 
 @_easy_dataclass
-class LpsLgrs(_GriddedCoordinate):
+class LpsLgrsBox(_GriddedCoordinate):
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
         "^"
@@ -1160,9 +1160,9 @@ class LpsLgrs(_GriddedCoordinate):
     easting: str | None = None
     northing: str | None = None
 
-    _validate_longitudinal_band = LpsAcc._validate_longitudinal_band
-    _validate_easting_area = LpsAcc._validate_easting_area
-    _validate_northing_area = LpsAcc._validate_northing_area
+    _validate_longitudinal_band = LpsAccBox._validate_longitudinal_band
+    _validate_easting_area = LpsAccBox._validate_easting_area
+    _validate_northing_area = LpsAccBox._validate_northing_area
 
     def _validate_easting(self) -> None:
         # TODO: Implement, with consideration of `.prefer_lps`, etc.
@@ -1180,39 +1180,39 @@ class LpsLgrs(_GriddedCoordinate):
         )
 
     #* Coordinate transformation. ---------------------------------------------
-    _easting_area__char_to_idx = LpsAcc._easting_area__char_to_idx
-    _easting_area__idx_to_char = LpsAcc._easting_area__idx_to_char
-    _northing_area__char_to_idx = LpsAcc._northing_area__char_to_idx
-    _northing_area__idx_to_char = LpsAcc._northing_area__idx_to_char
+    _easting_area__char_to_idx = LpsAccBox._easting_area__char_to_idx
+    _easting_area__idx_to_char = LpsAccBox._easting_area__idx_to_char
+    _northing_area__char_to_idx = LpsAccBox._northing_area__char_to_idx
+    _northing_area__idx_to_char = LpsAccBox._northing_area__idx_to_char
 
     @_cache_new_cousin
-    def _to_acc(self, **kwargs) -> LpsAcc | LtmAcc:
+    def _to_acc(self, **kwargs) -> LpsAccBox | LtmAccBox:
         init_kwargs = {
             "longitudinal_band": self.longitudinal_band,
             "easting_area": self.easting_area,
             "northing_area": self.northing_area,
         }
         if self.easting is not None:
-            init_kwargs["easting_1k"] = LpsAcc._easting_1k__idx_to_char[
+            init_kwargs["easting_1k"] = LpsAccBox._easting_1k__idx_to_char[
                 int(self.easting[:2])
             ]
-            init_kwargs["northing_1k"] = LpsAcc._northing_1k__idx_to_char[
+            init_kwargs["northing_1k"] = LpsAccBox._northing_1k__idx_to_char[
                 int(self.northing[:2])
             ]
             if len(self.easting) > 2:
                 init_kwargs["easting"] = self.easting[2:]
                 init_kwargs["northing"] = self.northing[2:]
-        if isinstance(self, LpsLgrs):
-            acc_type = LpsAcc
+        if isinstance(self, LpsLgrsBox):
+            acc_type = LpsAccBox
         else:
-            acc_type = LtmAcc
+            acc_type = LtmAccBox
             init_kwargs["latitudinal_band"] = self.latitudinal_band
         acc = acc_type(**init_kwargs, **self._root.constraints, validate=False)
         return acc
 
 
 @_easy_dataclass
-class LtmAcc(_GriddedCoordinate):
+class LtmAccBox(_GriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -1246,16 +1246,16 @@ class LtmAcc(_GriddedCoordinate):
 
     def _validate_northing_area(self) -> None:
         na_letterset = _calc_na_letterset(self.longitudinal_band)  # Eq. 83
-        na_chars = LtmLgrs._northing_area__letterset_to_char_to_idx[na_letterset]
+        na_chars = LtmLgrsBox._northing_area__letterset_to_char_to_idx[na_letterset]
         self._validate_against_sequence(
             attr_name="easting_area", sequence=na_chars,
             if_attr_name="longitudinal_band"
         )
 
-    _validate_easting_1k = LpsAcc._validate_easting_1k
-    _validate_easting = LpsAcc._validate_easting
-    _validate_northing_1k = LpsAcc._validate_northing_1k
-    _validate_northing = LpsAcc._validate_northing
+    _validate_easting_1k = LpsAccBox._validate_easting_1k
+    _validate_easting = LpsAccBox._validate_easting
+    _validate_northing_1k = LpsAccBox._validate_northing_1k
+    _validate_northing = LpsAccBox._validate_northing
 
     #* Coordinate transformation. ---------------------------------------------
     _latitudinal_band__char_to_idx, _latitudinal_band__idx_to_char = _index_char_set(
@@ -1280,7 +1280,7 @@ class LtmAcc(_GriddedCoordinate):
 
 
 @_easy_dataclass
-class LtmLgrs(_GriddedCoordinate):
+class LtmLgrsBox(_GriddedCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -1299,22 +1299,22 @@ class LtmLgrs(_GriddedCoordinate):
     easting: str | None = None
     northing: str | None = None
 
-    _validate_longitudinal_band = LtmAcc._validate_longitudinal_band
-    _validate_latitudinal_band = LtmAcc._validate_latitudinal_band
-    _validate_easting_area = LtmAcc._validate_easting_area
-    _validate_northing_area = LtmAcc._validate_northing_area
-    _validate_easting = LpsLgrs._validate_easting
-    _validate_northing = LpsLgrs._validate_northing
+    _validate_longitudinal_band = LtmAccBox._validate_longitudinal_band
+    _validate_latitudinal_band = LtmAccBox._validate_latitudinal_band
+    _validate_easting_area = LtmAccBox._validate_easting_area
+    _validate_northing_area = LtmAccBox._validate_northing_area
+    _validate_easting = LpsLgrsBox._validate_easting
+    _validate_northing = LpsLgrsBox._validate_northing
 
     #* Coordinate transformation. ---------------------------------------------
-    _latitudinal_band__char_to_idx = LtmAcc._latitudinal_band__char_to_idx
-    _latitudinal_band__idx_to_char = LtmAcc._latitudinal_band__idx_to_char
-    _easting_area__char_to_idx = LtmAcc._easting_area__char_to_idx
-    _easting_area__idx_to_char = LtmAcc._easting_area__idx_to_char
-    _northing_area__letterset_to_char_to_idx = LtmAcc._northing_area__letterset_to_char_to_idx
-    _northing_area__letterset_to_idx_to_char = LtmAcc._northing_area__letterset_to_idx_to_char
+    _latitudinal_band__char_to_idx = LtmAccBox._latitudinal_band__char_to_idx
+    _latitudinal_band__idx_to_char = LtmAccBox._latitudinal_band__idx_to_char
+    _easting_area__char_to_idx = LtmAccBox._easting_area__char_to_idx
+    _easting_area__idx_to_char = LtmAccBox._easting_area__idx_to_char
+    _northing_area__letterset_to_char_to_idx = LtmAccBox._northing_area__letterset_to_char_to_idx
+    _northing_area__letterset_to_idx_to_char = LtmAccBox._northing_area__letterset_to_idx_to_char
 
-    _to_acc = LpsLgrs._to_acc
+    _to_acc = LpsLgrsBox._to_acc
 
 
 
@@ -1322,32 +1322,32 @@ class LtmLgrs(_GriddedCoordinate):
 
 
 # TODO: Move to a proper test script.
-_caching.enable_caching(True)
+_caching.enable_caching(False)
 
-lat_lon = LatLon(latitude=-30.13048481, longitude=96.48515138)  # p. 45
+lat_lon = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)  # p. 45
 lps_or_ltm = lat_lon.to_lps_or_ltm()
 lgrs_ = lps_or_ltm.to_lgrs()
-assert lgrs_.is_close_to(LtmLgrs.from_string("35JFJ1271112229"))
+assert lgrs_.is_close_to(LtmLgrsBox.from_string("35JFJ1271112229"))
 
-lat_lon1 = LatLon(latitude=-81.13048481, longitude=96.48515138)
+lat_lon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
 lps_or_ltm1 = lat_lon1.to_lps_or_ltm()
 lgrs1 = lps_or_ltm1.to_lgrs()
-assert isinstance(lgrs1, LpsLgrs)
+assert isinstance(lgrs1, LpsLgrsBox)
 
 lat_lon2 = lat_lon1.with_constraints(extended_ltm=True)
 lps_or_ltm2 = lat_lon2.to_lps_or_ltm()
 lgrs2 = lps_or_ltm2.to_lgrs()
-assert isinstance(lgrs2, LtmLgrs)
+assert isinstance(lgrs2, LtmLgrsBox)
 
-lat_lon4 = LatLon(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
+lat_lon4 = LatLonPoint(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
 lps_or_ltm4 = lat_lon4.to_lps_or_ltm()
 lgrs4 = lps_or_ltm4.to_lgrs()
-assert lgrs4.is_close_to(LpsLgrs.from_string("AZS1359008480"))
+assert lgrs4.is_close_to(LpsLgrsBox.from_string("AZS1359008480"))
 
-lat_lon5 = LatLon(latitude=-30.13048481, longitude=96.48515138)
+lat_lon5 = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
 lat_lon5.to_latlon()
 
-lps = Lps(hemisphere="S", easting=197000, northing=197000)
+lps = LpsPoint(hemisphere="S", easting=197000, northing=197000)
 extreme_lat_lon = lps.to_latlon()
 
 lps_acc = lgrs1.to_acc()
