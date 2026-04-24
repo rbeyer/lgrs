@@ -4,7 +4,7 @@ Code to wrap reference scripts.
 Examples
 --------
 >>> import lgrs.coords as coords
->>> polar_latlon = coords.LatLon(latitude=85, longitude=1)
+>>> polar_latlon = coords.LatLonPoint(latitude=85, longitude=1)
 >>> polar_lps = LatLon2LPS(polar_latlon)
 >>> polar_latlon_recovered = LPS2LatLon(polar_lps)
 >>> polar_latlon_recovered.is_close_to(polar_latlon, error=True)
@@ -14,7 +14,7 @@ strict_result = polar_latlon_recovered.is_equal_to(
     polar_latlon, error=True, max_float_difference=0.
 )
 
->>> lps_lgrs = coords.LpsLgrs.from_string("AZS1359008480")
+>>> lps_lgrs = coords.LpsLgrsBox.from_string("AZS1359008480")
 >>> lps_acc = PolarLGRS2PolarLGRS_ACC(lps_lgrs)
 >>> lps_lgrs_recovered = PolarLGRS_ACC2PolarLGRS(lps_acc)
 >>> lps_lgrs_recovered.is_close_to(lps_lgrs, error=True)
@@ -86,154 +86,154 @@ def _execute_coordinate_conversion(
 ##############################################################################
 # region> CONVERSION FUNCTIONS
 ##############################################################################
-def LGRS2ACC(value: _coords.LtmLgrs, *, trunc_val: int = 1) -> _coords.LtmAcc:
+def LGRS2ACC(value: _coords.LtmLgrsBox, *, trunc_val: int = 1) -> _coords.LtmAccBox:
     return _execute_coordinate_conversion(
-        "LGRS2ACC", value, trunc_val, _coords.LtmAcc
+        "LGRS2ACC", value, trunc_val, _coords.LtmAccBox
     )
 
-def LGRS2LGRS_ACC(value: _coords.LtmLgrs, *, trunc_val: int = 1) -> _coords.LtmAcc:
+def LGRS2LGRS_ACC(value: _coords.LtmLgrsBox, *, trunc_val: int = 1) -> _coords.LtmAccBox:
     return _execute_coordinate_conversion(
-        "LGRS2LGRS_ACC", value, trunc_val, _coords.LtmAcc
+        "LGRS2LGRS_ACC", value, trunc_val, _coords.LtmAccBox
     )
 
-def LGRS2LTM(value: _coords.LtmLgrs, *, trunc_val: int = 0) -> _coords.Ltm:
+def LGRS2LTM(value: _coords.LtmLgrsBox, *, trunc_val: int = 0) -> _coords.LtmPoint:
     return _execute_coordinate_conversion(
-        "LGRS2LTM", value, trunc_val, _coords.Ltm
+        "LGRS2LTM", value, trunc_val, _coords.LtmPoint
     )
 
-def LGRS2LatLon(value: _coords.LtmLgrs, *, trunc_val: int = 0) -> _coords.LatLon:
+def LGRS2LatLon(value: _coords.LtmLgrsBox, *, trunc_val: int = 0) -> _coords.LatLonPoint:
     return _execute_coordinate_conversion(
-        "LGRS2LatLon", value, trunc_val, _coords.LatLon
+        "LGRS2LatLon", value, trunc_val, _coords.LatLonPoint
     )
 
-def LGRS_ACC2LGRS(value: _coords.LtmAcc, *, trunc_val: int = 1) -> _coords.LtmLgrs:
+def LGRS_ACC2LGRS(value: _coords.LtmAccBox, *, trunc_val: int = 1) -> _coords.LtmLgrsBox:
     return _execute_coordinate_conversion(
-        "LGRS_ACC2LGRS", value, trunc_val, _coords.LtmLgrs
+        "LGRS_ACC2LGRS", value, trunc_val, _coords.LtmLgrsBox
     )
 
-def LGRS_ACC2LTM(value: _coords.LtmAcc, *, trunc_val: int = 0) -> _coords.Ltm:
+def LGRS_ACC2LTM(value: _coords.LtmAccBox, *, trunc_val: int = 0) -> _coords.LtmPoint:
     return _execute_coordinate_conversion(
-        "LGRS_ACC2LTM", value, trunc_val, _coords.Ltm
+        "LGRS_ACC2LTM", value, trunc_val, _coords.LtmPoint
     )
 
-def LGRS_ACC2LatLon(value: _coords.LtmAcc, *, trunc_val: int = 0) -> _coords.LatLon:
+def LGRS_ACC2LatLon(value: _coords.LtmAccBox, *, trunc_val: int = 0) -> _coords.LatLonPoint:
     return _execute_coordinate_conversion(
-        "LGRS_ACC2LatLon", value, trunc_val, _coords.LatLon
+        "LGRS_ACC2LatLon", value, trunc_val, _coords.LatLonPoint
     )
 
-def LPS2ACC(value: _coords.Lps, *, trunc_val: int = 1) -> _coords.LtmAcc:
+def LPS2ACC(value: _coords.LpsPoint, *, trunc_val: int = 1) -> _coords.LtmAccBox:
     return _execute_coordinate_conversion(
-        "LPS2ACC", value, trunc_val, _coords.LtmAcc
+        "LPS2ACC", value, trunc_val, _coords.LtmAccBox
     )
 
-def LPS2LatLon(value: _coords.Lps, *, trunc_val: int = 0) -> _coords.LatLon:
+def LPS2LatLon(value: _coords.LpsPoint, *, trunc_val: int = 0) -> _coords.LatLonPoint:
     return _execute_coordinate_conversion(
-        "LPS2LatLon", value, trunc_val, _coords.LatLon
+        "LPS2LatLon", value, trunc_val, _coords.LatLonPoint
     )
 
-def LPS2PolarLGRS(value: _coords.Lps, *, trunc_val: int = 1) -> _coords.LpsLgrs:
+def LPS2PolarLGRS(value: _coords.LpsPoint, *, trunc_val: int = 1) -> _coords.LpsLgrsBox:
     return _execute_coordinate_conversion(
-        "LPS2PolarLGRS", value, trunc_val, _coords.LpsLgrs
+        "LPS2PolarLGRS", value, trunc_val, _coords.LpsLgrsBox
     )
 
-def LPS2PolarLGRS_ACC(value: _coords.Lps, *, trunc_val: int = 1) -> _coords.LpsAcc:
+def LPS2PolarLGRS_ACC(value: _coords.LpsPoint, *, trunc_val: int = 1) -> _coords.LpsAccBox:
     return _execute_coordinate_conversion(
-        "LPS2PolarLGRS_ACC", value, trunc_val, _coords.LpsAcc
+        "LPS2PolarLGRS_ACC", value, trunc_val, _coords.LpsAccBox
     )
 
-def LTM2ACC(value: _coords.Ltm, *, trunc_val: int = 1) -> _coords.LtmAcc:
+def LTM2ACC(value: _coords.LtmPoint, *, trunc_val: int = 1) -> _coords.LtmAccBox:
     return _execute_coordinate_conversion(
-        "LTM2ACC", value, trunc_val, _coords.LtmAcc
+        "LTM2ACC", value, trunc_val, _coords.LtmAccBox
     )
 
-def LTM2LGRS(value: _coords.Ltm, *, trunc_val: int = 1) -> _coords.LtmLgrs:
+def LTM2LGRS(value: _coords.LtmPoint, *, trunc_val: int = 1) -> _coords.LtmLgrsBox:
     return _execute_coordinate_conversion(
-        "LTM2LGRS", value, trunc_val, _coords.LtmLgrs
+        "LTM2LGRS", value, trunc_val, _coords.LtmLgrsBox
     )
 
-def LTM2LGRS_ACC(value: _coords.Ltm, *, trunc_val: int = 1) -> _coords.LtmAcc:
+def LTM2LGRS_ACC(value: _coords.LtmPoint, *, trunc_val: int = 1) -> _coords.LtmAccBox:
     return _execute_coordinate_conversion(
-        "LTM2LGRS_ACC", value, trunc_val, _coords.LtmAcc
+        "LTM2LGRS_ACC", value, trunc_val, _coords.LtmAccBox
     )
 
-def LTM2LatLon(value: _coords.Ltm, *, trunc_val: int = 0) -> _coords.LatLon:
+def LTM2LatLon(value: _coords.LtmPoint, *, trunc_val: int = 0) -> _coords.LatLonPoint:
     return _execute_coordinate_conversion(
-        "LTM2LatLon", value, trunc_val, _coords.LatLon
+        "LTM2LatLon", value, trunc_val, _coords.LatLonPoint
     )
 
-def LatLon2ACC(value: _coords.LatLon, *, trunc_val: int = 1) -> _coords.LtmAcc:
+def LatLon2ACC(value: _coords.LatLonPoint, *, trunc_val: int = 1) -> _coords.LtmAccBox:
     return _execute_coordinate_conversion(
-        "LatLon2ACC", value, trunc_val, _coords.LtmAcc
+        "LatLon2ACC", value, trunc_val, _coords.LtmAccBox
     )
 
-def LatLon2LGRS(value: _coords.LatLon, *, trunc_val: int = 1) -> _coords.LtmLgrs:
+def LatLon2LGRS(value: _coords.LatLonPoint, *, trunc_val: int = 1) -> _coords.LtmLgrsBox:
     return _execute_coordinate_conversion(
-        "LatLon2LGRS", value, trunc_val, _coords.LtmLgrs
+        "LatLon2LGRS", value, trunc_val, _coords.LtmLgrsBox
     )
 
-def LatLon2LGRS_ACC(value: _coords.LatLon, *, trunc_val: int = 1) -> _coords.LtmAcc:
+def LatLon2LGRS_ACC(value: _coords.LatLonPoint, *, trunc_val: int = 1) -> _coords.LtmAccBox:
     return _execute_coordinate_conversion(
-        "LatLon2LGRS_ACC", value, trunc_val, _coords.LtmAcc
+        "LatLon2LGRS_ACC", value, trunc_val, _coords.LtmAccBox
     )
 
-def LatLon2LPS(value: _coords.LatLon, *, trunc_val: int = 0) -> _coords.Lps:
+def LatLon2LPS(value: _coords.LatLonPoint, *, trunc_val: int = 0) -> _coords.LpsPoint:
     return _execute_coordinate_conversion(
-        "LatLon2LPS", value, trunc_val, _coords.Lps
+        "LatLon2LPS", value, trunc_val, _coords.LpsPoint
     )
 
-def LatLon2LTM(value: _coords.LatLon, *, trunc_val: int = 0) -> _coords.Ltm:
+def LatLon2LTM(value: _coords.LatLonPoint, *, trunc_val: int = 0) -> _coords.LtmPoint:
     return _execute_coordinate_conversion(
-        "LatLon2LTM", value, trunc_val, _coords.Ltm
+        "LatLon2LTM", value, trunc_val, _coords.LtmPoint
     )
 
-def LatLon2PolarLGRS(value: _coords.LatLon, *, trunc_val: int = 1) -> _coords.LpsLgrs:
+def LatLon2PolarLGRS(value: _coords.LatLonPoint, *, trunc_val: int = 1) -> _coords.LpsLgrsBox:
     return _execute_coordinate_conversion(
-        "LatLon2PolarLGRS", value, trunc_val, _coords.LpsLgrs
+        "LatLon2PolarLGRS", value, trunc_val, _coords.LpsLgrsBox
     )
 
-def LatLon2PolarLGRS_ACC(value: _coords.LatLon, *, trunc_val: int = 1) -> _coords.LpsAcc:
+def LatLon2PolarLGRS_ACC(value: _coords.LatLonPoint, *, trunc_val: int = 1) -> _coords.LpsAccBox:
     return _execute_coordinate_conversion(
-        "LatLon2PolarLGRS_ACC", value, trunc_val, _coords.LpsAcc
+        "LatLon2PolarLGRS_ACC", value, trunc_val, _coords.LpsAccBox
     )
 
-def LatLon2Polar_ACC(value: _coords.LatLon, *, trunc_val: int = 1) -> _coords.LpsAcc:
+def LatLon2Polar_ACC(value: _coords.LatLonPoint, *, trunc_val: int = 1) -> _coords.LpsAccBox:
     return _execute_coordinate_conversion(
-        "LatLon2Polar_ACC", value, trunc_val, _coords.LpsAcc
+        "LatLon2Polar_ACC", value, trunc_val, _coords.LpsAccBox
     )
 
-def PolarLGRS2LPS(value: _coords.LpsLgrs, *, trunc_val: int = 0) -> _coords.Lps:
+def PolarLGRS2LPS(value: _coords.LpsLgrsBox, *, trunc_val: int = 0) -> _coords.LpsPoint:
     return _execute_coordinate_conversion(
-        "PolarLGRS2LPS", value, trunc_val, _coords.Lps
+        "PolarLGRS2LPS", value, trunc_val, _coords.LpsPoint
     )
 
-def PolarLGRS2LatLon(value: _coords.LpsLgrs, *, trunc_val: int = 0) -> _coords.LatLon:
+def PolarLGRS2LatLon(value: _coords.LpsLgrsBox, *, trunc_val: int = 0) -> _coords.LatLonPoint:
     return _execute_coordinate_conversion(
-        "PolarLGRS2LatLon", value, trunc_val, _coords.LatLon
+        "PolarLGRS2LatLon", value, trunc_val, _coords.LatLonPoint
     )
 
-def PolarLGRS2PolarLGRS_ACC(value: _coords.LpsLgrs, *, trunc_val: int = 1) -> _coords.LpsAcc:
+def PolarLGRS2PolarLGRS_ACC(value: _coords.LpsLgrsBox, *, trunc_val: int = 1) -> _coords.LpsAccBox:
     return _execute_coordinate_conversion(
-        "PolarLGRS2PolarLGRS_ACC", value, trunc_val, _coords.LpsAcc
+        "PolarLGRS2PolarLGRS_ACC", value, trunc_val, _coords.LpsAccBox
     )
 
-def PolarLGRS2Polar_ACC(value: _coords.LpsLgrs, *, trunc_val: int = 1) -> _coords.LpsAcc:
+def PolarLGRS2Polar_ACC(value: _coords.LpsLgrsBox, *, trunc_val: int = 1) -> _coords.LpsAccBox:
     return _execute_coordinate_conversion(
-        "PolarLGRS2Polar_ACC", value, trunc_val, _coords.LpsAcc
+        "PolarLGRS2Polar_ACC", value, trunc_val, _coords.LpsAccBox
     )
 
-def PolarLGRS_ACC2LPS(value: _coords.LpsAcc, *, trunc_val: int = 0) -> _coords.Lps:
+def PolarLGRS_ACC2LPS(value: _coords.LpsAccBox, *, trunc_val: int = 0) -> _coords.LpsPoint:
     return _execute_coordinate_conversion(
-        "PolarLGRS_ACC2LPS", value, trunc_val, _coords.Lps
+        "PolarLGRS_ACC2LPS", value, trunc_val, _coords.LpsPoint
     )
 
-def PolarLGRS_ACC2LatLon(value: _coords.LpsAcc, *, trunc_val: int = 0) -> _coords.LatLon:
+def PolarLGRS_ACC2LatLon(value: _coords.LpsAccBox, *, trunc_val: int = 0) -> _coords.LatLonPoint:
     return _execute_coordinate_conversion(
-        "PolarLGRS_ACC2LatLon", value, trunc_val, _coords.LatLon
+        "PolarLGRS_ACC2LatLon", value, trunc_val, _coords.LatLonPoint
     )
 
-def PolarLGRS_ACC2PolarLGRS(value: _coords.LpsAcc, *, trunc_val: int = 1) -> _coords.LpsLgrs:
+def PolarLGRS_ACC2PolarLGRS(value: _coords.LpsAccBox, *, trunc_val: int = 1) -> _coords.LpsLgrsBox:
     return _execute_coordinate_conversion(
-        "PolarLGRS_ACC2PolarLGRS", value, trunc_val, _coords.LpsLgrs
+        "PolarLGRS_ACC2PolarLGRS", value, trunc_val, _coords.LpsLgrsBox
     )
 
 
