@@ -38,6 +38,7 @@ import builtins as _builtins
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
+import unittest.case
 from math import floor as _floor
 import pyproj as _pyproj
 import regex as _regex
@@ -354,29 +355,31 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
 
     def with_constraints(
             self, *,
-            polar_ltm: bool | None = None, prefer_lps: bool | None = None,
-            extended_ltm: bool | None = None, validate: bool = False,
+            prefer_lps: bool | None = None, extended_ltm: bool | None = None,
+            polar_ltm: bool | None = None, validate: bool | None = None,
             copy: bool = False
     ) -> _typing.Self:
         # Resolve new initialization kwargs.
         new_init_kwargs = self._init_kwargs.copy()
-        if polar_ltm is not None:
-            new_init_kwargs["polar_ltm"] = polar_ltm
         if prefer_lps is not None:
             new_init_kwargs["prefer_lps"] = prefer_lps
+        if polar_ltm is not None:
+            new_init_kwargs["polar_ltm"] = polar_ltm
         if extended_ltm is not None:
             new_init_kwargs["extended_ltm"] = extended_ltm
 
         # Return `self`, if suitable and allowed.
         if (
             not copy
-            and not validate
+            and not validate  # May be `None`.
             and new_init_kwargs == self._init_kwargs
         ):
             return self
 
         # Create and return copy, constrained as specified.
-        new = type(self)(**new_init_kwargs)
+        if validate is None:
+            validate = True  # *REASSIGNMENT*
+        new = type(self)(**new_init_kwargs, validate=validate)
         return new
 
     #* Field support. ---------------------------------------------------------
@@ -678,6 +681,36 @@ class BaseCoordinate(_BaseCoordinate):
         )
 
     #* Coordinate transformation. ---------------------------------------------
+    def _require(
+            self, bound_method: _collections.abc.Callable,
+            targ_typ: type[BaseCoordinate], **constraints: bool
+    ) -> type[BaseCoordinate]:
+        cand = bound_method()
+        if isinstance(cand, targ_typ):
+            return cand
+        reconstrained = self.with_constraints(**constraints)
+        cand = bound_method.__func__(reconstrained)
+        if isinstance(cand, targ_typ):
+            return cand
+        else:
+            raise _exceptions.MalformedCoordinate(
+                f"Location is not compatible with `{targ_typ.__name__}`: "
+                f"{reconstrained}"
+            )
+
+    def _get_projected_counterpart_method(self) -> ToMethod:
+        match self:
+            case LatLonPoint():
+                raise TypeError(f"Coordinate is not projected: {self!r}")
+            case LpsPoint() | LtmPoint():
+                return BaseCoordinate.to_lps_or_ltm
+            case LpsLgrsBox() | LtmLgrsBox():
+                return BaseCoordinate.to_lgrs
+            case LpsAccBox() | LtmAccBox():
+                return BaseCoordinate.to_acc
+            case _:
+                BaseCoordinate._expect_error()
+
     @_redirect
     def to_acc(self) -> LpsAccBox | LtmAccBox:
         ...
@@ -690,9 +723,34 @@ class BaseCoordinate(_BaseCoordinate):
     def to_lgrs(self) -> LpsLgrsBox | LtmLgrsBox:
         ...
 
+    def to_lps(self) -> LpsPoint:
+        lps_point = self._require(
+            self.to_lps_or_ltm, LpsPoint,
+            prefer_lps=True, extended_ltm=False, polar_ltm=False
+        )
+        return lps_point
+
+    def to_lps_counterpart(self) -> LpsPoint | LpsLgrsBox | LpsAccBox:
+        method = self._get_projected_counterpart_method()
+        lps = self.to_lps()
+        counterpart = method(lps)
+        return counterpart
+
     @_redirect
     def to_lps_or_ltm(self) -> LpsPoint | LtmPoint:
         ...
+
+    def to_ltm(self) -> LtmPoint:
+        ltm_point = self._require(
+            self.to_lps_or_ltm, LtmPoint, polar_ltm=True
+        )
+        return ltm_point
+
+    def to_ltm_counterpart(self) -> LtmPoint | LtmLgrsBox | LtmAccBox:
+        method = self._get_projected_counterpart_method()
+        ltm = self.to_ltm()
+        counterpart = method(ltm)
+        return counterpart
 
     # TODO: Uncomment abstract methods after implementation.
     # @_abc.abstractmethod
