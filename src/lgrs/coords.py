@@ -317,8 +317,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
 
     #* Initialization. --------------------------------------------------------
     def __post_init__(self, validate: bool) -> None:
-        if validate:  # TODO: Uncomment after testing.
-        # if validate and False:  # TODO: Comment after testing.
+        if validate:
             self._validate()
 
     @_functools.cached_property
@@ -1465,6 +1464,9 @@ class LtmLgrsBox(_GriddedCoordinate):
         # TODO: Let Mark know.
         # Note: Although `self._easting_area_chars` is 0-indexed and
         # Table 7 is 1-indexed, Eq. 93 is exactly reproduced here.
+        # TODO: Based on ref code (lines 1728-9), the parentheses are
+        #  assumed to be around the first two values, unlike the order
+        #  of operations in Eq. 93. Confirm, then let Mark know.
         ea_val = (5 + ea_idx) * 25_000  # Eq. 93
         easting = ea_val + self._easting_int  # Eq. 98
         na_letterset = _calc_na_letterset(self.longitudinal_band)  # Eq. 83
