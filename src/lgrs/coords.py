@@ -79,8 +79,7 @@ def _cache_new_cousin(func: ToMethod) -> ToMethod:
     wrapped : callable
         The wrapped `func`.
     """
-    public_func = getattr(BaseCoordinate, func.__name__.removeprefix("_"))
-    @_functools.wraps(public_func)
+    @_functools.wraps(func)
     def wrapped(self: BaseCoordinate, **kwargs) -> BaseCoordinate:
         new = func(self, **kwargs)
         self._register_cousin(new)
@@ -88,6 +87,8 @@ def _cache_new_cousin(func: ToMethod) -> ToMethod:
     return wrapped
 
 def _calc_na_letterset(zone_number: int) -> int:
+    # TODO: Determine if the "- 1" (which appears in the reference
+    #  code but not in Eq. 83) is correct.
     na_letterset = (zone_number - 1) % 3  # Eq. 83
     return na_letterset
 
@@ -153,17 +154,63 @@ def _compile_regex_without_i_and_o(pattern: str) -> _regex.Pattern:
     clean_pattern = _regex.sub("[A-Z]-[A-Z]", _remove_i_and_o, pattern)
     return _regex.compile(clean_pattern)
 
+def _expand_char_range(char_range: str) -> list[str]:
+    start_char, end_char = char_range.split("-")
+    chars = [chr(i)
+             for i in range(ord(start_char), ord(end_char) + 1)]
+    return chars
+
+def _extract_chars_from_pattern(
+        pattern: _regex.Pattern | None = None, name: str | None = None, *,
+        pre: str = "", post: str = ""
+) -> str:
+    # Note: M2025 assigns a value to each character in each table.
+    # However, in all M2025 equations, characters are treated as 0-
+    # indexed. Therefore, a string (rather than mapping) is sufficient.
+    # Note: Extraction is not general (e.g., does not accommodate
+    # escaped ")").
+    chars = _regex.search(
+        rf"\(\?P<{name}>\[(?P<gpattern>.*?)]\)", pattern.pattern
+    ).group("gpattern")
+    final = (pre + chars + post)
+    return final
+
+def _format_as_five_digit_int(n: float) -> str:
+    return f"{_smart_truncate(n):05}"
+
+def _make_en_pattern(*digit_count: int) -> str:
+    pattern = "|".join(
+        f"((?P<easting>[0-9]{{{i}}})(?P<northing>[0-9]{{{i}}}))"
+        for i in sorted(digit_count, reverse=True)
+    )
+    return pattern
+
+def _remove_i_and_o(match: _regex.Match) -> str:
+    expanded = _expand_char_range(match.group())
+    for char in ("I", "O"):
+        try:
+            expanded.remove(char)
+        except ValueError:
+            continue
+    return "".join(expanded)
+
+
+
+# endregion
+###############################################################################
+# region> UTILITIES: OTHER
+###############################################################################
 def _easy_dataclass(cls: type[BaseCoordinate]) -> type:
     """
     Force constraints to end of call signature, string representation.
-    
+
     Decorating a `BaseCoordinate` subclass with this function makes it a
     frozen dataclass and ensures that field order has `_BaseCoordinate`
-    fields--assumed to be constraints--pushed to the end of both 
-    `cls.__init__()` call signatures and the output of `cls.__repr__()`. 
-    Since constraints are assumed to be less important to most users, 
-    pushing them to the end is preferable.  
-    
+    fields--assumed to be constraints--pushed to the end of both
+    `cls.__init__()` call signatures and the output of `cls.__repr__()`.
+    Since constraints are assumed to be less important to most users,
+    pushing them to the end is preferable.
+
     Parameters
     ----------
     cls : type
@@ -207,76 +254,6 @@ def _easy_dataclass(cls: type[BaseCoordinate]) -> type:
     dataclass = _dataclasses.dataclass(frozen=True)(twin_cls)
     return dataclass
 
-def _expand_char_range(char_range: str) -> list[str]:
-    start_char, end_char = char_range.split("-")
-    chars = [chr(i)
-             for i in range(ord(start_char), ord(end_char) + 1)]
-    return chars
-
-def _format_as_five_digit_int(n: float) -> str:
-    return f"{_smart_truncate(n):05}"
-
-def _index_char_set(
-        pattern: _regex.Pattern | None = None, name: str | None = None, *,
-        chars: str | None = None, start:int, **manual: int
-) -> tuple[dict[str, int], dict[int, str]]:
-    # Resolve `chars` from group pattern, if necessary.
-    # Note: Not general (e.g., does not accommodate escaped ")").
-    if chars is None:
-        chars = _regex.search(
-            rf"\(\?P<{name}>\[(?P<gpattern>.*?)]\)", pattern.pattern
-        ).group("gpattern")
-
-    # Convert to mappings.
-    indices = range(start, len(chars) + start)
-    idx_to_char = dict(zip(indices, chars))
-    char_to_idx = dict(zip(chars, indices))
-    # Note: Implementation details here are fit for purpose (e.g., Table
-    # 6 in M2025).
-    for char, idx in manual.items():
-        if idx in idx_to_char:
-            raise TypeError(f"Index cannot be duplicated: {idx!r}")
-        idx_to_char[idx] = char
-        char_to_idx.setdefault(char, idx)
-    # TODO: This block is temporary, to remind me to test the case where
-    #  the mapping cannot be inverted without loss.
-    if len(char_to_idx) < len(idx_to_char):
-        char_to_idx = None
-    return (char_to_idx, idx_to_char)
-
-def _make_en_pattern(*digit_count: int) -> str:
-    pattern = "|".join(
-        f"((?P<easting>[0-9]{{{i}}})(?P<northing>[0-9]{{{i}}}))"
-        for i in sorted(digit_count, reverse=True)
-    )
-    return pattern
-
-def _map_index_char_sets(
-        *chars_tup: str, start:int
-) -> tuple[dict[int, dict[str, int]], dict[int, dict[str, int]]]:
-    i_to_char_to_idx = {}
-    i_to_idx_to_char = {}
-    for i, chars in enumerate(chars_tup):
-        char_to_idx, idx_to_char = _index_char_set(chars=chars, start=start)
-        i_to_char_to_idx[i] = char_to_idx
-        i_to_idx_to_char[i] = idx_to_char
-    return (i_to_char_to_idx, i_to_idx_to_char)
-
-def _remove_i_and_o(match: _regex.Match) -> str:
-    expanded = _expand_char_range(match.group())
-    for char in ("I", "O"):
-        try:
-            expanded.remove(char)
-        except ValueError:
-            continue
-    return "".join(expanded)
-
-
-
-# endregion
-###############################################################################
-# region> UTILITIES: OTHER
-###############################################################################
 def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
     # TODO: Determine whether `tolerance` is a good choice. Code
     #  mimics `check_decimal_round()` of reference code and presumably
@@ -387,7 +364,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     @_functools.cached_property
     def _constraint_keys(self) -> tuple[str, ...]:
         # Note: Assumes that all fields of `_BaseCoordinate` are
-        # constraints.
+        # constraints, consistent with `_easy_dataclass()`.
         constraint_keys = tuple(
             field.name
             for field in _BaseCoordinate._get_fields()
@@ -429,7 +406,6 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
 
 class BaseCoordinate(_BaseCoordinate):
     # TODO: Document that `MalformedCoordinate` may be raised.
-    _idx: int
     _template: _collections.abc.Callable | str | None = None
     _was_validated: bool = False
 
@@ -464,14 +440,6 @@ class BaseCoordinate(_BaseCoordinate):
         return cls(**init_kwargs)
 
     #* Validation. ------------------------------------------------------------
-    @staticmethod
-    def _expect_error(
-            func: _collections.abc.Callable | None = None
-    ) -> _typing.NoReturn:
-        if func is not None:
-            func()
-        raise TypeError("An unknown error occurred.")
-
     def _raise_malformed_coordinate(
             self, middle: str, *,
             attr_name: str, if_attr_name: str | None = None,
@@ -486,6 +454,14 @@ class BaseCoordinate(_BaseCoordinate):
             f"{middle}"
             f", not: {getattr(self, attr_name)!r}"
         )
+
+    @staticmethod
+    def _raise_unexpected(
+            func: _collections.abc.Callable | None = None
+    ) -> _typing.NoReturn:
+        if func is not None:
+            func()
+        raise TypeError("An unexpected error occurred.")
 
     def _validate_against_closed_interval(
         self, *, attr_name: str, minimum: _typing.Any, maximum: _typing.Any,
@@ -516,7 +492,7 @@ class BaseCoordinate(_BaseCoordinate):
                     f"or {sequence[-1]!r}"
                 )
             self._raise_malformed_coordinate(
-                attr_name=attr_name, if_attr_name=if_attr_name
+                middle=middle, attr_name=attr_name, if_attr_name=if_attr_name
             )
 
     def _validate_hemisphere(self) -> None:
@@ -572,6 +548,11 @@ class BaseCoordinate(_BaseCoordinate):
         )
         return new
 
+    # TODO: Rethink this. Maybe better is to implement an
+    #  `.is_equal_to()` that includes or excludes constraints, a
+    #  `_GriddedCoordinate.contains()`, that projects to same grid, and
+    #  possibly an `.is_close_to()` for which distance precision scales
+    #  with coordinate precision and round-trip conversion disparity.
     def is_close_to(
             self, other: _typing.Self, *,
             max_float_difference: float | None = None, error: bool = False,
@@ -585,8 +566,11 @@ class BaseCoordinate(_BaseCoordinate):
         if max_float_difference is None:
             # Note: Expected difference is "very small" but exact
             # default magnitudes are not rigorous.
+            # TODO: Determine appropriate values from systematic round-
+            #  trip conversion. Maybe record these values publicly?
             if isinstance(self, LatLonPoint):
-                max_float_difference = 1e-12
+                # Note: 1e-4 degrees latitude is ~3 m.
+                max_float_difference = 1e-4
             else:
                 max_float_difference = 1e-9
 
@@ -603,10 +587,8 @@ class BaseCoordinate(_BaseCoordinate):
             if self_val == other_val:
                 continue
             field_type = field_name_to_type[field_name]
-            if (
-                    field_type == "float"
-                    and abs(self_val - other_val) <= max_float_difference
-            ):
+            if (field_type == "float"
+                and abs(self_val - other_val) <= max_float_difference):
                 continue
             if not error:
                 return False
@@ -679,10 +661,10 @@ class BaseCoordinate(_BaseCoordinate):
         )
 
     #* Coordinate transformation. ---------------------------------------------
-    def _require(
+    def _force_type_or_error(
             self, bound_method: _collections.abc.Callable,
             targ_typ: type[BaseCoordinate], **constraints: bool
-    ) -> type[BaseCoordinate]:
+    ) -> BaseCoordinate:
         cand = bound_method()
         if isinstance(cand, targ_typ):
             return cand
@@ -707,7 +689,7 @@ class BaseCoordinate(_BaseCoordinate):
             case LpsAccBox() | LtmAccBox():
                 return BaseCoordinate.to_acc
             case _:
-                BaseCoordinate._expect_error()
+                BaseCoordinate._raise_unexpected()
 
     @_redirect
     def to_acc(self) -> LpsAccBox | LtmAccBox:
@@ -722,7 +704,7 @@ class BaseCoordinate(_BaseCoordinate):
         ...
 
     def to_lps(self) -> LpsPoint:
-        lps_point = self._require(
+        lps_point = self._force_type_or_error(
             self.to_lps_or_ltm, LpsPoint,
             prefer_lps=True, extended_ltm=False, polar_ltm=False
         )
@@ -739,7 +721,7 @@ class BaseCoordinate(_BaseCoordinate):
         ...
 
     def to_ltm(self) -> LtmPoint:
-        ltm_point = self._require(
+        ltm_point = self._force_type_or_error(
             self.to_lps_or_ltm, LtmPoint, polar_ltm=True
         )
         return ltm_point
@@ -750,22 +732,39 @@ class BaseCoordinate(_BaseCoordinate):
         counterpart = method(ltm)
         return counterpart
 
-    # TODO: Uncomment abstract methods after implementation.
-    # @_abc.abstractmethod
-    # def _to_acc(self, **kwargs) -> LpsAcc | LtmAcc:
-    #     ...
-    #
-    # @_abc.abstractmethod
-    # def _to_latlon(self, **kwargs) -> LatLon:
-    #     ...
-    #
-    # @_abc.abstractmethod
-    # def _to_lgrs(self, **kwargs) -> LpsLgrs | LtmLgrs:
-    #     ...
-    #
-    # @_abc.abstractmethod
-    # def _to_lps_or_ltm(self, **kwargs) -> Lps | Ltm:
-    #     ...
+    # Note: The following four methods permit `._to_*()` methods to be
+    # defined in subclasses for just one step in each direction.
+    def _to_acc(self) -> LpsAccBox | LtmAccBox:
+        if isinstance(self, (LpsPoint, LtmPoint)):
+            lps_or_ltm = self
+        else:
+            assert isinstance(self, LatLonPoint)
+            lps_or_ltm = self._to_lps_or_ltm()
+        lgrs = lps_or_ltm._to_lgrs()
+        acc = lgrs._to_acc()
+        return acc
+
+    def _to_latlon(self) -> LatLonPoint:
+        if isinstance(self, (LpsLgrsBox, LtmLgrsBox)):
+            lgrs = self
+        else:
+            assert isinstance(self, (LpsAccBox, LtmAccBox))
+            lgrs = self._to_lgrs()
+        lps_or_ltm = lgrs._to_lps_or_ltm()
+        latlon = lps_or_ltm._to_latlon()
+        return latlon
+
+    def _to_lgrs(self) -> LpsLgrsBox | LtmLgrsBox:
+        assert isinstance(self, LatLonPoint)
+        lps_or_ltm = self._to_lps_or_ltm()
+        lgrs = lps_or_ltm._to_lgrs()
+        return lgrs
+
+    def _to_lps_or_ltm(self) -> LpsPoint | LtmPoint:
+        assert isinstance(self, (LpsAccBox, LtmAccBox))
+        lgrs = self._to_lgrs()
+        lps_or_ltm = lgrs._to_lps_or_ltm()
+        return lps_or_ltm
 
     #* Utilities. -------------------------------------------------------------
     def _iter_value_strings(self) -> _typing.Iterator[str]:
@@ -778,7 +777,7 @@ class BaseCoordinate(_BaseCoordinate):
                 case int() | float():
                     yield repr(value)
                 case _:
-                    self._expect_error()
+                    self._raise_unexpected()
 
 
 
@@ -938,7 +937,7 @@ class LpsPoint(_NonGriddedCoordinate):
         return transformer
 
     @_cache_new_cousin
-    def _to_latlon(self, **kwargs) -> LatLonPoint:
+    def _to_latlon(self) -> LatLonPoint:
         transformer = self._get_transformer(to_geographic=True)
         lat, lon = transformer.transform(self.easting, self.northing)
         latlon = LatLonPoint(
@@ -948,7 +947,7 @@ class LpsPoint(_NonGriddedCoordinate):
         return latlon
 
     @_cache_new_cousin
-    def _to_lgrs(self, **kwargs) -> LpsLgrsBox:
+    def _to_lgrs(self) -> LpsLgrsBox:
         is_in_west_half = self.easting < _wkt.LPS_FALSE_EASTING
         match (self.hemisphere, is_in_west_half):
             case ("S", True):  # Eq. 100
@@ -960,7 +959,7 @@ class LpsPoint(_NonGriddedCoordinate):
             case ("N", False):  # Eq. 101
                 lon_band = "Z"
             case _:
-                self._expect_error(self._validate_hemisphere)
+                self._raise_unexpected(self._validate_hemisphere)
         e_adj = self.easting - _wkt.LPS_FALSE_EASTING  # Eq. 109
         n_adj = self.northing - _wkt.LPS_FALSE_NORTHING  # Eq. 110
         if is_in_west_half:
@@ -970,9 +969,11 @@ class LpsPoint(_NonGriddedCoordinate):
             ea_idx = 24 - _floor(abs(e_adj) // 25_000)  # Eq. 103
         else:
             ea_idx = _floor(e_adj // 25_000)  # Eq. 102
-        ea = LpsLgrsBox._easting_area__idx_to_char[ea_idx]  # Tables 13, 14
+        # Note: "- 1" adjusts for indices in Tables 13 + 14, which start
+        # at +1).
+        ea = LpsLgrsBox._easting_area_chars[ea_idx - 1]  # Tables 13, 14
         na_idx = _floor(n_adj // 25_000) + 13  # Eq. 104
-        na = LpsLgrsBox._northing_area__idx_to_char[na_idx]  # Tables 15, 16
+        na = LpsLgrsBox._northing_area_chars[na_idx]  # Tables 15, 16
         if is_in_west_half:
             e = 25_000 - (abs(e_adj) % 25_000)  # Eq. 105
         else:
@@ -1025,7 +1026,7 @@ class LtmPoint(_NonGriddedCoordinate):
                 minimum = 12_500
                 maximum = 2_500_000
             case _:
-                self._expect_error(self._validate_hemisphere)
+                self._raise_unexpected(self._validate_hemisphere)
         return self._validate_against_closed_interval(
             attr_name="northing", minimum=minimum, maximum=maximum
         )
@@ -1039,18 +1040,19 @@ class LtmPoint(_NonGriddedCoordinate):
     _to_latlon = LpsPoint._to_latlon
 
     @_cache_new_cousin
-    def _to_lgrs(self, **kwargs) -> LtmLgrsBox:
+    def _to_lgrs(self) -> LtmLgrsBox:
         lon_band = self.zone_number
         lat_lon = self.to_latlon()
         lat_band_idx = _floor(lat_lon.latitude // 8)  # Eq. 81
-        lat_band = LtmLgrsBox._latitudinal_band__idx_to_char[lat_band_idx]  # Table 6
+        # Note: "+ 11" adjusts for indices in Table 6, which start at
+        # -11.
+        # Table 6
+        lat_band = LtmLgrsBox._latitudinal_band_chars[lat_band_idx + 11]
         ea_idx = _floor(self.easting // 25_000) - 5  # Eq. 82
-        ea = LtmLgrsBox._easting_area__idx_to_char[ea_idx]  # Table 7
-        # TODO: Determine if the "- 1" (which appears in the reference
-        #  code but not in Eq. 83) is correct.
+        ea = LtmLgrsBox._easting_area_chars[ea_idx]  # Table 7
         na_letterset = _calc_na_letterset(self.zone_number)  # Eq. 83
         na_idx = _floor(self.northing // 25_000) % 20  # Eq. 84
-        na = LtmLgrsBox._northing_area__letterset_to_idx_to_char[na_letterset][na_idx]  # Tables 8, 9, 10
+        na = LtmLgrsBox._northing_area__letterset_to_chars[na_letterset][na_idx]  # Tables 8, 9, 10
         e = self.easting % 25_000  # Eq. 85
         n = self.northing % 25_000  # Eq. 86
         ltm_lgrs = LtmLgrsBox(
@@ -1112,16 +1114,16 @@ class _GriddedCoordinate(BaseCoordinate):
 
     #* Coordinate transformation. ---------------------------------------------
     @_functools.cached_property
-    def _easting_int(self) -> int | None:
+    def _easting_int(self) -> int:
         if self.easting is None:
-            return None
+            return 0
         else:
             return int(self.easting)
 
     @_functools.cached_property
-    def _northing_int(self) -> int | None:
+    def _northing_int(self) -> int:
         if self.easting is None:
-            return None
+            return 0
         else:
             return int(self.northing)
 
@@ -1165,7 +1167,7 @@ class LpsAccBox(_GriddedCoordinate):
                 minimum = "A"
                 maximum = "N"
             case _:
-                self._expect_error(self._validate_longitudinal_band)
+                self._raise_unexpected(self._validate_longitudinal_band)
         self._validate_against_closed_interval(
             attr_name="easting_area", minimum=minimum, maximum=maximum,
             if_attr_name="longitudinal_band"
@@ -1185,18 +1187,44 @@ class LpsAccBox(_GriddedCoordinate):
     _validate_northing = _return_none  # `._pattern` is sufficient.
 
     #* Coordinate transformation. ---------------------------------------------
-    _easting_area__char_to_idx, _easting_area__idx_to_char = _index_char_set(
-        _pattern, "easting_area", start=1
+    # Tables 13, 14
+    _easting_area_chars = _extract_chars_from_pattern(_pattern, "easting_area")
+    # Tables 15, 16
+    _northing_area_chars = _extract_chars_from_pattern(
+        _pattern, "northing_area"
     )
-    _northing_area__char_to_idx, _northing_area__idx_to_char = _index_char_set(
-        _pattern, "northing_area", start=0
-    )
-    _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
-        _pattern, "easting_1k", start=0
-    )
-    _northing_1k__char_to_idx, _northing_1k__idx_to_char = _index_char_set(
-        _pattern, "northing_1k", start=0
-    )
+    # Table 17
+    _easting_1k_chars = _extract_chars_from_pattern(_pattern, "easting_1k")
+    _northing_1k_chars = _easting_1k_chars
+
+    @_cache_new_cousin
+    def _to_lgrs(self) -> LpsLgrsBox | LtmLgrsBox:
+        if self.easting_1k is None:
+            easting = None
+            northing = None
+        else:
+            # Eqs. 91, 121, 122
+            easting = f"{self._easting_1k_chars.index(self.easting_1k):02}"
+            northing = f"{self._northing_1k_chars.index(self.northing_1k):02}"
+            if self.easting is not None:
+                easting += self.easting  # Eq. 123
+                northing += self.northing  # Eq. 124
+        init_kwargs = {
+            "longitudinal_band": self.longitudinal_band,
+            "easting_area": self.easting_area,
+            "northing_area": self.northing_area,
+            "easting": easting,
+            "northing": northing,
+        }
+        if isinstance(self, LpsAccBox):
+            lgrs_type = LpsLgrsBox
+        else:
+            lgrs_type = LtmLgrsBox
+            init_kwargs["latitudinal_band"] = self.latitudinal_band
+        lgrs = lgrs_type(
+            **init_kwargs, **self._root.constraints, validate=False
+        )
+        return lgrs
 
 
 @_easy_dataclass
@@ -1236,23 +1264,21 @@ class LpsLgrsBox(_GriddedCoordinate):
         )
 
     #* Coordinate transformation. ---------------------------------------------
-    _easting_area__char_to_idx = LpsAccBox._easting_area__char_to_idx
-    _easting_area__idx_to_char = LpsAccBox._easting_area__idx_to_char
-    _northing_area__char_to_idx = LpsAccBox._northing_area__char_to_idx
-    _northing_area__idx_to_char = LpsAccBox._northing_area__idx_to_char
+    _easting_area_chars = LpsAccBox._easting_area_chars
+    _northing_area_chars = LpsAccBox._northing_area_chars
 
     @_cache_new_cousin
-    def _to_acc(self, **kwargs) -> LpsAccBox | LtmAccBox:
+    def _to_acc(self) -> LpsAccBox | LtmAccBox:
         init_kwargs = {
             "longitudinal_band": self.longitudinal_band,
             "easting_area": self.easting_area,
             "northing_area": self.northing_area,
         }
         if self.easting is not None:
-            init_kwargs["easting_1k"] = LpsAccBox._easting_1k__idx_to_char[
+            init_kwargs["easting_1k"] = LpsAccBox._easting_1k_chars[
                 int(self.easting[:2])
             ]
-            init_kwargs["northing_1k"] = LpsAccBox._northing_1k__idx_to_char[
+            init_kwargs["northing_1k"] = LpsAccBox._northing_1k_chars[
                 int(self.northing[:2])
             ]
             if len(self.easting) > 2:
@@ -1265,6 +1291,53 @@ class LpsLgrsBox(_GriddedCoordinate):
             init_kwargs["latitudinal_band"] = self.latitudinal_band
         acc = acc_type(**init_kwargs, **self._root.constraints, validate=False)
         return acc
+
+    @_cache_new_cousin
+    def _to_lps_or_ltm(self) -> LpsPoint:
+        # Determine hemisphere and whether in the western half.
+        # p. 92 (parags. 1, 3)
+        match self.longitudinal_band:
+            case "A":
+                hemi = "S"
+                is_in_west_half = True
+            case "B":
+                hemi = "S"
+                is_in_west_half = False
+            case "Y":
+                hemi = "N"
+                is_in_west_half = True
+            case "Z":
+                hemi = "N"
+                is_in_west_half = False
+            case _:
+                self._raise_unexpected()
+
+        # Calculate easting and northing.
+        # Tables 13 + 14
+        ea_idx = self._easting_area_chars.index(self.easting_area)
+        if is_in_west_half:
+            # Note: `self._easting_area_chars` is 0-indexed but Table 7
+            # is 1-indexed, so "+ 1" in Eq. 112 is dropped here.
+            ea_val = -25_000 * (24 - ea_idx)  # Eq. 112
+        else:
+            # TODO: Let Mark know.
+            # Note: Although `self._easting_area_chars` is 0-indexed and
+            # Table 7 is 1-indexed, Eq. 113 is exactly reproduced here.
+            ea_val = 25_000 * ea_idx  # Eq. 113
+        # Eq. 115
+        easting = ea_val + self._easting_int + _wkt.LPS_FALSE_EASTING
+        # Tables 15, 16
+        na_idx = self._northing_area_chars.index(self.northing_area)
+        na_val = 25_000 * (na_idx - 13)  # Eq. 114
+        # Eq. 116
+        northing = na_val + self._northing_int + _wkt.LPS_FALSE_NORTHING
+
+        # Create and return instance.
+        lps = LpsPoint(
+            hemisphere=hemi, easting=easting, northing=northing,
+            **self.constraints, validate=False
+        )
+        return lps
 
 
 @_easy_dataclass
@@ -1302,7 +1375,7 @@ class LtmAccBox(_GriddedCoordinate):
 
     def _validate_northing_area(self) -> None:
         na_letterset = _calc_na_letterset(self.longitudinal_band)  # Eq. 83
-        na_chars = LtmLgrsBox._northing_area__letterset_to_char_to_idx[na_letterset]
+        na_chars = LtmLgrsBox._northing_area__letterset_to_chars[na_letterset]
         self._validate_against_sequence(
             attr_name="easting_area", sequence=na_chars,
             if_attr_name="longitudinal_band"
@@ -1314,25 +1387,20 @@ class LtmAccBox(_GriddedCoordinate):
     _validate_northing = LpsAccBox._validate_northing
 
     #* Coordinate transformation. ---------------------------------------------
-    _latitudinal_band__char_to_idx, _latitudinal_band__idx_to_char = _index_char_set(
-        _pattern, "latitudinal_band", start=-10, C=-11, X=10
+    # Table 6
+    _latitudinal_band_chars = _extract_chars_from_pattern(
+        _pattern, "latitudinal_band", pre="C", post="X"
     )
-    _easting_area__char_to_idx, _easting_area__idx_to_char = _index_char_set(
-        _pattern, "easting_area", start=0
-    )
-    (
-        _northing_area__letterset_to_char_to_idx,
-        _northing_area__letterset_to_idx_to_char
-    ) = _map_index_char_sets(
-        "ABCDEFGHJKLMNPQRSTUV", "FGHJKLMNPQRSTUVABCDE", "LMNPQRSTUVABCDEFGHJK",
-        start=0
-    )
-    _easting_1k__char_to_idx, _easting_1k__idx_to_char = _index_char_set(
-        _pattern, "easting_1k", start=0
-    )
-    _northing_1k__char_to_idx, _northing_1k__idx_to_char = _index_char_set(
-        _pattern, "northing_1k", start=0
-    )
+    # Table 7
+    _easting_area_chars = _extract_chars_from_pattern(_pattern, "easting_area")
+    # Tables 8-10
+    _northing_area__letterset_to_chars = [
+        "ABCDEFGHJKLMNPQRSTUV", "FGHJKLMNPQRSTUVABCDE", "LMNPQRSTUVABCDEFGHJK"
+    ]
+    _easting_1k_chars = LpsAccBox._easting_1k_chars
+    _northing_1k_chars = LpsAccBox._northing_1k_chars
+
+    _to_lgrs = LpsAccBox._to_lgrs
 
 
 @_easy_dataclass
@@ -1363,14 +1431,69 @@ class LtmLgrsBox(_GriddedCoordinate):
     _validate_northing = LpsLgrsBox._validate_northing
 
     #* Coordinate transformation. ---------------------------------------------
-    _latitudinal_band__char_to_idx = LtmAccBox._latitudinal_band__char_to_idx
-    _latitudinal_band__idx_to_char = LtmAccBox._latitudinal_band__idx_to_char
-    _easting_area__char_to_idx = LtmAccBox._easting_area__char_to_idx
-    _easting_area__idx_to_char = LtmAccBox._easting_area__idx_to_char
-    _northing_area__letterset_to_char_to_idx = LtmAccBox._northing_area__letterset_to_char_to_idx
-    _northing_area__letterset_to_idx_to_char = LtmAccBox._northing_area__letterset_to_idx_to_char
+    _latitudinal_band_chars = LtmAccBox._latitudinal_band_chars
+    _easting_area_chars = LtmAccBox._easting_area_chars
+    _northing_area__letterset_to_chars = LtmAccBox._northing_area__letterset_to_chars
+
+    _latitudinal_band_n_idx = _latitudinal_band_chars.index("N")
+
+    @staticmethod
+    @_functools.lru_cache(maxsize=5)  # `maxsize` is small but arbitrary.
+    def _calc_n_band(lat_band_min: int) -> int:
+        # Note: Longitude is arbitrary.
+        temp_latlon = LatLonPoint(
+            latitude=lat_band_min, longitude=0, validate=False
+        )
+        nband_float = temp_latlon.to_ltm().northing
+        nband = _floor(nband_float // 25_000) * 25_000  # Eq. 96
+        return nband
 
     _to_acc = LpsLgrsBox._to_acc
+
+    @_cache_new_cousin
+    def _to_lps_or_ltm(self) -> LtmPoint:
+        # Determine hemisphere.
+        # Eq. 92 (also Fig. 15)
+        lat_band_idx = self._latitudinal_band_chars.index(self.latitudinal_band)
+        if lat_band_idx >= self._latitudinal_band_n_idx:
+            hemi = "N"
+        else:
+            hemi = "S"
+
+        # Calculate easting and northing.
+        ea_idx = self._easting_area_chars.index(self.easting_area)  # Table 7
+        # TODO: Let Mark know.
+        # Note: Although `self._easting_area_chars` is 0-indexed and
+        # Table 7 is 1-indexed, Eq. 93 is exactly reproduced here.
+        ea_val = (5 + ea_idx) * 25_000  # Eq. 93
+        easting = ea_val + self._easting_int  # Eq. 98
+        na_letterset = _calc_na_letterset(self.longitudinal_band)  # Eq. 83
+        # Tables 8-10
+        na_idx = self._northing_area__letterset_to_chars[na_letterset].index(
+            self.northing_area
+        )
+        na_val_rel = na_idx * 25_000  # Eq. 94
+        # Table 6
+        # TODO: Same comment as above about parentheses.
+        # Eq. 95
+        lat_band_min = (
+            (self._latitudinal_band_chars.index(self.latitudinal_band) - 11) * 8
+        )
+        nband = self._calc_n_band(lat_band_min)  # Eq. 96, etc.
+        # Eqs. 97, 99
+        na_val = 0  # Initialize.
+        while True:
+            northing = na_val + na_val_rel + self._northing_int
+            if northing >= nband:
+                break
+            na_val += 500_000
+
+        # Create and return instance.
+        ltm = LtmPoint(
+            zone_number=self.longitudinal_band, hemisphere=hemi,
+            easting=easting, northing=northing, validate=False
+        )
+        return ltm
 
 
 
@@ -1383,7 +1506,10 @@ _caching.enable_caching(False)
 lat_lon = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)  # p. 45
 lps_or_ltm = lat_lon.to_lps_or_ltm()
 lgrs_ = lps_or_ltm.to_lgrs()
-assert lgrs_.is_close_to(LtmLgrsBox.from_string("35JFJ1271112229"))
+lgrs_.is_close_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
+
+# lgrs_.to_latlon().is_close_to(lat_lon, error=True)
+print(lgrs_.to_acc().to_latlon())
 
 lat_lon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
 lps_or_ltm1 = lat_lon1.to_lps_or_ltm()
@@ -1398,7 +1524,9 @@ assert isinstance(lgrs2, LtmLgrsBox)
 lat_lon4 = LatLonPoint(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
 lps_or_ltm4 = lat_lon4.to_lps_or_ltm()
 lgrs4 = lps_or_ltm4.to_lgrs()
-assert lgrs4.is_close_to(LpsLgrsBox.from_string("AZS1359008480"))
+assert lgrs4.is_close_to(LpsLgrsBox.from_string("AZS1359008480"), error=True)
+
+lgrs4.to_latlon()
 
 lat_lon5 = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
 lat_lon5.to_latlon()
