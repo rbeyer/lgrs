@@ -16,7 +16,7 @@ For brevity, this paper is referred to as M2025 hereinafter.
 # TODO: Finalize reference. Current form is copied from "Suggested
 #  citation" in M2025.
 
-# Copyright © 2026, Ethan I. Schafer (eschaefer@seti.org)
+# Copyright © 2026, Ethan I. Schaefer (eschaefer@seti.org)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
