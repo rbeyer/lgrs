@@ -5,12 +5,12 @@ This module also supports coordinate transformations.
 
 Examples
 --------
->>> lps_lgrs = LpsLgrsBox(
+>>> lps_lgrs_box = LpsLgrsBox(
 ...     longitudinal_band="A", easting_area="Z", northing_area="S",
 ...     easting="13590", northing="08480"
 ... )
->>> alt_lps_lgrs = LpsLgrsBox.from_string("AZS1359008480")
->>> alt_lps_lgrs.is_close_to(lps_lgrs, error=True)
+>>> alt_lps_lgrs_box = LpsLgrsBox.from_string("AZS1359008480")
+>>> alt_lps_lgrs_box.is_equal_to(lps_lgrs_box, error=True)
 """
 
 # Copyright © 2026, Ethan I. Schafer (eschaefer@seti.org)
@@ -551,6 +551,28 @@ class BaseCoordinate(_BaseCoordinate):
         return string
 
     #* General public methods. ------------------------------------------------
+    @classmethod
+    def _is_x_based(cls, prefix: str) -> bool:
+        if issubclass(cls, LatLonPoint):
+            raise TypeError("`LatLonPoint` is neither LPS- nor LTM-based")
+        return cls.__name__.startswith(prefix)
+    #*
+    @staticmethod
+    def _conform_to_latlon_points(
+            *coords: BaseCoordinate, center: bool
+    ) -> _typing.Iterator[LatLonPoint]:
+        for coord in coords:
+            if center and isinstance(coord, _GriddedCoordinate):
+                yield coord.center_latlon
+            else:
+                yield coord.to_latlon()
+
+    @property
+    def _geod(self) -> _pyproj.Geod:
+        geod = _pyproj.Geod(sphere=True, a=_wkt.LUNAR_RADIUS)
+        type(self)._geod = geod  # Reuse this instance.
+        return geod
+
     def copy(self, *, validate: bool = False) -> _typing.Self:
         # Note: `self` can only exist if validated or explicitly not
         # validated. Either way, defaulting `validate` to `False` is
@@ -560,65 +582,95 @@ class BaseCoordinate(_BaseCoordinate):
         )
         return new
 
-    # TODO: Rethink this. Maybe better is to implement an
-    #  `.is_equal_to()` that includes or excludes constraints, a
-    #  `_GriddedCoordinate.contains()`, that projects to same grid, and
-    #  possibly an `.is_close_to()` for which distance precision scales
-    #  with coordinate precision and round-trip conversion disparity.
-    def is_close_to(
-            self, other: _typing.Self, *,
-            max_float_difference: float | None = None, error: bool = False,
-            constraints: bool = False
+    def distance_to(
+            self, other: BaseCoordinate, *, center: bool = False
+    ) -> float:
+        self_latlon_point, other_latlon_point = self._conform_to_latlon_points(
+            self, other, center=center
+        )
+        _, _, dist = self._geod.inv(
+            self_latlon_point.longitude, self_latlon_point.latitude,
+            other_latlon_point.longitude, other_latlon_point.latitude
+        )
+        return dist
+
+    def grid_distance_to(
+            self, other: BaseCoordinate, *, center: bool = False,
+            system: str | None = None
+    ) -> float:
+        match system.upper():
+            case "LPS":
+                convert = BaseCoordinate.to_lps
+            case "LTM":
+                convert = BaseCoordinate.to_ltm
+            case None:
+                convert = BaseCoordinate.to_lps_or_ltm
+            case _:
+                raise TypeError(f"`system` not recognized: {system!r}")
+        self_box, other_box = map(
+            convert,
+            self._conform_to_latlon_points(self, other, center=center)
+        )
+        if (
+                system is None
+                and self_box.is_lps_based() != other_box.is_lps_based()
+        ):
+            raise TypeError(
+                "`self` and `other` are not in the same system (LPS or LTM)"
+            )
+        dist = _math.dist(
+            (self_box.easting, self_box.northing),
+            (other_box.easting, other_box.northing)
+        )
+        return dist
+
+    def is_equal_to(
+            self, other: _typing.Self, *, error: bool = False, constraints: bool = False
     ) -> bool:
-        # Validate and resolve arguments.
+        # Validate type of `other`.
+        # TODO: Once library-wide type guards are implemented, remove
+        #  this block.
         if not isinstance(other, type(self)):
             raise TypeError(
                 f"`other` must be of type {type(self).__name__}, not: {other!r}"
             )
-        if max_float_difference is None:
-            # Note: Expected difference is "very small" but exact
-            # default magnitudes are not rigorous.
-            # TODO: Determine appropriate values from systematic round-
-            #  trip conversion. Maybe record these values publicly?
-            if isinstance(self, LatLonPoint):
-                # Note: 1e-4 degrees latitude is ~3 m.
-                max_float_difference = 1e-4
-            else:
-                max_float_difference = 1e-9
 
         # Compare.
         if constraints:
-            field_names = self._constraint_keys
+            included_field_names = self._constraint_keys
         else:
-            field_names = self._init_kwargs.keys()
-        field_name_to_type = self._get_field_name_to_type()
+            included_field_names = self._init_kwargs.keys()
         err_lines = []
-        for field_name in field_names:
-            self_val = getattr(self, field_name)
+        for field_name, self_val in self._init_kwargs.items():
+            if field_name not in included_field_names:
+                continue
             other_val = getattr(other, field_name)
-            if self_val == other_val:
-                continue
-            field_type = field_name_to_type[field_name]
-            if (field_type == "float"
-                and abs(self_val - other_val) <= max_float_difference):
-                continue
-            if not error:
-                return False
-            err_lines.append(f"  {field_name!r} values differ:")
-            err_lines.append(f"    {self_val!r} vs. {other_val!r}")
+            if self_val != other_val:
+                if not error:
+                    return False
+                err_lines.append(f"  {field_name!r} values differ:")
+                err_lines.append(f"    {self_val!r} vs. {other_val!r}")
         if err_lines:
             raise TypeError("\n" + "\n".join(err_lines))
         return True
 
+    # TODO: Consider an `.is_close_to()` that automatically accounts for
+    #  both `.precision` (where applicable) and the inferred conversion
+    #  sequence. For example, comparing a `LatLonPoint` and a `LpsAcc`
+    #  would allow for expected imprecision in the `LatLonPoint` -->
+    #  `LpsPoint` --> `LpsLgrs` sequence, and comparing a `LatLonPoint`
+    #  to a `LatLonPoint` would allow for the expected round-trip
+    #  disparity.
+
     @classmethod
     @_functools.cache
     def is_lps_based(cls):
-        return cls.__name__.startswith("Lps")
+        return cls._is_x_based("Lps")
 
     @classmethod
     @_functools.cache
     def is_ltm_based(cls):
-        return cls.__name__.startswith("Ltm")
+        return cls._is_x_based("Ltm")
 
     def replace(
             self, *, validate: bool = True, copy: bool = True, **overrides
@@ -724,11 +776,11 @@ class BaseCoordinate(_BaseCoordinate):
         return (force_system, convert)
 
     def to(
-            self, typ: type[BaseCoordinate], *, counterpart_ok: bool = False
+            self, typ: type[BaseCoordinate], *, any_system: bool = False
     ) -> BaseCoordinate:
         force_system, convert = self._get_conversion_sequence(typ)
         if (
-                not counterpart_ok
+                not any_system
                 and force_system is not None
                 and self.is_lps_based() != typ.is_lps_based()
             ):
@@ -1146,7 +1198,75 @@ class _GriddedCoordinate(BaseCoordinate):
         }
         return cls(**init_kwargs, validate=validate)
 
+    #* Reference points. ------------------------------------------------------
+    def _make_reference_point(
+            self, easting_delta: float, northing_delta: float
+    ) -> LatLonPoint:
+        lps_or_ltm_point = self.to_lps_or_ltm()
+        temp = lps_or_ltm_point.replace(
+            easting=lps_or_ltm_point.easting + easting_delta,
+            northing=lps_or_ltm_point.northing + northing_delta,
+            validate=False
+        )
+        # Note: New instance must be `LatLonPoint`, to be guaranteed
+        # valid, and must be a copy, to divorce its cache history from
+        # the possibly invalid `temp`.
+        new = temp.to_latlon().copy()
+        return new
+
+    @_functools.cached_property
+    def center_latlon(self) -> LatLonPoint:
+        half_precision = (0.5 * self.precision)
+        center = self._make_reference_point(+half_precision, +half_precision)
+        return center
+
     #* Public data and methods. -----------------------------------------------
+    def contains(
+            self, other: BaseCoordinate, *,
+            logical: bool = False,  cross_system: bool = True
+    ) -> bool:
+        # Honor restrictive arguments.
+        if logical and not isinstance(other, _GriddedCoordinate):
+            return False
+        if (
+                (logical or not cross_system)
+                and  self.is_lps_based() != other.is_lps_based()
+        ):
+                return False
+
+        # Coerce `other` to same type as `self`.
+        try:
+            other_box = other.to(type(self))
+        except _exceptions.MalformedCoordinate:
+            return False
+
+        # If `other` is larger than `self`, `self` cannot contain
+        # `other`.
+        if other_box.precision > self.precision:
+            return False
+
+        # Test whether `other`, expanded to the same size as `self`, is
+        # equivalent to `self`.
+        return self.is_equal_to(other_box.truncate(self.precision))
+
+    @_functools.cached_property
+    def precision(self) -> int:
+        lgrs_easting = self.to_lgrs().easting
+        # Table 11
+        if lgrs_easting is None:
+            return 25_000
+        match len(lgrs_easting):
+            case 5:
+                return 1
+            case 4:
+                return 10
+            case 3:
+                return 100
+            case 2:
+                return 1000
+            case _:
+                self._raise_unexpected()
+
     def truncate(
             self, min_precision: float, *, copy: bool = False
     ) -> _typing.Self:
@@ -1187,24 +1307,6 @@ class _GriddedCoordinate(BaseCoordinate):
         new_lgrs_box = type(self_lgrs_box)(**init_kwargs, validate=False)
         final = new_lgrs_box.to(type(self))
         return final
-
-    @_functools.cached_property
-    def precision(self) -> int:
-        lgrs_easting = self.to_lgrs().easting
-        # Table 11
-        if lgrs_easting is None:
-            return 25_000
-        match len(lgrs_easting):
-            case 5:
-                return 1
-            case 4:
-                return 10
-            case 3:
-                return 100
-            case 2:
-                return 1000
-            case _:
-                self._raise_unexpected()
 
 
 
@@ -1588,9 +1690,9 @@ _caching.enable_caching(False)
 lat_lon = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)  # p. 45
 lps_or_ltm = lat_lon.to_lps_or_ltm()
 lgrs_ = lps_or_ltm.to_lgrs()
-lgrs_.is_close_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
+lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
 
-# lgrs_.to_latlon().is_close_to(lat_lon, error=True)
+# lgrs_.to_latlon().is_equal_to(lat_lon, error=True)
 print(lgrs_.to_acc().to_latlon())
 
 lat_lon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
@@ -1606,7 +1708,7 @@ assert isinstance(lgrs2, LtmLgrsBox)
 lat_lon4 = LatLonPoint(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
 lps_or_ltm4 = lat_lon4.to_lps_or_ltm()
 lgrs4 = lps_or_ltm4.to_lgrs()
-assert lgrs4.is_close_to(LpsLgrsBox.from_string("AZS1359008480"), error=True)
+assert lgrs4.is_equal_to(LpsLgrsBox.from_string("AZS1359008480"), error=True)
 
 lgrs4.to_latlon()
 
@@ -1620,3 +1722,5 @@ lps_acc = lgrs1.to_acc()
 ltm_acc = lgrs2.to_acc()
 
 lps_acc.truncate(100_000).to_latlon()
+
+lgrs_.distance_to(lgrs1)
