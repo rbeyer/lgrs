@@ -36,7 +36,8 @@ import abc as _abc
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
-from math import floor as _floor
+import math as _math
+_floor = _math.floor
 import pyproj as _pyproj
 import regex as _regex
 import types as _types
@@ -48,6 +49,7 @@ import lgrs.database as _database
 import lgrs.exceptions as _exceptions
 import lgrs.srs.srs as _srs
 import lgrs.srs.wkt as _wkt
+
 
 
 # endregion
@@ -199,6 +201,18 @@ def _remove_i_and_o(match: _regex.Match) -> str:
 ###############################################################################
 # region> UTILITIES: OTHER
 ###############################################################################
+def _as_int(str_or_none: int | None) -> int:
+    if str_or_none is None:
+        return 0
+    else:
+        return int(str_or_none)
+
+def _as_str(str_or_none: str | None) -> str:
+    if str_or_none is None:
+        return ""
+    else:
+        return str_or_none
+
 def _easy_dataclass(cls: type[BaseCoordinate]) -> type:
     """
     Force constraints to end of call signature, string representation.
@@ -596,6 +610,16 @@ class BaseCoordinate(_BaseCoordinate):
             raise TypeError("\n" + "\n".join(err_lines))
         return True
 
+    @classmethod
+    @_functools.cache
+    def is_lps_based(cls):
+        return cls.__name__.startswith("Lps")
+
+    @classmethod
+    @_functools.cache
+    def is_ltm_based(cls):
+        return cls.__name__.startswith("Ltm")
+
     def replace(
             self, *, validate: bool = True, copy: bool = True, **overrides
     ) -> _typing.Self:
@@ -676,18 +700,42 @@ class BaseCoordinate(_BaseCoordinate):
                 f"{reconstrained}"
             )
 
-    def _get_projected_counterpart_method(self) -> ToMethod:
-        match self:
-            case LatLonPoint():
-                raise TypeError(f"Coordinate is not projected: {self!r}")
-            case LpsPoint() | LtmPoint():
-                return BaseCoordinate.to_lps_or_ltm
-            case LpsLgrsBox() | LtmLgrsBox():
-                return BaseCoordinate.to_lgrs
-            case LpsAccBox() | LtmAccBox():
-                return BaseCoordinate.to_acc
-            case _:
-                BaseCoordinate._raise_unexpected()
+    @staticmethod
+    @_functools.cache
+    def _get_conversion_sequence(
+            targ_type: type[BaseCoordinate]
+    ) -> tuple[ToMethod | None, ToMethod]:
+        if targ_type is LatLonPoint:
+            return (None, BaseCoordinate.to_latlon)
+        if targ_type in (LpsPoint, LtmPoint):
+            convert = BaseCoordinate.to_lps_or_ltm
+        elif targ_type in (LpsLgrsBox, LtmLgrsBox):
+            convert = BaseCoordinate.to_lgrs
+        elif targ_type in (LpsAccBox, LtmAccBox):
+            convert = BaseCoordinate.to_acc
+        else:
+            BaseCoordinate._raise_unexpected()
+        if targ_type.is_lps_based():
+            force_system = BaseCoordinate.to_lps
+        elif targ_type.is_ltm_based():
+            force_system = BaseCoordinate.to_ltm
+        else:
+            BaseCoordinate._raise_unexpected()
+        return (force_system, convert)
+
+    def to(
+            self, typ: type[BaseCoordinate], *, counterpart_ok: bool = False
+    ) -> BaseCoordinate:
+        force_system, convert = self._get_conversion_sequence(typ)
+        if (
+                not counterpart_ok
+                and force_system is not None
+                and self.is_lps_based() != typ.is_lps_based()
+            ):
+            basis = force_system(self)
+        else:
+            basis = self
+        return convert(basis)
 
     @_redirect
     def to_acc(self) -> LpsAccBox | LtmAccBox:
@@ -708,12 +756,6 @@ class BaseCoordinate(_BaseCoordinate):
         )
         return lps_point
 
-    def to_lps_counterpart(self) -> LpsPoint | LpsLgrsBox | LpsAccBox:
-        method = self._get_projected_counterpart_method()
-        lps = self.to_lps()
-        counterpart = method(lps)
-        return counterpart
-
     @_redirect
     def to_lps_or_ltm(self) -> LpsPoint | LtmPoint:
         ...
@@ -723,12 +765,6 @@ class BaseCoordinate(_BaseCoordinate):
             self.to_lps_or_ltm, LtmPoint, polar_ltm=True
         )
         return ltm_point
-
-    def to_ltm_counterpart(self) -> LtmPoint | LtmLgrsBox | LtmAccBox:
-        method = self._get_projected_counterpart_method()
-        ltm = self.to_ltm()
-        counterpart = method(ltm)
-        return counterpart
 
     # Note: The following four methods permit `._to_*()` methods to be
     # defined in subclasses for just one step in each direction.
@@ -1110,20 +1146,65 @@ class _GriddedCoordinate(BaseCoordinate):
         }
         return cls(**init_kwargs, validate=validate)
 
-    #* Coordinate transformation. ---------------------------------------------
-    @_functools.cached_property
-    def _easting_int(self) -> int:
-        if self.easting is None:
-            return 0
+    #* Public data and methods. -----------------------------------------------
+    def truncate(
+            self, min_precision: float, *, copy: bool = False
+    ) -> _typing.Self:
+        # Determine `*LgrsBox` easting and northing character count.
+        if min_precision < 1:
+            raise TypeError(
+                f"`min_precision` must be >= 1, not: {min_precision!r}"
+            )
+        elif 1 <= min_precision < 10:
+            lgrs_char_count = 5
+        elif 10 <= min_precision < 100:
+            lgrs_char_count = 4
+        elif 100 <= min_precision < 1000:
+            lgrs_char_count = 3
+        elif 1000 <= min_precision < 25_000:
+            lgrs_char_count = 2
         else:
-            return int(self.easting)
+            lgrs_char_count = 0
+
+        # Return `self`, if allowed and suitable.
+        self_lgrs_box = self.to_lgrs()
+        if (
+                not copy
+                and len(_as_str(self_lgrs_box.easting)) == lgrs_char_count
+        ):
+            return self
+
+        # Create and return truncated instance.
+        init_kwargs = self_lgrs_box._init_kwargs.copy()
+        if lgrs_char_count:
+            easting = _as_str(self_lgrs_box.easting)
+            northing = _as_str(self_lgrs_box.northing)
+            init_kwargs["easting"] = f"{easting}00000"[:lgrs_char_count]
+            init_kwargs["northing"] = f"{northing}00000"[:lgrs_char_count]
+        else:
+            init_kwargs["easting"] = None
+            init_kwargs["northing"] = None
+        new_lgrs_box = type(self_lgrs_box)(**init_kwargs, validate=False)
+        final = new_lgrs_box.to(type(self))
+        return final
 
     @_functools.cached_property
-    def _northing_int(self) -> int:
-        if self.easting is None:
-            return 0
-        else:
-            return int(self.northing)
+    def precision(self) -> int:
+        lgrs_easting = self.to_lgrs().easting
+        # Table 11
+        if lgrs_easting is None:
+            return 25_000
+        match len(lgrs_easting):
+            case 5:
+                return 1
+            case 4:
+                return 10
+            case 3:
+                return 100
+            case 2:
+                return 1000
+            case _:
+                self._raise_unexpected()
 
 
 
@@ -1323,12 +1404,12 @@ class LpsLgrsBox(_GriddedCoordinate):
             # Table 7 is 1-indexed, Eq. 113 is exactly reproduced here.
             ea_val = 25_000 * ea_idx  # Eq. 113
         # Eq. 115
-        easting = ea_val + self._easting_int + _wkt.LPS_FALSE_EASTING
+        easting = ea_val + _as_int(self.easting) + _wkt.LPS_FALSE_EASTING
         # Tables 15, 16
         na_idx = self._northing_area_chars.index(self.northing_area)
         na_val = 25_000 * (na_idx - 13)  # Eq. 114
         # Eq. 116
-        northing = na_val + self._northing_int + _wkt.LPS_FALSE_NORTHING
+        northing = na_val + _as_int(self.northing) + _wkt.LPS_FALSE_NORTHING
 
         # Create and return instance.
         lps = LpsPoint(
@@ -1467,7 +1548,7 @@ class LtmLgrsBox(_GriddedCoordinate):
         #  assumed to be around the first two values, unlike the order
         #  of operations in Eq. 93. Confirm, then let Mark know.
         ea_val = (5 + ea_idx) * 25_000  # Eq. 93
-        easting = ea_val + self._easting_int  # Eq. 98
+        easting = ea_val + _as_int(self.easting)  # Eq. 98
         na_letterset = _calc_na_letterset(self.longitudinal_band)  # Eq. 83
         # Tables 8-10
         na_idx = self._northing_area__letterset_to_chars[na_letterset].index(
@@ -1484,7 +1565,7 @@ class LtmLgrsBox(_GriddedCoordinate):
         # Eqs. 97, 99
         na_val = 0  # Initialize.
         while True:
-            northing = na_val + na_val_rel + self._northing_int
+            northing = na_val + na_val_rel + _as_int(self.northing)
             if northing >= nband:
                 break
             na_val += 500_000
@@ -1537,3 +1618,5 @@ extreme_lat_lon = lps.to_latlon()
 
 lps_acc = lgrs1.to_acc()
 ltm_acc = lgrs2.to_acc()
+
+lps_acc.truncate(100_000).to_latlon()
