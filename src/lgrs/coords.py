@@ -637,12 +637,12 @@ class BaseCoordinate(_BaseCoordinate):
 
         # Compare.
         if constraints:
-            included_field_names = self._constraint_keys
+            excluded_field_names = ()
         else:
-            included_field_names = self._init_kwargs.keys()
+            excluded_field_names = self._constraint_keys
         err_lines = []
         for field_name, self_val in self._init_kwargs.items():
-            if field_name not in included_field_names:
+            if field_name in excluded_field_names:
                 continue
             other_val = getattr(other, field_name)
             if self_val != other_val:
