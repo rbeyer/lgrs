@@ -598,7 +598,7 @@ class BaseCoordinate(_BaseCoordinate):
             self, other: BaseCoordinate, *, center: bool = False,
             system: str | None = None
     ) -> float:
-        match system.upper():
+        match system:
             case "LPS":
                 convert = BaseCoordinate.to_lps
             case "LTM":
