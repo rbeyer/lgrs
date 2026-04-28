@@ -13,7 +13,7 @@ Examples
 >>> alt_lps_lgrs_box.is_equal_to(lps_lgrs_box, error=True)
 """
 
-# Copyright © 2026, Ethan I. Schafer (eschaefer@seti.org)
+# Copyright © 2026, Ethan I. Schaefer (eschaefer@seti.org)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
