@@ -1693,7 +1693,6 @@ lgrs_ = lps_or_ltm.to_lgrs()
 lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
 
 # lgrs_.to_latlon().is_equal_to(lat_lon, error=True)
-print(lgrs_.to_acc().to_latlon())
 
 lat_lon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
 lps_or_ltm1 = lat_lon1.to_lps_or_ltm()
