@@ -782,7 +782,8 @@ class BaseCoordinate(_BaseCoordinate):
         if (
                 not any_system
                 and force_system is not None
-                and self.is_lps_based() != typ.is_lps_based()
+                and (isinstance(self, LatLonPoint)
+                     or self.is_lps_based() != typ.is_lps_based())
             ):
             basis = force_system(self)
         else:
@@ -1723,3 +1724,6 @@ ltm_acc = lgrs2.to_acc()
 lps_acc.truncate(100_000).to_latlon()
 
 lgrs_.distance_to(lgrs1)
+
+lat_lon_point = LatLonPoint(0, 0)
+lat_lon_point.to(LtmLgrsBox)
