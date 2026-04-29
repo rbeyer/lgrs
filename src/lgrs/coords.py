@@ -1,5 +1,5 @@
 """
-Coordinate types: geographic and projected, point and gridded.
+Coordinate types: geographic and projected, point and box.
 
 This module also supports coordinate transformations.
 
@@ -298,6 +298,8 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
     prefer_lps: bool = False
     extended_ltm: bool = False
+    # TODO: How useful is `polar_ltm`? If useful, should something like
+    #  it be added for LPS?
     polar_ltm: bool = False
     validate: _dataclasses.InitVar[bool] = True
 
@@ -417,7 +419,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
 
 
 class BaseCoordinate(_BaseCoordinate):
-    # TODO: Document that `MalformedCoordinate` may be raised.
+    """The base class for all coordinates, both points and grid boxes."""
     _template: _collections.abc.Callable | str | None = None
     _was_validated: bool = False
 
@@ -513,6 +515,41 @@ class BaseCoordinate(_BaseCoordinate):
         )
 
     def validate(self, *, revalidate: bool = False) -> None:
+        """
+        Validate this coordinate.
+
+        Use this method to validate the instance or confirm that it has already
+        been validated. Note that validating at initialization instead is
+        generally recommended, as doing so is faster and avoids creating invalid
+        instances.
+
+        Parameters
+        ----------
+        revalidate : bool, default=False
+            Whether to re-validate the instance if it has already been
+            validated. This option is likely only useful in special cases.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        lgrs.Exceptions.MalformedCoordinate
+            If the instance is invalid. Unlike at-initialization validation,
+            an instance is considered invalid even if its values are merely
+            not conformed. See Examples.
+
+        Examples
+        --------
+        >>> latlon_1 = LatLonPoint(45, 182)
+        >>> latlon_1.longitude == -178
+        True  # Conformed.
+        >>> latlon_2 = LatLonPoint(45, 182, validate=False)
+        >>> latlon_2.longitude == -178
+        False # Not conformed.
+        >>> latlon_2.validate()
+        """
         if not revalidate and self._was_validated:
             return
         new = self.copy(validate=False)
@@ -524,6 +561,17 @@ class BaseCoordinate(_BaseCoordinate):
         if new._init_kwargs == self._init_kwargs:
             self._register_validation()
             return
+        # TODO: Think carefully about whether to unregister cousins.
+        #  There is currently no guard against these cousins being re-
+        #  created by `.to_*()`, so unregistering them has no benefit.
+        #  Options are:
+        #    (1) Leave cousins intact.
+        #    (2) Introduce (perhaps optionally) a way to label an
+        #        instance as invalid, to prohibit use, and apply that
+        #        to all cousins.
+        #    (3) Same as #2 but also conform self, if possible.
+        #  Since `.validate()` is only for special use cases, probably
+        #  #1.
         self._unregister_cousins(*self._cousins)
         change_lines = []
         for k, new_v in new._init_kwargs.items():
@@ -541,6 +589,11 @@ class BaseCoordinate(_BaseCoordinate):
     #* Public data. -----------------------------------------------------------
     @_functools.cached_property
     def string(self) -> str:
+        """
+        The string representation of the coordinate.
+
+        Equivalent to `str(self)`. Cached after first use.
+        """
         match self._template:
             case None:
                 string = "".join(self._iter_value_strings())
@@ -574,6 +627,41 @@ class BaseCoordinate(_BaseCoordinate):
         return geod
 
     def copy(self, *, validate: bool = False) -> _typing.Self:
+        """
+        Create independent copy of this coordinate.
+
+        Although `copy` is a different instance from `self`, its cache is not
+        guaranteed independnet. See Examples.
+
+        Parameters
+        ----------
+        validate : bool, default=False
+            Whether to validate the copy. The default is `False` because it's
+            assumed that either `self` was validated or intentionally not
+            validated, because its values are known to be valid.
+
+        Returns
+        -------
+        copy : typing.Self
+            A copy of this coordinate.
+
+        Examples
+        --------
+        >>> import lgrs.caching
+        >>> lgrs.caching.enable_caching()
+        >>> example_latlon = LatLonPoint(0, 0)
+        >>> example_lgrs = example_latlon.to_lgrs()
+        >>> alt_latlon = example_latlon.copy()
+        >>> example_latlon is alt_latlon
+        False
+        >>> example_latlon.to_lgrs() is example_latlon.to_lgrs()
+        True
+        >>> example_latlon.to_lgrs() is alt_latlon.to_lgrs()  # doctest: +SKIP
+
+        Whether this final statement evaluates as `True` or `False` is not
+        guaranteed. To guarantee independence, caching should be disabled
+        globally by `lgrs.caching.enable_caching(False)`.
+        """
         # Note: `self` can only exist if validated or explicitly not
         # validated. Either way, defaulting `validate` to `False` is
         # appropriate.
@@ -585,6 +673,39 @@ class BaseCoordinate(_BaseCoordinate):
     def distance_to(
             self, other: BaseCoordinate, *, center: bool = False
     ) -> float:
+        """
+        Calculate the geodesic distance between two coordinates, in meters.
+
+        For any box coordinate (`self` and/or `other`), distance is measured
+        to a representative point, as determined by `center`.
+
+        Parameters
+        ----------
+        other : BaseCoordinate
+            The other coordinate.
+        center : bool, default=False
+            Whether to use the center of any box coordinate instead of the
+            lower-left (grid southwest) corner.
+
+        Returns
+        -------
+        distance : float
+            The geodesic distance between `self` and `other`, in meters.
+
+        See Also
+        --------
+        contains : Whether a box coordinate contains another coordinate.
+        grid_distance_to : Point-to-point grid distance.
+
+        Examples
+        --------
+        >>> latlon_point = LatLonPoint(0, 0)
+        >>> acc_box = LtmAccBox.from_string("23NFF-001-001")
+        >>> latlon_point.distance_to(acc_box)
+        1.415638994018731
+        >>> latlon_point.distance_to(acc_box, center=True)
+        2.1234979460292074
+        """
         self_latlon_point, other_latlon_point = self._conform_to_latlon_points(
             self, other, center=center
         )
@@ -598,6 +719,53 @@ class BaseCoordinate(_BaseCoordinate):
             self, other: BaseCoordinate, *, center: bool = False,
             system: str | None = None
     ) -> float:
+        """
+        Calculate the grid distance between two coordinates, in meters.
+
+        For any box coordinate (`self` and/or `other`), distance is measured
+        to a representative point, as determined by `center`.
+
+        Parameters
+        ----------
+        other : BaseCoordinate
+            The other coordinate.
+        center : bool, default=False
+            Whether to use the center of any box coordinate instead of the
+            lower-left (grid southwest) corner.
+        system : str, optional
+            The system (LPS or LTM) in which to calculate the grid distance. By
+            default, if `self` and `other` use the same system, distance is
+            calculated in that system. Alternatively, the system may be
+            specified by "LPS" or "LTM" (case is ignored).
+
+        Returns
+        -------
+        distance : float
+            The grid distance between `self` and `other`, in meters.
+
+        Raises
+        ------
+        TypeError
+            If `system` is not recognized, or if `system` is not specified
+            (`None`) and `self` and `other` use different systems.
+        lgrs.Exceptions.MalformedCoordinate
+            If `system="LPS"` but `self` and/or `other` are outside the LPS
+            region supported by LGRS.
+
+        See Also
+        --------
+        contains : Whether a box coordinate contains another coordinate.
+        distance_to : Point-to-point geodesic distance.
+
+        Examples
+        --------
+        >>> latlon_point = LatLonPoint(0, 0)
+        >>> acc_box = LtmAccBox.from_string("23NFF-001-001")
+        >>> latlon_point.grid_distance_to(acc_box)
+        1.414223354889927
+        >>> latlon_point.distance_to(acc_box, center=True)
+        2.1234979460292074
+        """
         match system:
             case "LPS":
                 convert = BaseCoordinate.to_lps
@@ -627,6 +795,47 @@ class BaseCoordinate(_BaseCoordinate):
     def is_equal_to(
             self, other: _typing.Self, *, error: bool = False, constraints: bool = False
     ) -> bool:
+        """
+        Test whether two coordinates are equal, optionally including constraints.
+
+        Note that::
+
+            coord_1 == coord_2
+
+        is equivalent to::
+
+            coord_1.is_equal_to(coord_2, constraints=True)
+
+        Parameters
+        ----------
+        other : BaseCoordinate
+            The other coordinate to compare to.
+        error : bool, default=False
+            Whether to raise a descriptive error rather than return `False`.
+        constraints : bool, default=False
+            Whether to include constraints when evaluating equality. If `False`,
+            only coordinate values are compared. If `True`, each constraint is
+            also compared.
+
+        Returns
+        -------
+        is_equal : bool
+            Whether `self` and `other` are equal.
+
+        Raises
+        ------
+        TypeError
+            If `self` and `other` are of different types.
+
+        Examples
+        --------
+        >>> latlon_point_1 = LatLonPoint(0, 0)
+        >>> latlon_point_2 = LatLonPoint(0, 0, extended_ltm=True)
+        >>> latlon_point_1.is_equal_to(latlon_point_2)
+        True
+        >>> latlon_point_1.is_equal_to(latlon_point_2, constraints=True)
+        False
+        """
         # Validate type of `other`.
         # TODO: Once library-wide type guards are implemented, remove
         #  this block.
@@ -656,25 +865,116 @@ class BaseCoordinate(_BaseCoordinate):
 
     # TODO: Consider an `.is_close_to()` that automatically accounts for
     #  both `.precision` (where applicable) and the inferred conversion
-    #  sequence. For example, comparing a `LatLonPoint` and a `LpsAcc`
-    #  would allow for expected imprecision in the `LatLonPoint` -->
-    #  `LpsPoint` --> `LpsLgrs` sequence, and comparing a `LatLonPoint`
-    #  to a `LatLonPoint` would allow for the expected round-trip
-    #  disparity.
+    #  sequence. For example, comparing a `LatLonPoint` and a
+    #  `LpsAccBox` would allow for expected imprecision in the
+    #  `LatLonPoint` --> `LpsPoint` --> `LpsLgrs` sequence, and
+    #  comparing a `LatLonPoint` to a `LatLonPoint` would allow for the
+    #  expected round-trip disparity.
 
     @classmethod
     @_functools.cache
     def is_lps_based(cls):
+        """
+        Whether the coordinate is based in the LPS system.
+
+        Returns
+        -------
+        is_lps_based : bool
+            Whether the coordinate is based in the LPS system.
+
+        Raises
+        ------
+        TypeError
+            If instance is a `LatLonPoint`.
+
+        See Also
+        --------
+        is_ltm_based : Counterpart for the LTM system.
+
+        Examples
+        --------
+        >>> lps_lgrs_box = LpsLgrsBox.from_string("AZS1359008480")
+        >>> lps_lgrs_box.is_lps_based()
+        True
+        >>> LpsLgrsBox.is_lps_based()  # Can call on a class, too.
+        True
+        >>> ltm_acc_box = LtmAccBox.from_string("29TCVK738P376")
+        >>> ltm_acc_box.is_lps_based()
+        False
+        """
         return cls._is_x_based("Lps")
 
     @classmethod
     @_functools.cache
     def is_ltm_based(cls):
+        """
+        Whether the coordinate is based in the LTM system.
+
+        Returns
+        -------
+        is_ltm_based : bool
+            Whether the coordinate is based in the LTM system.
+
+        Raises
+        ------
+        TypeError
+            If instance is a `LatLonPoint`.
+
+        See Also
+        --------
+        is_lps_based : Counterpart for the LPS system.
+
+        Examples
+        --------
+        >>> ltm_acc_box = LtmAccBox.from_string("29TCVK738P376")
+        >>> ltm_acc_box.is_ltm_based()
+        True
+        >>> LtmAccBox.is_ltm_based()  # Can call on a class, too.
+        True
+        >>> lps_lgrs_box = LpsLgrsBox.from_string("AZS1359008480")
+        >>> lps_lgrs_box.is_ltm_based()
+        False
+        """
         return cls._is_x_based("Ltm")
 
     def replace(
             self, *, validate: bool = True, copy: bool = True, **overrides
     ) -> _typing.Self:
+        """
+        Create new instance with modified values and/or constraints.
+
+        The new instance will have the same values and constraints as `self`,
+        except where explicitly overridden by `overrides`.
+
+        Parameters
+        ----------
+        validate : bool, default=True
+            Whether to validate the new instance.
+        copy : bool, default=True
+            Whether to ensure that the new instance is not `self`. If `False`
+            and any `overrides` have the same values as `self`, `self` is
+            returned.
+        **overrides
+            Keyword arguments specifying initialization parameters (values and
+            constraints) for the new instance.
+
+        Returns
+        -------
+        new : typing.Self
+            The new instance.
+
+        Raises
+        ------
+        lgrs.Exceptions.MalformedCoordinate
+            If `new` would be invalid and `validate` is `True`.
+
+        Examples
+        --------
+        >>> lat_lon_point_1 = LatLonPoint(0, 0)
+        >>> lat_lon_point_2 = lat_lon_point_1.replace(longitude=1)
+        >>> lat_lon_point_2 == LatLonPoint(0, 1)
+        True
+        """
         if not copy and not overrides:
             return self
         init_kwargs = self._init_kwargs.copy()
@@ -727,6 +1027,7 @@ class BaseCoordinate(_BaseCoordinate):
 
     @_functools.cached_property
     def constraints(self) -> _types.MappingProxyType[str, bool]:
+        """The constraints on the instance, as a read-only mapping."""
         return _types.MappingProxyType(
             {
                 key: self._init_kwargs[key]
@@ -778,6 +1079,58 @@ class BaseCoordinate(_BaseCoordinate):
     def to(
             self, typ: type[BaseCoordinate], *, any_system: bool = False
     ) -> BaseCoordinate:
+        """
+        Transform `self` to the specified coordinate type.
+
+        This is a convenience function to call one or two `._to_*()`s in series.
+        See Examples.
+
+        Parameters
+        ----------
+        typ : a BaseCoordinate subclass
+            The coordinate type to which `self` should be converted.
+        any_system : bool, default=False
+            Whether to allow the output coordinate to be from either system (LPS
+            or LTM).
+
+        Returns
+        -------
+        coord : BaseCoordinate (specifically, `typ`)
+            The transformed coordinate. If `self` is compatible, `self` is
+            returned. If caching is enabled, a cached instance may be returned.
+
+        Raises
+        ------
+        lgrs.Exceptions.MalformedCoordinate
+            If `any_system=False` and the system of `typ` is incompatible with
+            `self`.
+
+        Examples
+        --------
+        >>> lat_lon_point = LatLonPoint(0, 0)
+        >>> new = lat_lon_point.to(LtmLgrsBox)  # Transform 1
+        >>> isinstance(new, LtmLgrsBox)
+        True
+
+        In this case, transformation is exact.
+
+        >>> new.distance_to(lat_lon_point)
+        0.0
+
+        You can also relax system requirements.
+
+        >>> new_2 = lat_lon_point.to(LpsLgrsBox, any_system=True)  # Transform 2
+        >>> isinstance(new_2, LtmLgrsBox)
+        True
+
+        Transform 1 is equivalent to::
+
+            lat_lon_point.to_lps().to_lgrs()
+
+        and Transform 2 is equivalent to::
+
+            lat_lon_point.to_lgrs()
+        """
         force_system, convert = self._get_conversion_sequence(typ)
         if (
                 not any_system
@@ -792,17 +1145,74 @@ class BaseCoordinate(_BaseCoordinate):
 
     @_redirect
     def to_acc(self) -> LpsAccBox | LtmAccBox:
-        ...
+        """
+        Transform coordinate to `LpsAccBox` or `LtmAccBox`.
+
+        The type of `out` is determined by the combination of `self.constraints`
+        and the location of `self` on the Moon.
+
+        `out` is not validated with this call but should be valid if `self` is
+        valid.
+
+        Returns
+        -------
+        out : LpsAccBox or LtmAccBox
+            The transformed coordinate. If `self` is compatible, `self` is
+            returned. If caching is enabled, a cached instance may be returned.
+        """
 
     @_redirect
     def to_latlon(self) -> LatLonPoint:
-        ...
+        """
+        Transform coordinate to `LatLonPoint`.
+
+        `out` is not validated with this call but should be valid if `self` is
+        valid.
+
+        Returns
+        -------
+        out : LatLonPoint
+            The transformed coordinate. If `self` is compatible, `self` is
+            returned. If caching is enabled, a cached instance may be returned.
+        """
 
     @_redirect
     def to_lgrs(self) -> LpsLgrsBox | LtmLgrsBox:
-        ...
+        """
+        Transform coordinate to `LpsLgrsBox` or `LtmLgrsBox`.
+
+        The type of `out` is determined by the combination of `self.constraints`
+        and the location of `self` on the Moon.
+
+        `out` is not validated with this call but should be valid if `self` is
+        valid.
+
+        Returns
+        -------
+        out : LpsLgrsBox or LtmLgrsBox
+            The transformed coordinate. If `self` is compatible, `self` is
+            returned. If caching is enabled, a cached instance may be returned.
+        """
 
     def to_lps(self) -> LpsPoint:
+        """
+        Transform coordinate to `LpsPoint`, if allowed.
+
+        The constraints of `out` will differ from those of `self` if necessary
+        to support the LPS system.
+
+        Returns
+        -------
+        out : LpsPoint
+            The transformed coordinate. If `self` is compatible, `self` is
+            returned. If caching is enabled, a cached instance may be returned.
+
+        Raises
+        ------
+        lgrs.Exceptions.MalformedCoordinate
+            If the location of `self` on the Moon is outside the LPS region
+            supported by LGRS.
+        """
         lps_point = self._force_type_or_error(
             self.to_lps_or_ltm, LpsPoint,
             prefer_lps=True, extended_ltm=False, polar_ltm=False
@@ -811,9 +1221,35 @@ class BaseCoordinate(_BaseCoordinate):
 
     @_redirect
     def to_lps_or_ltm(self) -> LpsPoint | LtmPoint:
-        ...
+        """
+        Transform coordinate to `LpsPoint` or `LtmPoint`.
+
+        The type of `out` is determined by the combination of `self.constraints`
+        and the location of `self` on the Moon.
+
+        `out` is not validated with this call but should be valid if `self` is
+        valid.
+
+        Returns
+        -------
+        out : LpsPoint or LtmPoint
+            The transformed coordinate. If `self` is compatible, `self` is
+            returned. If caching is enabled, a cached instance may be returned.
+        """
 
     def to_ltm(self) -> LtmPoint:
+        """
+        Transform coordinate to `LtmPoint`.
+
+        The constraints of `out` will differ from those of `self` if necessary
+        to support the LTM system.
+
+        Returns
+        -------
+        out : LtmPoint
+            The transformed coordinate. If `self` is compatible, `self` is
+            returned. If caching is enabled, a cached instance may be returned.
+        """
         ltm_point = self._force_type_or_error(
             self.to_lps_or_ltm, LtmPoint, polar_ltm=True
         )
@@ -1159,8 +1595,8 @@ class LtmPoint(_NonGriddedCoordinate):
 ###############################################################################
 # region> GRIDDED COORDINATE BASE TYPES
 ###############################################################################
-class _GriddedCoordinate(BaseCoordinate):
     # TODO: Add `.truncate_to()`.
+    """The base class for all gridded box coordinates."""
 
     #* Fields and validation. -------------------------------------------------
     easting:  str | None
@@ -1217,6 +1653,7 @@ class _GriddedCoordinate(BaseCoordinate):
 
     @_functools.cached_property
     def center_latlon(self) -> LatLonPoint:
+        """The grid center as a `LatLonPoint`."""
         half_precision = (0.5 * self.precision)
         center = self._make_reference_point(+half_precision, +half_precision)
         return center
@@ -1226,6 +1663,32 @@ class _GriddedCoordinate(BaseCoordinate):
             self, other: BaseCoordinate, *,
             logical: bool = False,  cross_system: bool = True
     ) -> bool:
+        """
+        Test whether the areal extent of `self` includes another coordinate.
+
+        More precisely, evaluate whether the interior of `self` includes the
+        interior of `other`. Note that for non-logical (`logical=False`)
+        evaluations, if `other` is extremely close to the boundary of `self`,
+        the underlying transformation calculation may not be sufficiently
+        precise to provide the correct result.
+
+        Parameters
+        ----------
+        other : BaseCoordinate
+            The possibly contained coordinate.
+        logical : bool, default=False
+            Whether to require logical containment. If `True`, and `other` is
+            either not a box coordinate or from a different system (LPS or LTM),
+            `False` is returned.
+        cross_system : bool, default=True
+            Whether to allow cross-system containment. If `False`, and `other`
+            is from a different system (LPS or LTM), `False` is returned.
+
+        Returns
+        -------
+        is_contained : bool
+            Whether `other` is contained within `self`.
+        """
         # Honor restrictive arguments.
         if logical and not isinstance(other, _GriddedCoordinate):
             return False
@@ -1253,6 +1716,12 @@ class _GriddedCoordinate(BaseCoordinate):
 
     @_functools.cached_property
     def precision(self) -> int:
+        """
+        The precision of the coordinate, in meters.
+
+        Strictly, this precision is expressed in grid meters and therefore
+        inherits the distortion of the underlying system (LPS or LTM).
+        """
         lgrs_easting = self.to_lgrs().easting
         # Table 11
         if lgrs_easting is None:
@@ -1272,6 +1741,28 @@ class _GriddedCoordinate(BaseCoordinate):
     def truncate(
             self, min_precision: float, *, copy: bool = False
     ) -> _typing.Self:
+        """
+        Truncate (or extend) the coordinate to represent a minimum precision.
+
+        More precisely, the respective lengths of the relevant easting and
+        northing strings will be truncated, or extended, as necessary so that
+        `out.precision` is greater than or equal to `min_precision`. The final
+        lengths of these strings will be no longer than what is strictly
+        necessary to satisfy `min_precision`.
+
+        Parameters
+        ----------
+        min_precision : float
+            The minimum allowed value of `out.precision`.
+        copy : bool, default=False
+            Whether to ensure that `out` is not `self`. If `False` and `self` is
+            suitable, it is returned as `out`.
+
+        Returns
+        -------
+        out : typing.Self
+            A truncated or extended version, as appropriate.
+        """
         # Determine `*LgrsBox` easting and northing character count.
         if min_precision < 1:
             raise TypeError(
