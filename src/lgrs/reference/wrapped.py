@@ -20,8 +20,7 @@ strict_result = polar_latlon_recovered.is_equal_to(
 >>> lps_lgrs_recovered.is_close_to(lps_lgrs, error=True)
 """
 
-# Copyright © 2026, Ethan I. Schafer (eschaefer@seti.org) and
-# Ross A. Beyer (rbeyer@seti.org)
+# Copyright © 2026, Ethan I. Schaefer (eschaefer@seti.org)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,20 +54,28 @@ _cconv.initialize_LGRS_function_globals()
 ##############################################################################
 # region> UTILITIES
 ##############################################################################
+def _answer_yes(*args, **kwargs) -> str:
+    return "y"
+
 def _execute_coordinate_conversion(
         method_name: str, value: _coords.BaseCoordinate, trunc_val: int,
         return_type: type[_coords.BaseCoordinate]
 ) -> _coords.BaseCoordinate:
     # Execute script, capturing stdout.
     orig_sys_argv = _sys.argv
-    _sys.argv = ["", method_name, *value._iter_value_strings()]
-    f = _io.StringIO()
-    with _contextlib.redirect_stdout(f):
-        try:
-            _cconv.main(method_name, trunc_val, False)
-        except SystemExit:
-            raise TypeError(f.getvalue())
-    _sys.argv = orig_sys_argv
+    try:
+        _sys.argv = ["", method_name, *value._iter_value_strings()]
+        # Note: Prevent prompting and always answer with "y".
+        _cconv.main.__globals__["input"] = _answer_yes
+        f = _io.StringIO()
+        with _contextlib.redirect_stdout(f):
+            try:
+                _cconv.main(method_name, trunc_val, False)
+            except SystemExit:
+                raise TypeError(f.getvalue())
+    finally:
+        _sys.argv = orig_sys_argv
+        _cconv.main.__globals__.pop("input", None)
     stdout_str = f.getvalue()
 
     # Create and return instance.
