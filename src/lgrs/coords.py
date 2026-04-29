@@ -1231,7 +1231,8 @@ class _GriddedCoordinate(BaseCoordinate):
             return False
         if (
                 (logical or not cross_system)
-                and  self.is_lps_based() != other.is_lps_based()
+                and (isinstance(other, LatLonPoint)
+                     or self.is_lps_based() != other.is_lps_based())
         ):
                 return False
 
