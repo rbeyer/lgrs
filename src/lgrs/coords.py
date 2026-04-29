@@ -1595,7 +1595,7 @@ class LtmPoint(_NonGriddedCoordinate):
 ###############################################################################
 # region> GRIDDED COORDINATE BASE TYPES
 ###############################################################################
-    # TODO: Add `.truncate_to()`.
+class _GriddedCoordinate(BaseCoordinate):
     """The base class for all gridded box coordinates."""
 
     #* Fields and validation. -------------------------------------------------
