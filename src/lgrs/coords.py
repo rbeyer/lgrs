@@ -301,6 +301,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     extended_ltm: bool = False
     # TODO: How useful is `polar_ltm`? If useful, should something like
     #  it be added for LPS?
+    # TODO: Would `global_ltm` be a better name?
     polar_ltm: bool = False
     validate: _dataclasses.InitVar[bool] = True
 
@@ -343,12 +344,51 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
             for field in self._get_fields()
         }
 
+    # TODO: Un-skip doctest once complete validation is implemented.
     def with_constraints(
             self, *,
             prefer_lps: bool | None = None, extended_ltm: bool | None = None,
             polar_ltm: bool | None = None, validate: bool | None = None,
             copy: bool = False
     ) -> _typing.Self:
+        """
+        Get a version of `self` with the specified constraints.
+
+        For any constraint that is not specified (or specified as `None`), the
+        corresponding value from `self` is used.
+
+        Parameters
+        ----------
+        prefer_lps : bool, optional
+            See `LatLonPoint` documentation.
+        extended_ltm : bool, optional
+            See `LatLonPoint` documentation.
+        polar_ltm : bool, optional
+            See `LatLonPoint` documentation.
+        validate : bool, optional
+            See `LatLonPoint` documentation.
+        copy : bool, optional
+            Whether to ensure that the returned instance is not `self`. If not
+            specified (`None`), set to `True` unless `self` is suitable.
+
+        Returns
+        -------
+        version : BaseCoordinate
+            Version of `self` with the specified constraints.
+
+        Examples
+        --------
+        >>> geo_point = LatLonPoint(81, 0, extended_ltm=True)
+        >>> ltm_point = geo_point.to_lps_or_ltm()
+        >>> isinstance(ltm_point, LtmPoint)
+        True
+        >>> illegal_point = ltm_point.with_constraints(extended_ltm=False)  # doctest: +SKIP
+        Traceback (most recent call last):
+          ...
+        lgrs.exceptions.MalformedCoordinate:
+          ...
+        """
+
         # Resolve new initialization kwargs.
         new_init_kwargs = self._init_kwargs.copy()
         if prefer_lps is not None:
@@ -633,6 +673,7 @@ class BaseCoordinate(_BaseCoordinate):
         type(self)._geod = geod  # Reuse this instance.
         return geod
 
+    # TODO: Un-skip doctest once complete validation is implemented.
     def copy(self, *, validate: bool = False) -> _typing.Self:
         """
         Create independent copy of this coordinate.
@@ -692,7 +733,7 @@ class BaseCoordinate(_BaseCoordinate):
             The other coordinate.
         center : bool, default=False
             Whether to use the center of any box coordinate instead of the
-            lower-left (grid southwest) corner.
+            lower-left (grid-southwest) corner.
 
         Returns
         -------
@@ -738,7 +779,7 @@ class BaseCoordinate(_BaseCoordinate):
             The other coordinate.
         center : bool, default=False
             Whether to use the center of any box coordinate instead of the
-            lower-left (grid southwest) corner.
+            lower-left (grid-southwest) corner.
         system : str, optional
             The system (LPS or LTM) in which to calculate the grid distance. By
             default, if `self` and `other` use the same system, distance is
@@ -1337,10 +1378,99 @@ class PointCoordinate(BaseCoordinate):
         transformer = _pyproj.Transformer.from_crs(crs_from, crs_to)
         return transformer
 
-
+# TODO: Un-skip Example 3 once complete validation is implemented.
 @_easy_dataclass
-class LatLonPoint(_NonGriddedCoordinate):
 class LatLonPoint(PointCoordinate):
+    """
+    Create an instance representing a latitude-longitude point.
+
+    The final four parameters--`prefer_lps`, `extended_ltm`, `polar_ltm`,
+    and `validate`--are common to all coordinates classes. The first three
+    are called "constraints" (e.g., `.constraints`). Together, they
+    partition the lunar surface into discrete regions that support either
+    the Lunar Polar Stereographic (LPS) or Lunar Transverse Mercator (LTM)
+    system. Once set, these constraints are honored in all derived
+    coordinate instances (Example 1), except where explicitly overridden
+    (Example 3). Conceptually, `extended_ltm` determines the maximum
+    poleward extent of the LTM region and `prefer_lps` determines how the
+    LPS-LTM overlap immediately equatorward of that boundary is handled. In
+    the `polar_ltm=True` case, the LTM region is global, so there is no LPS
+    region.
+
+    Parameters
+    ----------
+    latitude : float
+        The latitude of `new`, in decimal degrees.
+    longitude : float
+        The longitude of `new`, in decimal degrees.
+    prefer_lps : bool, default=False
+        Whether to prefer the LPS system for a location where both LPS
+        and LTM systems are supported by `lgrs`. This overlap only occurs
+        slightly equatorward of the nominal latitudinal boundary between
+        the systems, as determined by `extended_ltm`.
+    extended_ltm : bool, default=False
+        Whether to use the extended LTM region. If `True`, the nominal
+        poleward extent of the LTM region is 82° N/S instead of 80° N/S.
+        This nominal extent can be modified by `prefer_lps`.
+    polar_ltm : bool, default=False
+        Whether to extend the LTM region globally. If `True`, there is no
+        LPS region. If this option is enabled, enabling `prefer_lps` and/or
+        `extended_ltm` will render the instance invalid.
+    validate : bool, default=True
+        Whether to validate that the coordinate's values are supported,
+        subject to the constraints. This validation also conforms any
+        values, where appropriate. See Example 5.
+
+    Raises
+    ------
+    lgrs.Exceptions.MalformedCoordinate
+        If the instance is invalid. Both values and constraints are
+        considered.
+
+    Examples
+    --------
+    >>> point = LatLonPoint(0, 0)
+
+    Constraints are remembered and honored by all derived coordinate
+    instances (except where explicitly overridden). Thus, even though the
+    `extended_ltm` constraint is irrelevant to `geo_point` (below), that
+    constraint is remembered and determines that `proj_point` belongs to the
+    extended LTM region rather than the LPS region.
+
+    >>> geo_point = LatLonPoint(81, 0, extended_ltm=True)
+    >>> proj_point = geo_point.to_lps_or_ltm()  # Example 1
+    >>> isinstance(proj_point, LtmPoint)
+    True
+
+    A coordinate may be invalid because its values are disallowed
+    universally (Example 2) or because its type or values are disallowed by
+    the applied constraints (Example 3). Conflicting constraints also render
+     a coordinate invalid (Example 4).
+
+    >>> LatLonPoint(1000, -1000)  # Example 2  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+      ...
+    lgrs.exceptions.MalformedCoordinate:
+      ...
+    >>> ltm_point = geo_point.to_ltm()
+    >>> ltm_point.with_constraints(extended_ltm=False)  # Example 3  # doctest: +SKIP
+    Traceback (most recent call last):
+      ...
+    lgrs.exceptions.MalformedCoordinate:
+      ...
+    >>> LatLonPoint(0, 0, prefer_lps=True, polar_ltm=True)  # Example 4  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+      ...
+    lgrs.exceptions.MalformedCoordinate:
+      ...
+
+    Finally, validation may conform values where those can be confidently
+    interpreted.
+
+    >>> latlon_point = LatLonPoint(45, 182)  # Example 5
+    >>> latlon_point.longitude == -178  # Conformed.
+    True
+    """
 
     #* Fields and validation. -------------------------------------------------
     latitude: float
@@ -1433,8 +1563,37 @@ class LatLonPoint(PointCoordinate):
 
 
 @_easy_dataclass
-class LpsPoint(_NonGriddedCoordinate):
 class LpsPoint(PointCoordinate):
+    """
+    Create an instance representing a Lunar Polar Stereographic (LPS) point.
+
+    Parameters
+    ----------
+    hemisphere : {"N", "S"}
+        The point's hemisphere.
+    easting : float
+        The point's easting (meters).
+    northing : float
+        The point's northing (meters).
+    prefer_lps : bool, default=False
+        See `LatLonPoint` documentation.
+    extended_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    polar_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    validate : bool, default=True
+        See `LatLonPoint` documentation.
+
+    Raises
+    ------
+    lgrs.Exceptions.MalformedCoordinate
+        If the instance is invalid. Both values and constraints are
+        considered.
+
+    Examples
+    --------
+    >>> point = LpsPoint("N", 500_000, 500_000)
+    """
 
     #* Fields and validation. -------------------------------------------------
     _template = "{hemisphere}{easting!r}E{northing!r}N"
@@ -1524,8 +1683,39 @@ class LpsPoint(PointCoordinate):
 
 
 @_easy_dataclass
-class LtmPoint(_NonGriddedCoordinate):
 class LtmPoint(PointCoordinate):
+    """
+    Create an instance representing a Lunar Transverse Mercator (LTM) point.
+
+    Parameters
+    ----------
+    zone_number : int
+        The LTM zone number, between 1 and 45 (inclusive).
+    hemisphere : {"N", "S"}
+        The point's hemisphere.
+    easting : float
+        The point's easting (meters).
+    northing : float
+        The point's northing (meters).
+    prefer_lps : bool, default=False
+        See `LatLonPoint` documentation.
+    extended_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    polar_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    validate : bool, default=True
+        See `LatLonPoint` documentation.
+
+    Raises
+    ------
+    lgrs.Exceptions.MalformedCoordinate
+        If the instance is invalid. Both values and constraints are
+        considered.
+
+    Examples
+    --------
+    >>> point = LtmPoint(23, "N", 250_000, 250_000)
+    """
 
     #* Fields and validation. -------------------------------------------------
     _template = "{zone_number}{hemisphere}{easting!r}E{northing!r}N"
@@ -1628,6 +1818,43 @@ class BoxCoordinate(BaseCoordinate):
 
     @classmethod
     def from_string(cls, string: str, *, validate: bool = True) -> _typing.Self:
+        """
+        Create a box coordinate instance from a string.
+
+        Parameters
+        ----------
+        string : str
+            The string form of the box coordinate, equivalent to `new.string`.
+        validate : bool, default=True
+            Whether to validate `new`.
+
+        Returns
+        -------
+        new : BoxCoordinate
+            The new box coordinate instance. The type is determined by the call.
+            See Examples.
+
+        Examples
+        --------
+        When called the `BoxCoordinate` base class, an instance of the
+        appropriate type is returned.
+
+        >>> box_1 = BoxCoordinate.from_string("12SAM1234512345")
+        >>> isinstance(box_1, LtmLgrsBox)
+        True
+
+        When called from any other class (or instance), an instance of the same
+        type is returned, if possible, or an error is raised.
+
+        >>> box_2 = LtmLgrsBox.from_string("12SAM1234512345")
+        >>> box_1 == box_2
+        True
+        >>> box_3 = LpsLgrsBox.from_string("12SAM1234512345")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+          ...
+        lgrs.exceptions.MalformedCoordinate:
+          ...
+        """
         # Match to pattern.
         match = cls._pattern.search(string)
         if match is None:
@@ -1638,6 +1865,13 @@ class BoxCoordinate(BaseCoordinate):
         match_dict = match.groupdict()
 
         # Coerce each argument to the correct type.
+        # TODO: Approach below allows 0-prefixing of integers. The only
+        #  pattern that allows an ambiguity is for the first few
+        #  characters of `Ltm*Box`. For example, should both "01N" and
+        #  "1N" be allowed? The former has the benefit of ensuring that
+        #  all strings have the same length, but `.string` uses the
+        #  latter, which I think is Mark's intent. The reference code
+        #  allows "1N", "01N", "001N", etc.
         field_name_to_type = cls._get_field_name_to_type()
         init_kwargs = {
             name: field_name_to_type[name](value_string)
@@ -1710,6 +1944,13 @@ class BoxCoordinate(BaseCoordinate):
         ):
                 return False
 
+        # TODO: Should reimplement to project to LPS or LTM and then
+        #  check whether within ranges. This neatly addresses otherwise
+        #  complicate border situations (between LTM zones, between LPS
+        #  and LTM regions). But keep current code to support "logical"
+        #  use. Also, in cross-system case, will need to consider
+        #  corners at least. (Current thinking is only corners and
+        #  document this, in case that's not strictly sufficient.)
         # Coerce `other` to same type as `self`.
         try:
             other_box = other.to(type(self))
@@ -1756,9 +1997,9 @@ class BoxCoordinate(BaseCoordinate):
         Truncate (or extend) the coordinate to represent a minimum precision.
 
         More precisely, the respective lengths of the relevant easting and
-        northing strings will be truncated, or extended, as necessary so that
-        `out.precision` is greater than or equal to `min_precision`. The final
-        lengths of these strings will be no longer than what is strictly
+        northing strings will be truncated, or extended with zeros, as necessary
+        so that `out.precision` is greater than or equal to `min_precision`. The
+        final lengths of these strings will be no longer than what is strictly
         necessary to satisfy `min_precision`.
 
         Parameters
@@ -1808,6 +2049,11 @@ class BoxCoordinate(BaseCoordinate):
         else:
             init_kwargs["easting"] = None
             init_kwargs["northing"] = None
+        # TODO: Consider how to handle the possibility that a truncated
+        #  LPS-based coordinate now plots outside the `prefer_lps=False`
+        #  zone. Simplest solution would be to assign `prefer_lps=True`
+        #  for any LPS-based coordinate upon truncation, but that might
+        #  not be what the user expects.
         new_lgrs_box = type(self_lgrs_box)(**init_kwargs, validate=False)
         final = new_lgrs_box.to(type(self))
         return final
@@ -1818,8 +2064,65 @@ class BoxCoordinate(BaseCoordinate):
 ###############################################################################
 # region> BOX COORDINATE TYPES
 ###############################################################################
+# TODO: Think about what best field names are, e.g., `easting_area`,
+#  `easting_25k`, `easting_25km`, `easting_25k_area`, or
+#  `easting_25km_area`.
 @_easy_dataclass
-class LpsAccBox(_GriddedCoordinate):
+class LpsAccBox(_BaseAccBox):
+    """
+    Create an instance representing an LPS Artemis Condensed Coordinate box.
+
+    Note that each instance represents a square area in LPS space, referenced to
+    its lower-left (grid-southwest) corner.
+
+    Except for `easting` and `northing`, each string argument is a single
+    character.
+
+    Parameters
+    ----------
+    longitudinal_band : {"A", "B", "Y", "Z"}
+        The polar zone band, which subdivides each polar zone into an east and
+        west area.
+    easting_area : str
+        The point's 25-kilometer-grid easting area designator.
+    northing_area : str
+        The point's 25-kilometer-grid northing area designator.
+    easting_1k : str, optional
+        The point's 1-kilometer-grid easting area designator.
+    easting : str, optional
+        The point's easting (meters).
+    northing_1k : str, optional
+        The point's 1-kilometer-grid northing area designator.
+    northing : str, optional
+        The point's northing (meters).
+    prefer_lps : bool, default=False
+        See `LatLonPoint` documentation.
+    extended_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    polar_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    validate : bool, default=True
+        See `LatLonPoint` documentation.
+
+    Raises
+    ------
+    lgrs.Exceptions.MalformedCoordinate
+        If the instance is invalid. Both values and constraints are
+        considered.
+
+    Examples
+    --------
+    >>> box_1 = LpsAccBox(
+    ...     longitudinal_band='B', easting_area='A', northing_area='N',
+    ...     easting_1k='-', easting='000', northing_1k='-', northing='000'
+    ... )
+
+    You may find it simpler to instantiate from a string.
+
+    >>> box_2 = LpsAccBox.from_string("BAN-000-000")
+    >>> box_1 == box_2
+    True
+    """
 
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -1913,7 +2216,58 @@ class LpsAccBox(_GriddedCoordinate):
 
 
 @_easy_dataclass
-class LpsLgrsBox(_GriddedCoordinate):
+class LpsLgrsBox(_BaseLgrsBox):
+    """
+    Create an instance representing an LPS Lunar Grid Reference System box.
+
+    Note that each instance represents a square area in LPS space, referenced to
+    its lower-left (grid-southwest) corner.
+
+    Except for `easting` and `northing`, each string argument is a single
+    character.
+
+    Parameters
+    ----------
+    longitudinal_band : {"A", "B", "Y", "Z"}
+        The polar zone band, which subdivides each polar zone into an east and
+        west area.
+    easting_area : str
+        The point's 25-kilometer-grid easting area designator.
+    northing_area : str
+        The point's 25-kilometer-grid northing area designator.
+    easting : str, optional
+        The point's easting (meters).
+    northing : str, optional
+        The point's northing (meters).
+    prefer_lps : bool, default=False
+        See `LatLonPoint` documentation.
+    extended_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    polar_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    validate : bool, default=True
+        See `LatLonPoint` documentation.
+
+    Raises
+    ------
+    lgrs.Exceptions.MalformedCoordinate
+        If the instance is invalid. Both values and constraints are
+        considered.
+
+    Examples
+    --------
+    >>> box_1 = LpsLgrsBox(
+    ...     longitudinal_band='Z', easting_area='A', northing_area='B',
+    ...     easting='12345', northing='12345'
+    ... )
+
+    You may find it simpler to instantiate from a string.
+
+    >>> box_2 = LpsLgrsBox.from_string("ZAB1234512345")
+    >>> box_1 == box_2
+    True
+    """
+
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
         "^"
@@ -2026,7 +2380,63 @@ class LpsLgrsBox(_GriddedCoordinate):
 
 
 @_easy_dataclass
-class LtmAccBox(_GriddedCoordinate):
+class LtmAccBox(_BaseAccBox):
+    """
+    Create an instance representing an LTM Artemis Condensed Coordinate box.
+
+    Note that each instance represents a square area in LTM space, referenced to
+    its lower-left (grid-southwest) corner.
+
+    Except for `easting` and `northing`, each string argument is a single
+    character.
+
+    Parameters
+    ----------
+    longitudinal_band : int
+        The LTM zone number, between 1 and 45 (inclusive).
+    latitudinal_band : str
+        The latitudinal band.
+    easting_area : str
+        The point's 25-kilometer-grid easting area designator.
+    northing_area : str
+        The point's 25-kilometer-grid northing area designator.
+    easting_1k : str, optional
+        The point's 1-kilometer-grid easting area designator.
+    easting : str, optional
+        The point's easting (meters).
+    northing_1k : str, optional
+        The point's 1-kilometer-grid northing area designator.
+    northing : str, optional
+        The point's northing (meters).
+    prefer_lps : bool, default=False
+        See `LatLonPoint` documentation.
+    extended_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    polar_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    validate : bool, default=True
+        See `LatLonPoint` documentation.
+
+    Raises
+    ------
+    lgrs.Exceptions.MalformedCoordinate
+        If the instance is invalid. Both values and constraints are
+        considered.
+
+    Examples
+    --------
+    >>> box_1 = LtmAccBox(
+    ...     longitudinal_band=23, latitudinal_band='N',
+    ...     easting_area='F', northing_area='F',
+    ...     easting_1k='-', easting='000', northing_1k='-', northing='000'
+    ... )
+
+    You may find it simpler to instantiate from a string.
+
+    >>> box_2 = LtmAccBox.from_string("23NFF-000-000")
+    >>> box_1 == box_2
+    True
+    """
 
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -2089,7 +2499,60 @@ class LtmAccBox(_GriddedCoordinate):
 
 
 @_easy_dataclass
-class LtmLgrsBox(_GriddedCoordinate):
+class LtmLgrsBox(_BaseLgrsBox):
+    """
+    Create an instance representing an LTM Lunar Grid Reference System box.
+
+    Note that each instance represents a square area in LTM space, referenced to
+    its lower-left (grid-southwest) corner.
+
+    Except for `easting` and `northing`, each string argument is a single
+    character.
+
+    Parameters
+    ----------
+    longitudinal_band : int
+        The LTM zone number, between 1 and 45 (inclusive).
+    latitudinal_band : str
+        The latitudinal band.
+    easting_area : str
+        The point's 25-kilometer-grid easting area designator.
+    northing_area : str
+        The point's 25-kilometer-grid northing area designator.
+    easting : str, optional
+        The point's easting (meters).
+    northing : str, optional
+        The point's northing (meters).
+    prefer_lps : bool, default=False
+        See `LatLonPoint` documentation.
+    extended_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    polar_ltm : bool, default=False
+        See `LatLonPoint` documentation.
+    validate : bool, default=True
+        See `LatLonPoint` documentation.
+
+    Raises
+    ------
+    lgrs.Exceptions.MalformedCoordinate
+        If the instance is invalid. Both values and constraints are
+        considered.
+
+    Examples
+    --------
+    >>> box_1 = LtmLgrsBox(
+    ...     longitudinal_band=12, latitudinal_band='S',
+    ...     easting_area='A', northing_area='M',
+    ...     easting='12345', northing='12345'
+    ... )
+
+    You may find it simpler to instantiate from a string.
+
+    >>> box_2 = LtmLgrsBox.from_string("12SAM1234512345")
+    >>> box_1 == box_2
+    True
+    """
+
 
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
