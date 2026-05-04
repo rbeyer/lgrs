@@ -9,6 +9,7 @@
 # If either of the "update" steps takes forever, consider using "mamba" instead of "conda".
 #
 dependencies:
+  - beartype
   - numpy
   - pyproj
   - regex

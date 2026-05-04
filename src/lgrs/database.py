@@ -19,6 +19,7 @@
 ##############################################################################
 # External.
 from __future__ import annotations
+import beartype as _beartype
 import collections as _collections
 import functools as _functools
 import itertools as _itertools
@@ -47,6 +48,9 @@ _lunar_crs_long_name_pattern = _re.compile(
     "^(?P<num>[0-9]{2})?(?P<hemi>[NS])(?P<suffix>[*]*)$"
 )
 
+# Note: For unknown reason, `beartype` cannot resolve `int | None` and
+# raises an exception. Therefore, disable `beartype` for this class.
+@_beartype.beartype(conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0))
 class _LongNameParsed(_typing.NamedTuple):
     zone_number: int | None
     hemisphere: str
@@ -301,9 +305,11 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         return tup
 
     #* Instantiation. -------------------------------------------------
+    # Note: `beartype` errors if using `typing.Self` as return hint,
+    # perhaps because base type is `tuple`.
     @classmethod
     @_caching._optionally_cache
-    def _from_long_name(cls, long_name: str) -> _typing.Self:
+    def _from_long_name(cls, long_name: str) -> LunarCrsInfo:
         # Parse `long_name`.
         long_name_parsed = _parse_lunar_crs_long_name(long_name)
         zone_num, hemi, suffix = long_name_parsed

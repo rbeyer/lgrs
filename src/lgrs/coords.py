@@ -837,6 +837,7 @@ class BaseCoordinate(_BaseCoordinate):
         )
         return dist
 
+    # TODO: Decide whether to support mixed types.
     def is_equal_to(
             self, other: _typing.Self, *, error: bool = False, constraints: bool = False
     ) -> bool:
@@ -850,6 +851,8 @@ class BaseCoordinate(_BaseCoordinate):
         is equivalent to::
 
             coord_1.is_equal_to(coord_2, constraints=True)
+
+        except that the latter does not support mixed types.
 
         Parameters
         ----------
@@ -881,14 +884,6 @@ class BaseCoordinate(_BaseCoordinate):
         >>> latlon_point_1.is_equal_to(latlon_point_2, constraints=True)
         False
         """
-        # Validate type of `other`.
-        # TODO: Once library-wide type guards are implemented, remove
-        #  this block.
-        if not isinstance(other, type(self)):
-            raise TypeError(
-                f"`other` must be of type {type(self).__name__}, not: {other!r}"
-            )
-
         # Compare.
         if constraints:
             excluded_field_names = ()

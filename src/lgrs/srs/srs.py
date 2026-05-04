@@ -137,7 +137,7 @@ class _CrsParameters:
     @_caching._optionally_cache
     def make_crs(self) -> CRS:
         if not self._spec_count:
-            return _pyproj.CRS(_wkt.DATUM_NAME)
+            return CRS(_wkt.DATUM_NAME)
         match self.proj:
             case "LPS":
                 type_ = _wkt.LpsZone
