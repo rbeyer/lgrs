@@ -32,9 +32,9 @@ example. Conversely, interconversion between LGRS and ACC is exact.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-##############################################################################
+###############################################################################
 # region> IMPORT
-##############################################################################
+###############################################################################
 # External.
 from __future__ import annotations
 import contextlib as _contextlib
@@ -49,10 +49,11 @@ _cconv.initialize_LGRS_function_globals()
 
 
 # endregion
-##############################################################################
+###############################################################################
 # region> UTILITIES
-##############################################################################
+###############################################################################
 _LAST_CMD = None
+
 def _answer_yes(*args, **kwargs) -> str:
     return "y"
 
@@ -115,9 +116,9 @@ def get_last_command() -> str | None:
 
 
 # endregion
-##############################################################################
+###############################################################################
 # region> CONVERSION FUNCTIONS
-##############################################################################
+###############################################################################
 def LGRS2ACC(value: _coords.LtmLgrsBox, *, trunc_val: int = 1) -> _coords.LtmAccBox:
     return _execute_coordinate_conversion(
         "LGRS2ACC", value, trunc_val, _coords.LtmAccBox
