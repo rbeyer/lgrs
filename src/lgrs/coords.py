@@ -1052,10 +1052,7 @@ class BaseCoordinate(_BaseCoordinate):
             return cached_cousins
 
     def _get_cached_cousin(self, func: _ToMethod) -> BaseCoordinate | None:
-        # Resolve out types.
         out_types = _resolve_out_types(func)
-
-        # If suitable cousin is found, return it.
         for cousin in self._cousins:
             if isinstance(cousin, out_types):
                 return cousin
