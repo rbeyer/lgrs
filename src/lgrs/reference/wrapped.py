@@ -54,6 +54,7 @@ _cconv.initialize_LGRS_function_globals()
 ##############################################################################
 # region> UTILITIES
 ##############################################################################
+_LAST_CMD = None
 def _answer_yes(*args, **kwargs) -> str:
     return "y"
 
@@ -61,10 +62,21 @@ def _execute_coordinate_conversion(
         method_name: str, value: _coords.BaseCoordinate, trunc_val: int,
         return_type: type[_coords.BaseCoordinate]
 ) -> _coords.BaseCoordinate:
-    # Execute script, capturing stdout.
+    global _LAST_CMD
+
+    # Execute script, capturing stdout, suppressing prompts, and
+    # recording the command.
+    args = (method_name, *value._iter_value_strings())
     orig_sys_argv = _sys.argv
     try:
-        _sys.argv = ["", method_name, *value._iter_value_strings()]
+        _sys.argv = ["", *args]
+        if isinstance(value, _coords.BoxCoordinate):
+            # Note: Command-line execution implied `condensed=True`,
+            # unlike `main()` call further below.
+            nom_args = "".join(args)
+        else:
+            nom_args = args
+        _LAST_CMD = f"python {_cconv.__file__} {' '.join(nom_args)}"
         # Note: Prevent prompting and always answer with "y".
         _cconv.main.__globals__["input"] = _answer_yes
         f = _io.StringIO()
@@ -79,13 +91,28 @@ def _execute_coordinate_conversion(
     stdout_str = f.getvalue()
 
     # Create and return instance.
-    if issubclass(return_type, _coords._GriddedCoordinate):
+    if issubclass(return_type, _coords.BoxCoordinate):
         string = stdout_str.strip().replace(" ", "")
         new = return_type.from_string(string)
     else:
         string = stdout_str.strip()
         new = return_type._from_ref_string(string)
     return new
+
+def get_last_command() -> str | None:
+    """
+    Return most recent command.
+
+    Note that `cmd` may not be identical to the actually executed command
+    but should be equivalent. To achieve the same final result, answer "y"
+    to any prompt.
+
+    Returns
+    -------
+    cmd : str or None
+        The most recent command. `None` is no command was yet executed.
+    """
+    return _LAST_CMD
 
 
 
