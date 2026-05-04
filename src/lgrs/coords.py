@@ -434,8 +434,8 @@ class BaseCoordinate(_BaseCoordinate):
     #* Instantiation. ---------------------------------------------------------
     @classmethod
     def _from_ref_string(cls, string: str) -> _typing.Self:
-        # Note: Unlike `_GriddedCoordinate.from_string()`, this method
-        # exists solely to support parsing values from
+        # Note: Unlike `BoxCoordinate.from_string()`, this method exists
+        # solely to support parsing values from
         # `LGRS_Coordinate_Conversion`.
         parts = tuple(string.split(" "))
         if len(parts) == 1:
@@ -622,7 +622,7 @@ class BaseCoordinate(_BaseCoordinate):
             *coords: BaseCoordinate, center: bool
     ) -> _typing.Iterator[LatLonPoint]:
         for coord in coords:
-            if center and isinstance(coord, _GriddedCoordinate):
+            if center and isinstance(coord, BoxCoordinate):
                 yield coord.center_latlon
             else:
                 yield coord.to_latlon()
@@ -1313,9 +1313,10 @@ class BaseCoordinate(_BaseCoordinate):
 
 # endregion
 ###############################################################################
-# region> NON-GRIDDED COORDINATE TYPES
+# region> POINT COORDINATE TYPES
 ###############################################################################
-class _NonGriddedCoordinate(BaseCoordinate):
+class PointCoordinate(BaseCoordinate):
+    """The base class for all point coordinates."""
     #* Coordinate transformation. ---------------------------------------------
     @_abc.abstractmethod
     def _get_proj_crs(self, **kwargs) -> _srs.CRS:
@@ -1339,6 +1340,7 @@ class _NonGriddedCoordinate(BaseCoordinate):
 
 @_easy_dataclass
 class LatLonPoint(_NonGriddedCoordinate):
+class LatLonPoint(PointCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     latitude: float
@@ -1432,6 +1434,7 @@ class LatLonPoint(_NonGriddedCoordinate):
 
 @_easy_dataclass
 class LpsPoint(_NonGriddedCoordinate):
+class LpsPoint(PointCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     _template = "{hemisphere}{easting!r}E{northing!r}N"
@@ -1522,6 +1525,7 @@ class LpsPoint(_NonGriddedCoordinate):
 
 @_easy_dataclass
 class LtmPoint(_NonGriddedCoordinate):
+class LtmPoint(PointCoordinate):
 
     #* Fields and validation. -------------------------------------------------
     _template = "{zone_number}{hemisphere}{easting!r}E{northing!r}N"
@@ -1600,9 +1604,9 @@ class LtmPoint(_NonGriddedCoordinate):
 
 # endregion
 ###############################################################################
-# region> GRIDDED COORDINATE BASE TYPES
+# region> BOX COORDINATE BASE TYPES
 ###############################################################################
-class _GriddedCoordinate(BaseCoordinate):
+class BoxCoordinate(BaseCoordinate):
     """The base class for all gridded box coordinates."""
 
     #* Fields and validation. -------------------------------------------------
@@ -1697,7 +1701,7 @@ class _GriddedCoordinate(BaseCoordinate):
             Whether `other` is contained within `self`.
         """
         # Honor restrictive arguments.
-        if logical and not isinstance(other, _GriddedCoordinate):
+        if logical and not isinstance(other, BoxCoordinate):
             return False
         if (
                 (logical or not cross_system)
@@ -1812,7 +1816,7 @@ class _GriddedCoordinate(BaseCoordinate):
 
 # endregion
 ###############################################################################
-# region> GRIDDED COORDINATE TYPES
+# region> BOX COORDINATE TYPES
 ###############################################################################
 @_easy_dataclass
 class LpsAccBox(_GriddedCoordinate):
