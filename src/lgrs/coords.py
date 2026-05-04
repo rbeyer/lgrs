@@ -2691,44 +2691,46 @@ class LtmLgrsBox(_BaseLgrsBox):
 
 
 # TODO: Move to a proper test script.
-_caching.enable_caching(False)
+if __name__ == "__main__":
+    _caching.enable_caching(False)
 
-lat_lon = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)  # p. 45
-lps_or_ltm = lat_lon.to_lps_or_ltm()
-lgrs_ = lps_or_ltm.to_lgrs()
-lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
+    lat_lon = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)  # p. 45
+    lps_or_ltm = lat_lon.to_lps_or_ltm()
+    lgrs_ = lps_or_ltm.to_lgrs()
+    lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
 
-# lgrs_.to_latlon().is_equal_to(lat_lon, error=True)
+    # lgrs_.to_latlon().is_equal_to(lat_lon, error=True)
 
-lat_lon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
-lps_or_ltm1 = lat_lon1.to_lps_or_ltm()
-lgrs1 = lps_or_ltm1.to_lgrs()
-assert isinstance(lgrs1, LpsLgrsBox)
+    lat_lon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
+    lps_or_ltm1 = lat_lon1.to_lps_or_ltm()
+    lgrs1 = lps_or_ltm1.to_lgrs()
+    assert isinstance(lgrs1, LpsLgrsBox)
 
-lat_lon2 = lat_lon1.with_constraints(extended_ltm=True)
-lps_or_ltm2 = lat_lon2.to_lps_or_ltm()
-lgrs2 = lps_or_ltm2.to_lgrs()
-assert isinstance(lgrs2, LtmLgrsBox)
+    lat_lon2 = lat_lon1.with_constraints(extended_ltm=True)
+    lps_or_ltm2 = lat_lon2.to_lps_or_ltm()
+    lgrs2 = lps_or_ltm2.to_lgrs()
+    assert isinstance(lgrs2, LtmLgrsBox)
 
-lat_lon4 = LatLonPoint(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
-lps_or_ltm4 = lat_lon4.to_lps_or_ltm()
-lgrs4 = lps_or_ltm4.to_lgrs()
-assert lgrs4.is_equal_to(LpsLgrsBox.from_string("AZS1359008480"), error=True)
+    lat_lon4 = LatLonPoint(latitude=-86.38231380366628, longitude=-6.004331982958013)  # p. 53, 64
+    lps_or_ltm4 = lat_lon4.to_lps_or_ltm()
+    lgrs4 = lps_or_ltm4.to_lgrs()
+    assert lgrs4.is_equal_to(LpsLgrsBox.from_string("AZS1359008480"), error=True)
 
-lgrs4.to_latlon()
+    lgrs4.to_latlon()
 
-lat_lon5 = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
-lat_lon5.to_latlon()
+    lat_lon5 = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
+    lat_lon5.to_latlon()
 
-lps = LpsPoint(hemisphere="S", easting=197000, northing=197000)
-extreme_lat_lon = lps.to_latlon()
+    lps = LpsPoint(hemisphere="S", easting=197000, northing=197000)
+    extreme_lat_lon = lps.to_latlon()
 
-lps_acc = lgrs1.to_acc()
-ltm_acc = lgrs2.to_acc()
+    lps_acc = lgrs1.to_acc()
+    ltm_acc = lgrs2.to_acc()
 
-lps_acc.truncate(100_000).to_latlon()
+    lps_acc.truncate(100_000).to_latlon()
 
-lgrs_.distance_to(lgrs1)
+    lgrs_.distance_to(lgrs1)
 
-lat_lon_point = LatLonPoint(0, 0)
-lat_lon_point.to(LtmLgrsBox)
+
+    lat_lon_point = LatLonPoint(90, 0)
+    lat_lon_point.to_acc().validate()
