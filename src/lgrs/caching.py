@@ -32,6 +32,8 @@ import weakref as _weakref
 _CACHING_IS_ENABLED: bool = True
 _NOT_FOUND = object()
 
+# TODO: Reimplement coordinate caching to be self clearing (on garbage
+#  collection), as originally intended.
 _cache: dict = {}
 _weak_cache: _weakref.WeakKeyDictionary[_typing.Any, dict[str, _typing.Any]] = _weakref.WeakKeyDictionary()
 
