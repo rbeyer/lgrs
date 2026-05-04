@@ -11,6 +11,7 @@ Examples
 ... )
 >>> alt_lps_lgrs_box = LpsLgrsBox.from_string("AZS1359008480")
 >>> alt_lps_lgrs_box.is_equal_to(lps_lgrs_box, error=True)
+True
 """
 
 # Copyright © 2026, Ethan I. Schaefer (eschaefer@seti.org)
@@ -543,12 +544,18 @@ class BaseCoordinate(_BaseCoordinate):
         Examples
         --------
         >>> latlon_1 = LatLonPoint(45, 182)
-        >>> latlon_1.longitude == -178
-        True  # Conformed.
+        >>> latlon_1.longitude == -178  # Conformed.
+        True
         >>> latlon_2 = LatLonPoint(45, 182, validate=False)
-        >>> latlon_2.longitude == -178
-        False # Not conformed.
-        >>> latlon_2.validate()
+        >>> latlon_2.longitude == -178   # Not conformed.
+        False
+        >>> latlon_2.validate()  # doctest: +NORMALIZE_WHITESPACE
+        Traceback (most recent call last):
+          ...
+        lgrs.exceptions.MalformedCoordinate:
+          Validation conformed the following value(s):
+            longitude: 182 --> -178
+
         """
         if not revalidate and self._was_validated:
             return
@@ -762,7 +769,7 @@ class BaseCoordinate(_BaseCoordinate):
         >>> latlon_point = LatLonPoint(0, 0)
         >>> acc_box = LtmAccBox.from_string("23NFF-001-001")
         >>> latlon_point.grid_distance_to(acc_box)
-        1.414223354889927
+        1.4142135623730951
         >>> latlon_point.distance_to(acc_box, center=True)
         2.1234979460292074
         """
