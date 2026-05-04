@@ -4,20 +4,18 @@ Code to wrap reference scripts.
 Examples
 --------
 >>> import lgrs.coords as coords
->>> polar_latlon = coords.LatLonPoint(latitude=85, longitude=1)
->>> polar_lps = LatLon2LPS(polar_latlon)
->>> polar_latlon_recovered = LPS2LatLon(polar_lps)
->>> polar_latlon_recovered.is_close_to(polar_latlon, error=True)
+>>> latlon_point = coords.LatLonPoint(latitude=85, longitude=1)
+>>> lps_point = LatLon2LPS(latlon_point)
+>>> latlon_point_recovered = LPS2LatLon(lps_point)
+>>> assert latlon_point_recovered.distance_to(latlon_point) < 1e-10
 
-Note: Below call would error because recovery is not exact:
-strict_result = polar_latlon_recovered.is_equal_to(
-    polar_latlon, error=True, max_float_difference=0.
-)
+Note that projection is not exact, so distance is not 0 in the above
+example. Conversely, interconversion between LGRS and ACC is exact.
 
->>> lps_lgrs = coords.LpsLgrsBox.from_string("AZS1359008480")
->>> lps_acc = PolarLGRS2PolarLGRS_ACC(lps_lgrs)
->>> lps_lgrs_recovered = PolarLGRS_ACC2PolarLGRS(lps_acc)
->>> lps_lgrs_recovered.is_close_to(lps_lgrs, error=True)
+>>> lps_lgrs_box = coords.LpsLgrsBox.from_string("AZS1359008480")
+>>> lps_acc_box = PolarLGRS2PolarLGRS_ACC(lps_lgrs_box)
+>>> lps_lgrs_box_recovered = PolarLGRS_ACC2PolarLGRS(lps_acc_box)
+>>> assert lps_lgrs_box == lps_lgrs_box_recovered
 """
 
 # Copyright © 2026, Ethan I. Schaefer (eschaefer@seti.org)
