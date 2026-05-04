@@ -202,12 +202,6 @@ def _remove_i_and_o(match: _regex.Match) -> str:
 ###############################################################################
 # region> UTILITIES: OTHER
 ###############################################################################
-def _as_int(str_or_none: int | None) -> int:
-    if str_or_none is None:
-        return 0
-    else:
-        return int(str_or_none)
-
 def _as_str(str_or_none: str | None) -> str:
     if str_or_none is None:
         return ""
@@ -1554,6 +1548,8 @@ class LatLonPoint(PointCoordinate):
                 raise
             return lps
         else:
+            # TODO: Let Mark know that Table 2 is missing zones 24 and
+            #  25.
             zone = int(proj_crs.ltm_zone[:-1])
             hemi = proj_crs.ltm_zone[-1]
             ltm = LtmPoint(
@@ -1561,11 +1557,6 @@ class LatLonPoint(PointCoordinate):
                 **self._root.constraints, validate=False
             )
             return ltm
-
-    def _to_lgrs(self, **kwargs) -> LpsLgrsBox | LtmLgrsBox:
-        lps_or_ltm = self._to_lps_or_ltm(**kwargs)
-        lgrs = lps_or_ltm._to_lgrs(**kwargs)
-        return lgrs
 
 
 @_easy_dataclass
@@ -1664,12 +1655,14 @@ class LpsPoint(PointCoordinate):
             # TODO: Check with Mark that abs() should instead be around
             #  around e_adj in Eq. 103, as it is on line 1646 of
             #  reference code.
-            ea_idx = 24 - _floor(abs(e_adj) // 25_000)  # Eq. 103
+            # TODO: Let Mark know that Eq. 103 treats Table 13 as 1-
+            #  indexed but Eq. 102 treats it as 0-indexed.
+            # Note: Eq. 103 uses "24" but "23" used here since our Table
+            # 13 equivalent starts at 1, not 0.
+            ea_idx = 23 - _floor(abs(e_adj) // 25_000)  # Eq. 103
         else:
             ea_idx = _floor(e_adj // 25_000)  # Eq. 102
-        # Note: "- 1" adjusts for indices in Tables 13 + 14, which start
-        # at +1).
-        ea = LpsLgrsBox._easting_area_chars[ea_idx - 1]  # Tables 13, 14
+        ea = LpsLgrsBox._easting_area_chars[ea_idx]  # Tables 13, 14
         na_idx = _floor(n_adj // 25_000) + 13  # Eq. 104
         na = LpsLgrsBox._northing_area_chars[na_idx]  # Tables 15, 16
         if is_in_west_half:
@@ -1818,6 +1811,14 @@ class BoxCoordinate(BaseCoordinate):
             raise _exceptions.MalformedCoordinate(
                 f"`.string` does not have the form: {self._pattern.pattern!r}"
             )
+
+    #* Utilities. -------------------------------------------------------------
+    @staticmethod
+    def _as_int(string: str | None, *, nom_length: int) -> int:
+        if string is None:
+            return 0
+        else:
+            return int(f"{string}00"[:nom_length])
 
     #* Instantiation from string. ---------------------------------------------
     _pattern: _regex.Pattern
@@ -2077,6 +2078,25 @@ class BoxCoordinate(BaseCoordinate):
         final = new_lgrs_box.to(type(self))
         return final
 
+class _BaseAccBox(BoxCoordinate):
+
+    @_functools.cached_property
+    def _easting_int(self) -> int:
+        return self._as_int(self.easting, nom_length=3)
+
+    @_functools.cached_property
+    def _northing_int(self) -> int:
+        return self._as_int(self.northing, nom_length=3)
+
+class _BaseLgrsBox(BoxCoordinate):
+
+    @_functools.cached_property
+    def _easting_int(self) -> int:
+        return self._as_int(self.easting, nom_length=5)
+
+    @_functools.cached_property
+    def _northing_int(self) -> int:
+        return self._as_int(self.northing, nom_length=5)
 
 
 # endregion
@@ -2383,12 +2403,12 @@ class LpsLgrsBox(_BaseLgrsBox):
             # Table 7 is 1-indexed, Eq. 113 is exactly reproduced here.
             ea_val = 25_000 * ea_idx  # Eq. 113
         # Eq. 115
-        easting = ea_val + _as_int(self.easting) + _wkt.LPS_FALSE_EASTING
+        easting = ea_val + self._easting_int + _wkt.LPS_FALSE_EASTING
         # Tables 15, 16
         na_idx = self._northing_area_chars.index(self.northing_area)
         na_val = 25_000 * (na_idx - 13)  # Eq. 114
         # Eq. 116
-        northing = na_val + _as_int(self.northing) + _wkt.LPS_FALSE_NORTHING
+        northing = na_val + self._northing_int + _wkt.LPS_FALSE_NORTHING
 
         # Create and return instance.
         lps = LpsPoint(
@@ -2634,9 +2654,9 @@ class LtmLgrsBox(_BaseLgrsBox):
         # Table 7 is 1-indexed, Eq. 93 is exactly reproduced here.
         # TODO: Based on ref code (lines 1728-9), the parentheses are
         #  assumed to be around the first two values, unlike the order
-        #  of operations in Eq. 93. Confirm, then let Mark know.
+        #  of operations in Eq. 93. Now confirmed. Let Mark know.
         ea_val = (5 + ea_idx) * 25_000  # Eq. 93
-        easting = ea_val + _as_int(self.easting)  # Eq. 98
+        easting = ea_val + self._easting_int  # Eq. 98
         na_letterset = _calc_na_letterset(self.longitudinal_band)  # Eq. 83
         # Tables 8-10
         na_idx = self._northing_area__letterset_to_chars[na_letterset].index(
@@ -2653,7 +2673,7 @@ class LtmLgrsBox(_BaseLgrsBox):
         # Eqs. 97, 99
         na_val = 0  # Initialize.
         while True:
-            northing = na_val + na_val_rel + _as_int(self.northing)
+            northing = na_val + na_val_rel + self._northing_int
             if northing >= nband:
                 break
             na_val += 500_000
