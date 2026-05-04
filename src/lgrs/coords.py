@@ -1060,7 +1060,13 @@ class BaseCoordinate(_BaseCoordinate):
 
     def _register_cousin(self, cousin: BaseCoordinate) -> None:
         if _caching._CACHING_IS_ENABLED:
-            object.__setattr__(cousin, "_root", self._root)
+            # Note: Only assign `._root` if transformation is reversible
+            # (lossless).
+            if (
+                not isinstance(cousin, BoxCoordinate)
+                or isinstance(self, BoxCoordinate)
+            ):
+                object.__setattr__(cousin, "_root", self._root)
             self._cousins.appendleft(cousin)
 
     @_functools.cached_property
