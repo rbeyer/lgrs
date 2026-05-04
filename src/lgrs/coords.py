@@ -2078,7 +2078,9 @@ class BoxCoordinate(BaseCoordinate):
         final = new_lgrs_box.to(type(self))
         return final
 
+
 class _BaseAccBox(BoxCoordinate):
+    _condensed_prefix_template: str
 
     @_functools.cached_property
     def _easting_int(self) -> int:
@@ -2087,6 +2089,16 @@ class _BaseAccBox(BoxCoordinate):
     @_functools.cached_property
     def _northing_int(self) -> int:
         return self._as_int(self.northing, nom_length=3)
+
+    @_functools.cached_property
+    def condensed(self) -> str:
+        return self.string.removeprefix(self.condensed_prefix)
+
+    @_functools.cached_property
+    def condensed_prefix(self) -> str:
+        prefix = self._condensed_prefix_template.format(**self._init_kwargs)
+        return prefix
+
 
 class _BaseLgrsBox(BoxCoordinate):
 
@@ -2162,6 +2174,7 @@ class LpsAccBox(_BaseAccBox):
     >>> box_1 == box_2
     True
     """
+    _condensed_prefix_template = "{longitudinal_band}{easting_area}{northing_area}"
 
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -2476,6 +2489,7 @@ class LtmAccBox(_BaseAccBox):
     >>> box_1 == box_2
     True
     """
+    _condensed_prefix_template = "{longitudinal_band}{latitudinal_band}{easting_area}{northing_area}"
 
     #* Fields and validation. -------------------------------------------------
     _pattern = _compile_regex_without_i_and_o(
@@ -2519,6 +2533,10 @@ class LtmAccBox(_BaseAccBox):
     _validate_easting = LpsAccBox._validate_easting
     _validate_northing_1k = LpsAccBox._validate_northing_1k
     _validate_northing = LpsAccBox._validate_northing
+
+    @property
+    def zone_number(self) -> int:
+        return self.longitudinal_band
 
     #* Coordinate transformation. ---------------------------------------------
     # Table 6
@@ -2616,6 +2634,8 @@ class LtmLgrsBox(_BaseLgrsBox):
     _validate_northing_area = LtmAccBox._validate_northing_area
     _validate_easting = LpsLgrsBox._validate_easting
     _validate_northing = LpsLgrsBox._validate_northing
+
+    zone_number = LtmAccBox.zone_number
 
     #* Coordinate transformation. ---------------------------------------------
     _latitudinal_band_chars = LtmAccBox._latitudinal_band_chars
