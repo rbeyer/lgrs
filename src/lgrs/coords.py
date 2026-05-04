@@ -214,7 +214,7 @@ def _as_str(str_or_none: str | None) -> str:
     else:
         return str_or_none
 
-def _easy_dataclass(cls: type[BaseCoordinate]) -> type:
+def _easy_dataclass(cls: type[BaseCoordinate]) -> type[BaseCoordinate]:
     """
     Force constraints to end of call signature, string representation.
 
@@ -262,7 +262,10 @@ def _easy_dataclass(cls: type[BaseCoordinate]) -> type:
         *cls.__mro__[:cls.__mro__.index(_AbstractBaseCoordinate)],
         *shadow_dataclass.__mro__,
     )
-    twin_cls = type(cls.__name__, mro, {"__module__": cls.__module__})
+    twin_cls = type(cls.__name__, mro, {})
+    # Note: Copies docstring, etc. from `cls` to `twin_cls`.
+    _functools.update_wrapper(twin_cls, cls, updated=())
+    del twin_cls.__wrapped__  # Avoid confusion, duplicate doctests.
 
     # Create and return outer dataclass.
     dataclass = _dataclasses.dataclass(frozen=True)(twin_cls)
@@ -1855,6 +1858,19 @@ class BoxCoordinate(BaseCoordinate):
         lgrs.exceptions.MalformedCoordinate:
           ...
         """
+        # Support call from `BoxCoordinate` itself.
+        if cls is BoxCoordinate:
+            for typ in (LpsLgrsBox, LpsAccBox, LtmLgrsBox, LtmAccBox):
+                try:
+                    new = typ.from_string(string)
+                except _exceptions.MalformedCoordinate:
+                    continue
+                else:
+                    return new
+            raise _exceptions.MalformedCoordinate(
+                f"`string` is not in a supported format: {string!r}"
+            )
+
         # Match to pattern.
         match = cls._pattern.search(string)
         if match is None:
