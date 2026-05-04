@@ -56,7 +56,7 @@ import lgrs.srs.wkt as _wkt
 ###############################################################################
 # region> TYPE ALIASES
 ###############################################################################
-type ToMethod = _collections.abc.Callable[..., BaseCoordinate]
+type _ToMethod = _collections.abc.Callable[..., BaseCoordinate]
 
 
 
@@ -64,7 +64,7 @@ type ToMethod = _collections.abc.Callable[..., BaseCoordinate]
 ###############################################################################
 # region> UTILITIES: REDIRECTION & CACHING
 ###############################################################################
-def _cache_new_cousin(func: ToMethod) -> ToMethod:
+def _cache_new_cousin(func: _ToMethod) -> _ToMethod:
     """
     Cache the new `BaseCoordinate` returned whenever `func()` is called.`.
 
@@ -93,7 +93,7 @@ def _calc_na_letterset(zone_number: int) -> int:
     na_letterset = (zone_number - 1) % 3  # Eq. 83
     return na_letterset
 
-def _redirect(func: ToMethod) -> ToMethod:
+def _redirect(func: _ToMethod) -> _ToMethod:
     """
     For `.to_*()`, get from cache or redirect to `._to_*()`.
 
@@ -1000,7 +1000,7 @@ class BaseCoordinate(_BaseCoordinate):
         else:
             return cached_cousins
 
-    def _get_cached_cousin(self, func: ToMethod) -> BaseCoordinate | None:
+    def _get_cached_cousin(self, func: _ToMethod) -> BaseCoordinate | None:
         # Resolve out types.
         out_types = _resolve_out_types(func)
 
@@ -1057,7 +1057,7 @@ class BaseCoordinate(_BaseCoordinate):
     @_functools.cache
     def _get_conversion_sequence(
             targ_type: type[BaseCoordinate]
-    ) -> tuple[ToMethod | None, ToMethod]:
+    ) -> tuple[_ToMethod | None, _ToMethod]:
         if targ_type is LatLonPoint:
             return (None, BaseCoordinate.to_latlon)
         if targ_type in (LpsPoint, LtmPoint):
