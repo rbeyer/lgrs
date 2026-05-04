@@ -21,7 +21,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy", "pyproj", "regex", "typer"
+    "beartype", "numpy", "pyproj", "regex", "typer"
 ]
 
 [project.optional-dependencies]
