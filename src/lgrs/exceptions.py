@@ -10,27 +10,28 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
-##############################################################################
+###############################################################################
 # region> IMPORT
-##############################################################################
+###############################################################################
 import pyproj as _pyproj
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> EXCEPTIONS
-##############################################################################
+###############################################################################
 # TODO: Delete unused exception classes.
 class MalformedCoordinate(Exception):
     """
     Raised when a coordinate is malformed.
     """
+
     pass
+
 
 class NonGriddedError(_pyproj.exceptions.CRSError):
     """
@@ -40,20 +41,24 @@ class NonGriddedError(_pyproj.exceptions.CRSError):
     expected, or when a `pyproj.Transformer` is encountered but a
     `GriddedTransformer` is expected.
     """
+
     pass
+
 
 class NonPolarError(_pyproj.exceptions.ProjError):
     """
     Raised when the non-polar region is unexpectedly referenced.
     """
+
     pass
+
 
 class PolarError(_pyproj.exceptions.ProjError):
     """
     Raised when the polar region is unexpectedly referenced.
     """
-    pass
 
+    pass
 
 
 # endregion

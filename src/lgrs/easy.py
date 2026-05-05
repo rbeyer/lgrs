@@ -10,13 +10,13 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
-##############################################################################
+###############################################################################
 # region> IMPORT
-##############################################################################
+###############################################################################
 # External.
 import enum as _enum
 
@@ -24,11 +24,10 @@ import enum as _enum
 import lgrs.exceptions as _exceptions
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> ENUMERATIONS
-##############################################################################
+###############################################################################
 class Format(_enum.StrEnum):
     LAT_LON = _enum.auto()
     LON_LAT = _enum.auto()
@@ -37,10 +36,12 @@ class Format(_enum.StrEnum):
     ACC = _enum.auto()
     ACC_FULL = _enum.auto()
 
+
 class Region(_enum.StrEnum):
     POLAR = _enum.auto()
     NONPOLAR = _enum.auto()
     ANY = _enum.auto()
+
 
 class Type(_enum.StrEnum):
     LABELED = _enum.auto()
@@ -48,34 +49,44 @@ class Type(_enum.StrEnum):
     PRETTY = _enum.auto()
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> CONVENIENCE FUNCTIONS
-##############################################################################
-def from_gridded(string: str, *,
-                 fmt: Format = Format.LGRS,
-                 typ: Type = Type.LABELED,
-                 region: Region = Region.ANY,
-                 extended_ltm: bool = False) -> tuple | str:
-    ...
+###############################################################################
+def from_gridded(
+    string: str,
+    *,
+    fmt: Format = Format.LGRS,
+    typ: Type = Type.LABELED,
+    region: Region = Region.ANY,
+    extended_ltm: bool = False,
+) -> tuple | str: ...
 
-def from_geographic(latitude: float, longitude: float, *,
-                    fmt: Format = Format.LGRS,
-                    typ: Type = Type.LABELED,
-                    region: Region = Region.ANY,
-                    extended_ltm: bool = False) -> tuple | str:
-    ...
+
+def from_geographic(
+    latitude: float,
+    longitude: float,
+    *,
+    fmt: Format = Format.LGRS,
+    typ: Type = Type.LABELED,
+    region: Region = Region.ANY,
+    extended_ltm: bool = False,
+) -> tuple | str: ...
+
 
 # TODO: Or could "cheat" and call this `from_projected()`, perhaps even
 #  replace-all "lps_or_ltm" ro "projected" across the package, with the
 #  understanding (as we'd state in the docs) that projected invariably
 #  means LPS or LTM in the package.
-def from_lps_or_ltm(easting: float, northing: float, *,
-                    fmt: Format = Format.LGRS,
-                    typ: Type = Type.LABELED,
-                    region: Region = Region.ANY,
-                    extended_ltm: bool = False) -> tuple | str:
+def from_lps_or_ltm(
+    easting: float,
+    northing: float,
+    *,
+    fmt: Format = Format.LGRS,
+    typ: Type = Type.LABELED,
+    region: Region = Region.ANY,
+    extended_ltm: bool = False,
+) -> tuple | str:
     """
     Convert from LPS or LTM coordinates.
 
@@ -125,7 +136,6 @@ def from_lps_or_ltm(easting: float, northing: float, *,
     # import sys
     # _rich.print("[bold red]NonPolarError:[/bold red] Test.", file=sys.stderr, flush=True)
     ...
-
 
 
 # endregion

@@ -13,6 +13,7 @@ and Lunar Transverse Mercator (LTM) projections described by:
 
 For brevity, this paper is referred to as M2025 hereinafter.
 """
+
 # TODO: Finalize reference. Current form is copied from "Suggested
 #  citation" in M2025.
 
@@ -26,13 +27,13 @@ For brevity, this paper is referred to as M2025 hereinafter.
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
-##############################################################################
+###############################################################################
 # region> IMPORT
-##############################################################################
+###############################################################################
 # External.
 import abc as _abc
 import dataclasses as _dataclasses
@@ -42,53 +43,56 @@ import typing as _typing
 # Internal.
 import lgrs.caching as _caching
 
-
-
 # endregion
-##############################################################################
+###############################################################################
 # region> CONFIGURATION
-##############################################################################
+###############################################################################
 # Note: See Table 4 of M2025 for most of these variables.
 # Note: If any of these variables are modified from their M2025 values,
 # additional changes to the code will likely be necessary.
 
 # Datum.
 DATUM_NAME = "IAU_2015:30100"
-DATUM_WKT_ID = 'ID[“IAU”,30100,2015]'
+DATUM_WKT_ID = "ID[“IAU”,30100,2015]"
 
 # Boundaries.
-LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE: float = 82.  # (degrees)
-LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE: float = 80.  # (degrees)
+LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE: float = 82.0  # (degrees)
+LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE: float = 80.0  # (degrees)
 
 # False northing and easting.
-LTM_FALSE_EASTING: float = 250_000.  # `F_E` in M2025 (meters)
-LTM_N_FALSE_NORTHING: float = 0.  # `F_N` in M2025 (meters)
-LTM_S_FALSE_NORTHING: float = 2_500_000.  # `F_N` in M2025 (meters)
+LTM_FALSE_EASTING: float = 250_000.0  # `F_E` in M2025 (meters)
+LTM_N_FALSE_NORTHING: float = 0.0  # `F_N` in M2025 (meters)
+LTM_S_FALSE_NORTHING: float = 2_500_000.0  # `F_N` in M2025 (meters)
 
 # Shape parameters.
-LUNAR_RADIUS: float = 1_737_400.  # `a` in M2025 (meters)
+LUNAR_RADIUS: float = 1_737_400.0  # `a` in M2025 (meters)
 
 # Other parameters.
 LTM_CENTRAL_SCALE_FACTOR: float = 0.999  # `k_0` in M2025 (exact, unitless)
-LTM_LATITUDE_OF_PROJECTION_AXIS: float = 0.  # `phi_0` in M2025 (degrees)
-LTM_ZONE_HALF_WIDTH: float = 4.  # `W` in M2025 (degrees)
+LTM_LATITUDE_OF_PROJECTION_AXIS: float = 0.0  # `phi_0` in M2025 (degrees)
+LTM_ZONE_HALF_WIDTH: float = 4.0  # `W` in M2025 (degrees)
 
 # Note: See Table 5 of M2025 for most of these variables.
 LPS_CENTRAL_SCALE_FACTOR: float = 0.994  # `k_0` in M2025 (exact, unitless)
-LPS_N_LATITUDE_OF_PROJECTION_ORIGIN: float = +90.  # `phi_0` in M2025 (degrees)
-LPS_S_LATITUDE_OF_PROJECTION_ORIGIN: float = -90.  # `phi_0` in M2025 (degrees)
-LPS_LONGITUDE_OF_PROJECTION_ORIGIN: float = 0.  # `lambda_0` in M2025 (degrees)
-LPS_FALSE_EASTING: float = 500_000.  # `F_E` in M2025 (meters)
-LPS_FALSE_NORTHING: float = 500_000.  # `F_N` in M2025 (meters)
+LPS_N_LATITUDE_OF_PROJECTION_ORIGIN: float = (
+    +90.0
+)  # `phi_0` in M2025 (degrees)
+LPS_S_LATITUDE_OF_PROJECTION_ORIGIN: float = (
+    -90.0
+)  # `phi_0` in M2025 (degrees)
+LPS_LONGITUDE_OF_PROJECTION_ORIGIN: float = (
+    0.0  # `lambda_0` in M2025 (degrees)
+)
+LPS_FALSE_EASTING: float = 500_000.0  # `F_E` in M2025 (meters)
+LPS_FALSE_NORTHING: float = 500_000.0  # `F_N` in M2025 (meters)
 LPS_N_ID = 7190092
 LPS_S_ID = 7190091
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> TEMPLATES
-##############################################################################
+###############################################################################
 # Below: Format taken from p. 36 of M2025. Only deviation from M2025 is
 # the addition of USAGE, which parallels that for the LTM WKT in the
 # current module.
@@ -175,11 +179,10 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
 """.strip().format
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> ZONES
-##############################################################################
+###############################################################################
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class BaseZone(metaclass=_caching._AbstractMetaMultiton):
     extended_ltm: bool = False
@@ -187,7 +190,7 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
     hemisphere: str
     datum_name: str = DATUM_NAME
 
-    # * UTILITIES. ----------------------------------------------------
+    # * UTILITIES. ────────────────────────────────────────────────────
     def _get_bbox_string(self) -> str:
         return f"BBOX[{self.minimum_latitude},{self.minimum_longitude},{self.maximum_latitude},{self.maximum_longitude}]"
 
@@ -205,11 +208,11 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
                 f"{self.hemisphere!r}"
             )
 
-    # * ATTRIBUTES. ----------------------------------------------------
+    # * ATTRIBUTES. ───────────────────────────────────────────────────
     @_functools.cached_property
     def ltm_limit(self) -> float:
         if self.polar_ltm:
-            return 90.
+            return 90.0
         elif self.extended_ltm:
             return LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
@@ -217,58 +220,53 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
 
     @property
     @_abc.abstractmethod
-    def maximum_latitude(self) -> float:
-        ...
+    def maximum_latitude(self) -> float: ...
 
     @property
     @_abc.abstractmethod
-    def maximum_longitude(self) -> float:
-        ...
+    def maximum_longitude(self) -> float: ...
 
     @property
     @_abc.abstractmethod
-    def minimum_latitude(self) -> float:
-        ...
+    def minimum_latitude(self) -> float: ...
 
     @property
     @_abc.abstractmethod
-    def minimum_longitude(self) -> float:
-        ...
+    def minimum_longitude(self) -> float: ...
 
     @property
     @_abc.abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
     @_abc.abstractmethod
-    def wkt(self) -> str:
-        ...
+    def wkt(self) -> str: ...
+
 
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LpsZone(BaseZone):
     number: None = None  # Ignored, but included to parallel `LtmZone`.
 
-    # * INITIALIZATION. -----------------------------------------------
+    # * INITIALIZATION. ───────────────────────────────────────────────
     def __post_init__(self) -> None:
         self._validate_datum_name()
         self._validate_hemisphere()
 
-    #* ATTRIBUTES. ----------------------------------------------------
-    maximum_longitude: _typing.ClassVar = 180.
-    minimum_longitude: _typing.ClassVar = -180.
+    # * ATTRIBUTES. ───────────────────────────────────────────────────
+    maximum_longitude: _typing.ClassVar = 180.0
+    minimum_longitude: _typing.ClassVar = -180.0
 
     @_functools.cached_property
     def maximum_latitude(self) -> float:
         if self.hemisphere == "N":
-            return 90.
+            return 90.0
         else:
             return -self.ltm_limit
 
     @_functools.cached_property
     def minimum_latitude(self) -> float:
         if self.hemisphere == "S":
-            return -90.
+            return -90.0
         else:
             return self.ltm_limit
 
@@ -294,30 +292,32 @@ class LpsZone(BaseZone):
         wkt = _format_lps_wkt(**locals())
         return wkt
 
+
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class LtmZone(BaseZone):
     number: int
 
-    # * INITIALIZATION. -----------------------------------------------
+    # * INITIALIZATION. ───────────────────────────────────────────────
     def __post_init__(self) -> None:
         self._validate_datum_name()
         self._validate_hemisphere()
         self._validate_number()
 
-    # * UTILITIES. ----------------------------------------------------
+    # * UTILITIES. ────────────────────────────────────────────────────
     def _validate_number(self) -> None:
         if not (1 <= self.number <= 45):
             raise TypeError(
                 f"`number` must be in the range [1, 45], not: {self.number!r}"
             )
 
-    #* ATTRIBUTES. ----------------------------------------------------
+    # * ATTRIBUTES. ───────────────────────────────────────────────────
     @_functools.cached_property
     def center_longitude(self) -> float:
-        ctr_lon = ((self.number - 1)
-                   * (2 * LTM_ZONE_HALF_WIDTH)
-                   - 180
-                   + LTM_ZONE_HALF_WIDTH)
+        ctr_lon = (
+            (self.number - 1) * (2 * LTM_ZONE_HALF_WIDTH)
+            - 180
+            + LTM_ZONE_HALF_WIDTH
+        )
         return ctr_lon
 
     @_functools.cached_property
@@ -364,7 +364,6 @@ class LtmZone(BaseZone):
         bbox_string = self._get_bbox_string()
         wkt = _format_ltm_wkt(**locals())
         return wkt
-
 
 
 # endregion

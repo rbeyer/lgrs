@@ -10,13 +10,13 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
-##############################################################################
+###############################################################################
 # region> IMPORT
-##############################################################################
+###############################################################################
 # External.
 from __future__ import annotations
 import dataclasses as _dataclasses
@@ -29,12 +29,10 @@ import typing as _typing
 import lgrs.caching as _caching
 import lgrs.srs.wkt as _wkt
 
-
-
 # endregion
-##############################################################################
+###############################################################################
 # region> COORDINATE REFERENCE SYSTEMS
-##############################################################################
+###############################################################################
 _crs_name_pattern = _re.compile(
     "(?i)^"  # Case-insensitive. Match from start.
     "((?P<datum>.+?) ?/ ?)?"  # Datum is optional.
@@ -44,6 +42,7 @@ _crs_name_pattern = _re.compile(
     "(?P<n_or_s>[NS])"  # "N" or "S" hemisphere.
     "$"  # Match to end.
 )
+
 
 # Note: Parsing of arguments to `make_lunar_crs()` is delegated to this
 # class to improve code organization and caching of equivalent calls.
@@ -81,7 +80,7 @@ class _CrsParameters:
             self.zone = None
         else:
             self.zone = int(num)
-        self.south = (match.group("n_or_s").upper() == "S")
+        self.south = match.group("n_or_s").upper() == "S"
         del self._spec_count  # Force recalculation.
 
     def _resolve_and_validate(self) -> None:
@@ -145,11 +144,13 @@ class _CrsParameters:
                 type_ = _wkt.LtmZone
             case _:
                 raise TypeError(f"`proj` not recognized: {self.proj!r}")
-        hemisphere = ("S" if self.south else "N")
+        hemisphere = "S" if self.south else "N"
         zone_instance = type_(
-            number=self.zone, hemisphere=hemisphere,
-            extended_ltm=self.extended_ltm, polar_ltm=self.polar_ltm,
-            datum_name=self.ellps
+            number=self.zone,
+            hemisphere=hemisphere,
+            extended_ltm=self.extended_ltm,
+            polar_ltm=self.polar_ltm,
+            datum_name=self.ellps,
         )
         crs = CRS.from_wkt(zone_instance.wkt)
         # TODO: Retain? Document? Or `CRS` -> `LunarCrs` and share
@@ -163,6 +164,7 @@ class _CrsParameters:
             # Note: Parallels `CRS.utm_zone`.
             crs.ltm_zone = f"{self.zone}{hemisphere}"
         return crs
+
 
 class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     """
@@ -185,14 +187,19 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     False
     """
 
+
 # Note: Only identical calls are cached here. Compare:
 # `_CrsParameters.make_crs()`.
 @_caching._optionally_cache
 def make_lunar_crs(
-        name: str | None = None, *,
-        proj: str | None = None, zone: int | None = None,
-        south: bool | None = None, ellps: str | None = None,
-        extended_ltm: bool = False, polar_ltm: bool = False
+    name: str | None = None,
+    *,
+    proj: str | None = None,
+    zone: int | None = None,
+    south: bool | None = None,
+    ellps: str | None = None,
+    extended_ltm: bool = False,
+    polar_ltm: bool = False,
 ) -> CRS:
     """
     Return LPS or LTM zone `CRS` using UTM-like `proj.CRS()` arguments.
@@ -279,11 +286,10 @@ def make_lunar_crs(
     return crs
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> GRIDDED REFERENCE SYSTEMS
-##############################################################################
+###############################################################################
 @_dataclasses.dataclass(frozen=True, kw_only=True)
 class GRS:
     """
@@ -292,8 +298,9 @@ class GRS:
     Instances are not especially useful on their own. They are primarily
     intended as inputs to `LunarTransformer.from_srs()`.
     """
+
     form: _typing.Literal["ACC", "ACC_FULL", "LGRS"]
-    digits : int | None = None
+    digits: int | None = None
     multi_zone: bool = False
     domain: _typing.Literal["LPS", "LTM", "BOTH", "INFER"] = "INFER"
     extended_ltm: bool = False

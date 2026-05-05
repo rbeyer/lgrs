@@ -10,13 +10,13 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
-##############################################################################
+###############################################################################
 # region> IMPORT
-##############################################################################
+###############################################################################
 # External.
 import abc as _abc
 import numpy as _np
@@ -29,17 +29,16 @@ import lgrs.srs.srs as _lgrs_srs
 import lgrs.exceptions as _lgrs_exceptions
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> TRANSFORMERS
-##############################################################################
+###############################################################################
 class GriddedTransformer:
 
     # Begin: `pyproj.Transformer` primary (~required) counterparts.
     @classmethod
     def from_srs(
-            cls, srs_from: _typing.Any, srs_to: _typing.Any, *args, **kwargs
+        cls, srs_from: _typing.Any, srs_to: _typing.Any, *args, **kwargs
     ) -> type[_typing.Self]:
         """
         Make a Transformer to and/or from a gridded reference system (`GRS`).
@@ -83,8 +82,14 @@ class GriddedTransformer:
     #  adapting the relevant `pyproj` utilities (`_copytobuffer()` and
     #  `_convertback()`) wouldn't be too hard.
     def transform(
-            self, xx: _typing.Any, yy: _typing.Any = None, *args, **kwargs
-    ) -> str | tuple[str, ...] | list[str] | tuple[float | tuple[float, ...] | list[float] |  _np.ndarray, ...] | _np.ndarray:
+        self, xx: _typing.Any, yy: _typing.Any = None, *args, **kwargs
+    ) -> (
+        str
+        | tuple[str, ...]
+        | list[str]
+        | tuple[float | tuple[float, ...] | list[float] | _np.ndarray, ...]
+        | _np.ndarray
+    ):
         """
         Transform points between two spatial reference systems.
 
@@ -147,11 +152,9 @@ class GriddedTransformer:
     source_srs: _pyproj.CRS | _lgrs_srs.GRS
     target_srs: _pyproj.CRS | _lgrs_srs.GRS
 
-    def has_inverse(self) -> bool:
-        ...
+    def has_inverse(self) -> bool: ...
 
-    def is_exact_same(self, other: _typing.Any) -> bool:
-        ...
+    def is_exact_same(self, other: _typing.Any) -> bool: ...
 
     @staticmethod
     def to_wkt() -> _typing.NoReturn:
@@ -159,6 +162,7 @@ class GriddedTransformer:
             "WKT does not support transformations involving gridded "
             "coordinate systems."
         )
+
     # End: `pyproj.Transformer` secondary counterparts.
 
 
@@ -172,14 +176,14 @@ class BaseTransformer(_abc.ABC):
     convenience, `.from_srs()` is extended to support equivalent calls to
     `pyproj.Transformer.from_crs()`.
     """
+
     from_crs = _pyproj.Transformer.from_crs
     from_pipeline = _pyproj.Transformer.from_pipeline
     from_proj = _pyproj.Transformer.from_proj
 
     @classmethod
     def from_srs(
-            cls, srs_from: _typing.Any, srs_to: _typing.Any,
-            *args, **kwargs
+        cls, srs_from: _typing.Any, srs_to: _typing.Any, *args, **kwargs
     ) -> GriddedTransformer | _pyproj.Transformer:
         """
         Make a Transformer for any combination of `CRS` and `GRS`.
@@ -215,9 +219,10 @@ class BaseTransformer(_abc.ABC):
         # Note: Allow `crs_from` and `crs_to` as aliases of `srs_from` and
         # `srs_to`.
         ...
+
+
 BaseTransformer.register(_pyproj.Transformer)
 BaseTransformer.register(GriddedTransformer)
-
 
 
 # endregion
