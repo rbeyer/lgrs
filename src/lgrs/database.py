@@ -10,13 +10,13 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
-##############################################################################
+###############################################################################
 # region> IMPORT
-##############################################################################
+###############################################################################
 # External.
 from __future__ import annotations
 import beartype as _beartype
@@ -36,25 +36,27 @@ import lgrs.exceptions as _exceptions
 import lgrs.srs.srs as _srs
 import lgrs.srs.wkt as _wkt
 
-
-
 # endregion
-##############################################################################
+###############################################################################
 # region> UTILITIES
-##############################################################################
+###############################################################################
 type _FloatIterable = _collections.abc.Iterable[float]
 
 _lunar_crs_long_name_pattern = _re.compile(
     "^(?P<num>[0-9]{2})?(?P<hemi>[NS])(?P<suffix>[*]*)$"
 )
 
+
 # Note: For unknown reason, `beartype` cannot resolve `int | None` and
 # raises an exception. Therefore, disable `beartype` for this class.
-@_beartype.beartype(conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0))
+@_beartype.beartype(
+    conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0)
+)
 class _LongNameParsed(_typing.NamedTuple):
     zone_number: int | None
     hemisphere: str
     suffix: str
+
 
 def _conform_latitudes(latitudes: _FloatIterable) -> list[float]:
     conformed = []
@@ -65,6 +67,7 @@ def _conform_latitudes(latitudes: _FloatIterable) -> list[float]:
             )
         conformed.append(lat)
     return conformed
+
 
 def _conform_longitudes(longitudes: _FloatIterable) -> list[float]:
     conformed = []
@@ -82,8 +85,9 @@ def _conform_longitudes(longitudes: _FloatIterable) -> list[float]:
         conformed.append(lon)
     return conformed
 
+
 def _ensure_float_iterable(
-        obj: float | _FloatIterable, *, convert_np: bool = True
+    obj: float | _FloatIterable, *, convert_np: bool = True
 ) -> tuple[bool, _FloatIterable]:
     if isinstance(obj, float | int):
         if convert_np and isinstance(obj, _np.number):
@@ -98,12 +102,17 @@ def _ensure_float_iterable(
         else:
             return (False, obj)
 
+
 @_functools.cache
 def _get_all_lunar_crs_long_names(
-        *, lps: bool = True, ltm: bool = True,
-        extended_ltm: bool = False, polar_ltm: bool = False,
-        prefer_ltm: bool = False, prefer_west_ltm: bool = False,
-        south: bool | None = None
+    *,
+    lps: bool = True,
+    ltm: bool = True,
+    extended_ltm: bool = False,
+    polar_ltm: bool = False,
+    prefer_ltm: bool = False,
+    prefer_west_ltm: bool = False,
+    south: bool | None = None,
 ) -> tuple[str, ...]:
     # Note: `prefer_*` included for call signature compatibility with
     # `_get_lunar_crs_long_names()` but are intentionally unused.
@@ -115,12 +124,16 @@ def _get_all_lunar_crs_long_names(
         suffix = ""
     if ltm and lps:
         lps_tuple = _get_all_lunar_crs_long_names(
-            ltm=False, extended_ltm=extended_ltm, polar_ltm=polar_ltm,
-            south=south
+            ltm=False,
+            extended_ltm=extended_ltm,
+            polar_ltm=polar_ltm,
+            south=south,
         )
         ltm_tuple = _get_all_lunar_crs_long_names(
-            lps=False, extended_ltm=extended_ltm, polar_ltm=polar_ltm,
-            south=south
+            lps=False,
+            extended_ltm=extended_ltm,
+            polar_ltm=polar_ltm,
+            south=south,
         )
         complete = lps_tuple + ltm_tuple
         return complete
@@ -142,12 +155,16 @@ def _get_all_lunar_crs_long_names(
         ltm_tuple = tuple(final_iter)
         return ltm_tuple
 
+
 def _get_lunar_crs_long_names(
-        *, conformed_latitudes: _FloatIterable,
-        conformed_longitudes: _FloatIterable,
-        extended_ltm: bool = False, polar_ltm: bool = False,
-        prefer_ltm: bool = False, prefer_south_ltm: bool = False,
-        prefer_west_ltm: bool = False
+    *,
+    conformed_latitudes: _FloatIterable,
+    conformed_longitudes: _FloatIterable,
+    extended_ltm: bool = False,
+    polar_ltm: bool = False,
+    prefer_ltm: bool = False,
+    prefer_south_ltm: bool = False,
+    prefer_west_ltm: bool = False,
 ) -> list[str]:
     # Determine LTM vs. LPS condition.
     if polar_ltm:
@@ -166,10 +183,10 @@ def _get_lunar_crs_long_names(
     lunar_crs_long_names = []
     for lat, lon in zip(conformed_latitudes, conformed_longitudes):
         if prefer_south_ltm:
-            hemi = ("N" if lat > 0 else "S")
+            hemi = "N" if lat > 0 else "S"
         else:
             # Note: This inequality is from M2025 code.
-            hemi = ("N" if lat >= 0 else "S")
+            hemi = "N" if lat >= 0 else "S"
         if is_in_ltm(lat):
             # Below: Eq. 13 of M2025. Zones are 1-indexed.
             zone_float = ((lon + 180) / (2 * _wkt.LTM_ZONE_HALF_WIDTH)) + 1
@@ -189,9 +206,13 @@ def _get_lunar_crs_long_names(
         lunar_crs_long_names.append(long_name)
     return lunar_crs_long_names
 
+
 def _grid_sample(
-        *, latitudes: tuple[float, float], longitudes: tuple[float, float],
-        lat_sample: int | float, lon_sample: int | float,
+    *,
+    latitudes: tuple[float, float],
+    longitudes: tuple[float, float],
+    lat_sample: int | float,
+    lon_sample: int | float,
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
     # Support wraparound for longitude but not latitude.
     lat1, lat2 = latitudes
@@ -214,7 +235,8 @@ def _grid_sample(
     # Sample in each dimension.
     samp_coords = []
     for sample, max_bound, sample_hint in (
-            (lat1, lat2, lat_sample), (lon1, lon2, lon_sample)
+        (lat1, lat2, lat_sample),
+        (lon1, lon2, lon_sample),
     ):
         samples = []
         if isinstance(sample_hint, float):
@@ -224,7 +246,7 @@ def _grid_sample(
                 sample += incr
         else:
             count = sample_hint
-            span = (max_bound - sample)
+            span = max_bound - sample
             incr = span / (count - 1)
             for _ in range(count - 1):
                 samples.append(sample)
@@ -235,6 +257,7 @@ def _grid_sample(
     # Construct and return iterable.
     result = tuple(zip(*_itertools.product(*samp_coords)))
     return result
+
 
 def _parse_lunar_crs_long_name(long_name: str) -> _LongNameParsed:
     match = _lunar_crs_long_name_pattern.search(long_name)
@@ -252,11 +275,10 @@ def _parse_lunar_crs_long_name(long_name: str) -> _LongNameParsed:
     return _LongNameParsed(zone_num, hemi, suffix)
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> INFO CLASS
-##############################################################################
+###############################################################################
 class LunarCrsInfo(_pyproj_database.CRSInfo):
     """
     Subclass of `pyproj_database.CRSInfo`.
@@ -287,7 +309,8 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     --------
     pyproj_database.CRSInfo : Parent class, with additional documentation.
     """
-    #* Basic behavior. ------------------------------------------------
+
+    # * BASIC BEHAVIOR. ───────────────────────────────────────────────
     # Below: Assigned by `._from_long_name()`. All instances should be
     # created by that factory function.
     _long_name: str
@@ -300,11 +323,11 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             0 if self.is_lps else 1,
             0 if self.hemisphere == "N" else 1,
             self.ltm_zone,
-            self.ltm_limit
+            self.ltm_limit,
         )
         return tup
 
-    #* Instantiation. -------------------------------------------------
+    # * INSTANTIATION. ────────────────────────────────────────────────
     # Note: `beartype` errors if using `typing.Self` as return hint,
     # perhaps because base type is `tuple`.
     @classmethod
@@ -316,9 +339,9 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
 
         # Precompute latitudinal bounds.
         if hemi == "N":
-            sign = 1.
+            sign = 1.0
         else:
-            sign = -1.
+            sign = -1.0
         match suffix:
             case "":
                 trans_lat = sign * _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
@@ -333,11 +356,11 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         if zone_num is None:
             area_name = f"LPS {'South' if hemi == "S" else 'North'}"
             area_of_use = _pyproj_aoi.AreaOfUse(
-                west=-180.,
-                south=-90. if hemi == "S" else trans_lat,
-                east=180.,
-                north=90. if hemi == "N" else trans_lat,
-                name=f"Moon - {area_name}"
+                west=-180.0,
+                south=-90.0 if hemi == "S" else trans_lat,
+                east=180.0,
+                north=90.0 if hemi == "N" else trans_lat,
+                name=f"Moon - {area_name}",
             )
             # TODO: LPS has a suffix specifying the variant. Should we
             #  suffix with the central scale factor, as done?
@@ -348,13 +371,13 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         else:
             # TODO: Decide if names should encode same info as `suffix`.
             area_name = f"LTM zone {zone_num}{hemi}"
-            west_lon = zone_num * (2 * _wkt.LTM_ZONE_HALF_WIDTH) - 188.
+            west_lon = zone_num * (2 * _wkt.LTM_ZONE_HALF_WIDTH) - 188.0
             area_of_use = _pyproj_aoi.AreaOfUse(
                 west=west_lon,
-                south=trans_lat if hemi == "S" else 0.,
+                south=trans_lat if hemi == "S" else 0.0,
                 east=west_lon + (2 * _wkt.LTM_ZONE_HALF_WIDTH),
-                north=trans_lat if hemi == "N" else 0.,
-                name=f"Moon - {area_name}"
+                north=trans_lat if hemi == "N" else 0.0,
+                name=f"Moon - {area_name}",
             )
             proj_method_name = "Transverse Mercator"
         auth_name = ""
@@ -363,9 +386,13 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         deprecated = False
         type_ = _pyproj_database.PJType.PROJECTED_CRS
         info = LunarCrsInfo(
-            auth_name=auth_name, code=code, name=name, type=type_,
-            deprecated=deprecated, area_of_use=area_of_use,
-            projection_method_name=proj_method_name
+            auth_name=auth_name,
+            code=code,
+            name=name,
+            type=type_,
+            deprecated=deprecated,
+            area_of_use=area_of_use,
+            projection_method_name=proj_method_name,
         )
 
         # Attach useful attributes and return.
@@ -373,18 +400,18 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         info._long_name_parsed = long_name_parsed
         return info
 
-    #* Public data attributes. ----------------------------------------
+    # * PUBLIC DATA ATTRIBUTES. ───────────────────────────────────────
     @_functools.cached_property
     def hemisphere(self) -> str:
         return self._long_name_parsed.hemisphere
 
     @_functools.cached_property
     def is_lps(self) -> bool:
-        return (self._long_name_parsed.zone_number is None)
+        return self._long_name_parsed.zone_number is None
 
     @_functools.cached_property
     def is_ltm(self) -> bool:
-        return (not self.is_lps)
+        return not self.is_lps
 
     @_functools.cached_property
     def lps_hemisphere(self) -> str | None:
@@ -402,7 +429,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             case "*":
                 limit = _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
             case "**":
-                limit = 90.
+                limit = 90.0
             case _:
                 raise TypeError(f"`suffix` is not recognized: {suffix!r}")
         return limit
@@ -411,7 +438,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     def ltm_zone(self) -> str | None:
         return self._long_name_parsed.zone_number
 
-    #* Public methods. ------------------------------------------------
+    # * PUBLIC METHODS. ───────────────────────────────────────────────
     # TODO: Seriously consider exposing "long name" (by another name,
     #  perhaps "nickname" or "shorthand") as an attribute of `CRS` and
     #  also support some way for user to use in instantiation, such as
@@ -474,19 +501,18 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         """
         return info._sort_tuple
 
+
 # Note: Unfortunately, if we want to replicate
 # `pyproj.query_utm_crs_info()` as closely as possible, we'd need to
 # implement something like `pyproj.database.CRSInfo` (stub below) and
 # `pyproj.database.PJType`, possibly more.
-class SRSInfo(_pyproj_database.CRSInfo):
-    ...
-
+class SRSInfo(_pyproj_database.CRSInfo): ...
 
 
 # endregion
-##############################################################################
+###############################################################################
 # region> QUERY FUNCTIONS
-##############################################################################
+###############################################################################
 # Preferred option, which extends support to LPS and supports querying
 # by point(s), which will be needed to support `GriddedTransform`
 # (though `GriddedTransform` might use some intermediate `np.ndarray`
@@ -495,14 +521,21 @@ class SRSInfo(_pyproj_database.CRSInfo):
 # that has useful (but possibly empty) subsets accessible as `.lps`,
 # `.ltm`, and `.ltm_extended`.
 def query_lunar_crs_info(
-        datum_name: str | None = _wkt.DATUM_NAME,
-        pj_types: _pyproj.enums.PJType | _collections.abc.Iterable[_pyproj.enums.PJType] | None = None,
-        area_of_interest: _pyproj_aoi.AreaOfInterest | None = None,
-        contains: bool = False, *,
-        primary_ltm: bool = True, extended_ltm: bool = False,
-        polar_ltm: bool = False, inclusive_bounds: bool = False,
-        latitude: float | _collections.abc.Iterable[float] | None = None,
-        longitude: float | _collections.abc.Iterable[float] | None = None
+    datum_name: str | None = _wkt.DATUM_NAME,
+    pj_types: (
+        _pyproj.enums.PJType
+        | _collections.abc.Iterable[_pyproj.enums.PJType]
+        | None
+    ) = None,
+    area_of_interest: _pyproj_aoi.AreaOfInterest | None = None,
+    contains: bool = False,
+    *,
+    primary_ltm: bool = True,
+    extended_ltm: bool = False,
+    polar_ltm: bool = False,
+    inclusive_bounds: bool = False,
+    latitude: float | _collections.abc.Iterable[float] | None = None,
+    longitude: float | _collections.abc.Iterable[float] | None = None,
 ) -> list[LunarCrsInfo]:
     """
     Query for LPS and LTM CRS information.
@@ -567,29 +600,35 @@ def query_lunar_crs_info(
     match (latitude, longitude).count(None):
         case 0:
             if area_of_interest:
-                raise TypeError("Cannot specify both `area_of_interest` and "
-                                "`latitude`, `longitude`.")
+                raise TypeError(
+                    "Cannot specify both `area_of_interest` and "
+                    "`latitude`, `longitude`."
+                )
             _, raw_lats = _ensure_float_iterable(latitude)
             _, raw_lons = _ensure_float_iterable(longitude)
         case 1:
             raise TypeError(
-                "Must specify both `latitude` and `longitude`, or "
-                "neither."
+                "Must specify both `latitude` and `longitude`, or " "neither."
             )
         case 2:
             if area_of_interest:
-                raw_lats = (area_of_interest.south_lat_degree,
-                            area_of_interest.north_lat_degree)
-                raw_lons = (area_of_interest.west_lon_degree,
-                            area_of_interest.east_lon_degree)
+                raw_lats = (
+                    area_of_interest.south_lat_degree,
+                    area_of_interest.north_lat_degree,
+                )
+                raw_lons = (
+                    area_of_interest.west_lon_degree,
+                    area_of_interest.east_lon_degree,
+                )
                 if not contains:
                     # Note: This grid sampling is guaranteed to sample
                     # all relevant LPS and LTM zones for all inputs.
                     # *REASSIGNMENTs*
                     raw_lats, raw_lons = _grid_sample(
-                        latitudes=raw_lats, longitudes=raw_lons,
+                        latitudes=raw_lats,
+                        longitudes=raw_lons,
                         lat_sample=4,
-                        lon_sample=2.0 * _wkt.LTM_ZONE_HALF_WIDTH
+                        lon_sample=2.0 * _wkt.LTM_ZONE_HALF_WIDTH,
                     )
             else:
                 has_spatial_filter = False
@@ -601,7 +640,7 @@ def query_lunar_crs_info(
         conformed_lons = _conform_longitudes(raw_lons)
         latlon_kwargs = {
             "conformed_latitudes": conformed_lats,
-            "conformed_longitudes": conformed_lons
+            "conformed_longitudes": conformed_lons,
         }
     else:
         get_lunar_crs_long_names = _get_all_lunar_crs_long_names
@@ -629,14 +668,16 @@ def query_lunar_crs_info(
         # Note: `prefer_ltm` and `prefer_south_ltm` can be iterated in
         # parallel, because they apply at disjoint latitudes: the LTM/
         # LPS boundary and the equator, respectively.
-        for this_prefer_ltm, this_prefer_south_ltm in zip(prefer_ltms,
-                                                          prefer_south_ltms):
+        for this_prefer_ltm, this_prefer_south_ltm in zip(
+            prefer_ltms, prefer_south_ltms
+        ):
             for this_prefer_west_ltm in prefer_west_ltms:
                 crs_long_names = get_lunar_crs_long_names(
                     prefer_ltm=this_prefer_ltm,
                     prefer_south_ltm=this_prefer_south_ltm,
                     prefer_west_ltm=this_prefer_west_ltm,
-                    **latlon_kwargs, **ltm_kwargs
+                    **latlon_kwargs,
+                    **ltm_kwargs,
                 )
                 inner_crs_long_names.append(crs_long_names)
         if contains:
@@ -657,7 +698,7 @@ def query_lunar_crs_info(
                 assert len(inner_crs_long_names) == 1
                 these_unique_crs_long_names = set(crs_long_names)
                 try:
-                    common_crs_long_name, = these_unique_crs_long_names
+                    (common_crs_long_name,) = these_unique_crs_long_names
                 except ValueError:
                     # *REASSIGNMENT*
                     inner_crs_long_names = ((),)
@@ -669,16 +710,14 @@ def query_lunar_crs_info(
         )
 
     # Treat special case of all polar LTM zones meeting at the pole.
-    if (inclusive_bounds
-        and has_spatial_filter
-        and polar_ltm):
+    if inclusive_bounds and has_spatial_filter and polar_ltm:
         conformed_lat_set = set(conformed_lats)
         if contains:
-            has_np = (conformed_lat_set == {90})
-            has_sp = (conformed_lat_set == {-90})
+            has_np = conformed_lat_set == {90}
+            has_sp = conformed_lat_set == {-90}
         else:
-            has_np = (90 in conformed_lat_set)
-            has_sp = (-90 in conformed_lat_set)
+            has_np = 90 in conformed_lat_set
+            has_sp = -90 in conformed_lat_set
         kwargs2 = {"polar_ltm": True}
         if has_np and has_sp:
             kwargs2["south"] = None
@@ -700,12 +739,9 @@ def query_lunar_crs_info(
     if pj_types is not None:
         pj_type_set = set(pj_types)
         # *REASSIGNMENT*
-        infos = [info
-                 for info in infos
-                 if info.type in pj_type_set]
+        infos = [info for info in infos if info.type in pj_type_set]
     infos.sort(key=LunarCrsInfo.sorter)
     return infos
-
 
 
 # endregion

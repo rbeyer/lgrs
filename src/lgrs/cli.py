@@ -10,13 +10,13 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
-##############################################################################
+###############################################################################
 # region> IMPORT
-##############################################################################
+###############################################################################
 # External.
 import functools as _functools
 import inspect as _inspect
@@ -30,23 +30,23 @@ import typing as _typing
 # Internal.
 import easy as _easy
 
-
-
 # endregion
-##############################################################################
+###############################################################################
 # region> INITIATE CLI SUPPORT
-##############################################################################
-_app = _typer.Typer(add_completion=False, no_args_is_help=True,
-                    pretty_exceptions_show_locals=True)
-
+###############################################################################
+_app = _typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    pretty_exceptions_show_locals=True,
+)
 
 
 # endregion
-##############################################################################
+###############################################################################
 # region> UTILITIES
-##############################################################################
+###############################################################################
 def _prep_for_cli(
-        func: _types.FunctionType, examples: str
+    func: _types.FunctionType, examples: str
 ) -> _types.FunctionType:
     # Extract parameter info from numpy-styled docstring.
     # Note: Avoid using `numpydoc` module, due to dependencies.
@@ -54,8 +54,8 @@ def _prep_for_cli(
     params_block_match = params_pattern.search(func.__doc__)
     param_name_to_desc = {}
     for match in _re.finditer(
-            r"(?m)^(?P<pname>[a-z_]+) : .*\n(?P<pdesc>(    .*\n)+)",
-            params_block_match.group()
+        r"(?m)^(?P<pname>[a-z_]+) : .*\n(?P<pdesc>(    .*\n)+)",
+        params_block_match.group(),
     ):
         param_name = match.group("pname")
         raw_desc = match.group("pdesc")
@@ -82,9 +82,7 @@ def _prep_for_cli(
     no_params_doc = _re.sub(params_pattern, "", old_doc, count=1)
     examples_pattern = _re.compile(r"(?ms)^Examples *$.*?((^ *$)|\Z)")
     excerpted_doc = _re.sub(examples_pattern, "", no_params_doc, count=1)
-    clean_doc = _re.sub(
-        r"(?m)(^ *\n){2,}", r"\n", excerpted_doc
-    ).strip()
+    clean_doc = _re.sub(r"(?m)(^ *\n){2,}", r"\n", excerpted_doc).strip()
 
     # Add new examples to docstring.
     populated_examples = examples.format(
@@ -95,8 +93,11 @@ def _prep_for_cli(
 
     # Create a (near) copy of `func`.
     new = _types.FunctionType(
-        func.__code__, func.__globals__, func.__name__,
-        func.__defaults__, func.__closure__
+        func.__code__,
+        func.__globals__,
+        func.__name__,
+        func.__defaults__,
+        func.__closure__,
     )
     _functools.update_wrapper(new, func)
     del new.__wrapped__
@@ -109,11 +110,10 @@ def _prep_for_cli(
     return out
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> COMMANDS
-##############################################################################
+###############################################################################
 from_lps_or_ltm = _prep_for_cli(
     _easy.from_lps_or_ltm,
     """
@@ -122,18 +122,16 @@ from_lps_or_ltm = _prep_for_cli(
     {cmd} 488590 608480
     (zone="A", area="ZS", easting=13590, northing=8480,
      string="AZS1359008480")
-    """
+    """,
 )
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> FINALIZE CLI SUPPORT
-##############################################################################
+###############################################################################
 if __name__ == "__main__":
     _app()
-
 
 
 # endregion

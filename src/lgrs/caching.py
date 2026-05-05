@@ -10,35 +10,36 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
-##############################################################################
+###############################################################################
 # region> IMPORT
-##############################################################################
+###############################################################################
 import abc as _abc
 import collections as _collections
 import functools as _functools
 import typing as _typing
 import weakref as _weakref
 
-
-
 # endregion
-##############################################################################
+###############################################################################
 # region> INTRA-MODULE USE
-##############################################################################
+###############################################################################
 _CACHING_IS_ENABLED: bool = True
 _NOT_FOUND = object()
 
 # TODO: Reimplement coordinate caching to be self clearing (on garbage
 #  collection), as originally intended.
 _cache: dict = {}
-_weak_cache: _weakref.WeakKeyDictionary[_typing.Any, dict[str, _typing.Any]] = _weakref.WeakKeyDictionary()
+_weak_cache: _weakref.WeakKeyDictionary[
+    _typing.Any, dict[str, _typing.Any]
+] = _weakref.WeakKeyDictionary()
+
 
 def _query_cache(
-        func_or_cls: _collections.abc.Callable | type, *args, **kwargs
+    func_or_cls: _collections.abc.Callable | type, *args, **kwargs
 ) -> tuple[_collections.abc.Hashable, _typing.Any]:
     # Abort if caching is disabled.
     default_result = (None, _NOT_FOUND)
@@ -65,9 +66,12 @@ def _query_cache(
             raise e
     return (key, cached)
 
+
 def _query_weak_cache(
-        instance: _collections.abc.Hashable, *,
-        key: str, default: _typing.Any = _NOT_FOUND
+    instance: _collections.abc.Hashable,
+    *,
+    key: str,
+    default: _typing.Any = _NOT_FOUND,
 ) -> _typing.Any:
     if _CACHING_IS_ENABLED:
         cached_dict = _weak_cache.get(instance, default)
@@ -78,13 +82,16 @@ def _query_weak_cache(
     else:
         return default
 
-def _store_to_cache(key: _collections.abc.Hashable, value: _typing.Any) -> None:
+
+def _store_to_cache(
+    key: _collections.abc.Hashable, value: _typing.Any
+) -> None:
     if key is not None:
         _cache[key] = value
 
+
 def _store_to_weak_cache(
-        instance: _collections.abc.Hashable, *,
-        key: str, value: _typing.Any
+    instance: _collections.abc.Hashable, *, key: str, value: _typing.Any
 ) -> None:
     if not _CACHING_IS_ENABLED:
         return
@@ -95,11 +102,10 @@ def _store_to_weak_cache(
     cached_dict[key] = value
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> INTRA-PACKAGE USE
-##############################################################################
+###############################################################################
 class _MetaMultiton(type):
     """
     Metaclass to support optional caching.
@@ -120,6 +126,7 @@ class _MetaMultiton(type):
     >>> z is x
     False
     """
+
     def __call__(cls, *args, **kwargs) -> _typing.Any:
         key, cached = _query_cache(cls, *args, **kwargs)
         if cached is not _NOT_FOUND:
@@ -128,6 +135,7 @@ class _MetaMultiton(type):
         cls.__init__(new, *args, **kwargs)
         _store_to_cache(key, new)
         return new
+
 
 class _AbstractMetaMultiton(_abc.ABCMeta):
     """
@@ -139,10 +147,12 @@ class _AbstractMetaMultiton(_abc.ABCMeta):
     --------
     _MetaMultiton : Concrete equivalent, with examples.
     """
+
     __call__ = _MetaMultiton.__call__
 
+
 def _optionally_cache(
-        func: _collections.abc.Callable
+    func: _collections.abc.Callable,
 ) -> _collections.abc.Callable:
     """
     Decorate a function to optionally cache its results.
@@ -173,6 +183,8 @@ def _optionally_cache(
     >>> z is x
     False
     """
+
+    # Wrap function.
     @_functools.wraps(func)
     def wrapped(*args, **kwargs) -> _typing.Any:
         key, cached = _query_cache(func, *args, **kwargs)
@@ -181,14 +193,15 @@ def _optionally_cache(
         result = func(*args, **kwargs)
         _store_to_cache(key, result)
         return result
+
+    # Return wrapped function.
     return wrapped
 
 
-
 # endregion
-##############################################################################
+###############################################################################
 # region> PUBLIC USE
-##############################################################################
+###############################################################################
 def enable_caching(enable: bool = True, *, clear: bool = False) -> None:
     """
     Enable or disable caching, and optionally clear the cache.
@@ -206,7 +219,6 @@ def enable_caching(enable: bool = True, *, clear: bool = False) -> None:
     if clear:
         _cache.clear()
         _weak_cache.clear()
-
 
 
 # endregion

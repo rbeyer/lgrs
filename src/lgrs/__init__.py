@@ -10,24 +10,26 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
 __author__ = """lgrs Developers"""
 __email__ = "rbeyer@seti.org"  # TODO: Decide which, both?
 __version__ = "0.1.0"
 
-# Enable type-checking at package level.
+# * ENABLE TYPE-CHECKING AT PACKAGE LEVEL. ───────────────────────────
 import beartype.claw
+
 beartype.claw.beartype_this_package(
     conf=beartype.BeartypeConf(is_pep484_tower=True)
 )
 del beartype
 
-# Bubble-up most useful classes and functions.
+# * BUBBLE-UP MOST USEFUL CLASSES AND FUNCTIONS. ──────────────────────
 # Note: Analogous to `pyproj`:
 from lgrs.srs.srs import CRS, GRS, make_lunar_crs
+
 # Note: Unlike in `pyproj`:
 from lgrs.caching import enable_caching
 from lgrs.database import query_lunar_crs_info

@@ -69,3 +69,7 @@ optional_value = "released"
 filename = "src/lgrs/__init__.py"
 search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
+
+[tool.black]
+line-length = 79
+force-exclude = "LGRS"
