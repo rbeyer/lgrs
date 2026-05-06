@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "lgrs"
 description = "The lgrs package is software to support the Lunar Grid Reference System."
 authors = [
-    {name = "Ethan Schaefer", email = "eschaefer@seti.org"},
-    {name = "Ross Beyer", email = "rbeyer@seti.org"}
+    { name = "Ethan Schaefer", email = "eschaefer@seti.org" },
+    { name = "Ross Beyer", email = "rbeyer@seti.org" }
 ]
 dynamic = ["version", "readme"]
 
@@ -36,11 +36,11 @@ namespaces = false
 
 [tool.setuptools.dynamic]
 # version = {attr = "synthterrain.__version__"}
-version = {attr = "lgrs.__version__"}
-readme = {file= "README.rst"}
+version = { attr = "lgrs.__version__" }
+readme = { file = "README.rst" }
 
 [tool.pytest.ini_options]
-testpaths = ["tests",]
+testpaths = ["tests", ]
 
 
 [tool.bumpversion]

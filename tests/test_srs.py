@@ -28,7 +28,6 @@ import lgrs.srs.srs as srs
 import lgrs.srs.wkt as wkt
 
 
-
 # endregion
 ###############################################################################
 # region> TESTS
@@ -39,9 +38,14 @@ class TestDirectCrsGeneration(unittest.TestCase):
         caching.enable_caching(False, clear=True)
 
     def check_crs_generation(
-            self, *, proj_crs: crs.CRS,
-            north: float, south: float, east: float, west: float,
-            method_name_part: str
+        self,
+        *,
+        proj_crs: crs.CRS,
+        north: float,
+        south: float,
+        east: float,
+        west: float,
+        method_name_part: str,
     ) -> None:
         self.assertIsInstance(proj_crs, crs.CRS)
         self.assertEqual(proj_crs.area_of_use.north, north)
@@ -60,23 +64,24 @@ class TestDirectCrsGeneration(unittest.TestCase):
         lps_n = srs.make_lunar_crs("N")
         self.check_crs_generation(
             proj_crs=lps_n,
-            north=90.,
-            south=80.,
-            east=180.,
-            west=-180.,
-            method_name_part="Stereographic"
+            north=90.0,
+            south=80.0,
+            east=180.0,
+            west=-180.0,
+            method_name_part="Stereographic",
         )
 
     def test_ltm_generation(self) -> None:
         ltm_1s = srs.make_lunar_crs("1S")
         self.check_crs_generation(
             proj_crs=ltm_1s,
-            north=0.,
-            south=-80.,
-            east=-172.,
-            west=-180.,
-            method_name_part="transverse Mercator"
+            north=0.0,
+            south=-80.0,
+            east=-172.0,
+            west=-180.0,
+            method_name_part="transverse Mercator",
         )
+
 
 class TestDirectCrsInterconversion(unittest.TestCase):
 
@@ -84,20 +89,29 @@ class TestDirectCrsInterconversion(unittest.TestCase):
         caching.enable_caching(False, clear=True)
 
     def check_interconversion(
-            self, *, proj_crs: crs.CRS, in_lat: float, in_lon: float,
-            in_easting: float, in_northing: float
+        self,
+        *,
+        proj_crs: crs.CRS,
+        in_lat: float,
+        in_lon: float,
+        in_easting: float,
+        in_northing: float,
     ) -> None:
         geo_crs = proj_crs.geodetic_crs
         transformer_from_geo = pyproj.Transformer.from_crs(geo_crs, proj_crs)
         transformer_to_geo = pyproj.Transformer.from_crs(proj_crs, geo_crs)
-        out_easting, out_northing = transformer_from_geo.transform(in_lat, in_lon)
+        out_easting, out_northing = transformer_from_geo.transform(
+            in_lat, in_lon
+        )
         # Note: Expected disparity is "very small" but precise
         # magnitudes of `very_small_projected` and `very_small_geo` are
         # not rigorous.
         very_small_projected = 1e-9
         self.assertLess(abs(out_easting - in_easting), very_small_projected)
         self.assertLess(abs(out_northing - in_northing), very_small_projected)
-        out_lat, out_lon = transformer_to_geo.transform(in_easting, in_northing)
+        out_lat, out_lon = transformer_to_geo.transform(
+            in_easting, in_northing
+        )
         very_small_geo = 1e-12
         self.assertLess(abs(out_lat - in_lat), very_small_geo)
         self.assertLess(abs(out_lon - in_lon), very_small_geo)
@@ -108,9 +122,10 @@ class TestDirectCrsInterconversion(unittest.TestCase):
         # `in_lat` and `in_lon` as inputs.
         self.check_interconversion(
             proj_crs=lps_s,
-            in_lat=-87.6, in_lon=54.3,
+            in_lat=-87.6,
+            in_lon=54.3,
             in_easting=558754.2137973069,
-            in_northing=542219.1855347467
+            in_northing=542219.1855347467,
         )
 
     def test_ltm_interconversion(self) -> None:
@@ -119,10 +134,12 @@ class TestDirectCrsInterconversion(unittest.TestCase):
         # `in_lat` and `in_lon` as inputs.
         self.check_interconversion(
             proj_crs=ltm_45n,
-            in_lat=45.6, in_lon=178.9,
+            in_lat=45.6,
+            in_lon=178.9,
             in_easting=311464.70966367936,
-            in_northing=1382473.8696073617
+            in_northing=1382473.8696073617,
         )
+
 
 class TestCrsCaching(unittest.TestCase):
 
@@ -141,7 +158,6 @@ class TestCrsCaching(unittest.TestCase):
         ltm_23s = srs.make_lunar_crs("23S")
         also_ltm_23s = srs.make_lunar_crs(proj="LTM", zone=23, south=True)
         self.assertIs(ltm_23s, also_ltm_23s)
-
 
 
 # endregion
