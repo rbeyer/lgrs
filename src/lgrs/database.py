@@ -168,16 +168,19 @@ def _get_lunar_crs_long_names(
 ) -> list[str]:
     # Determine LTM vs. LPS condition.
     if polar_ltm:
-        is_in_ltm = lambda test_lat: True
+        def is_in_ltm(test_lat: float) -> bool:
+            return True
     else:
         if extended_ltm:
             ltm_max_abs_lat = _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
         else:
             ltm_max_abs_lat = _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
         if prefer_ltm:
-            is_in_ltm = lambda test_lat: abs(test_lat) <= ltm_max_abs_lat
+            def is_in_ltm(test_lat: float) -> bool:
+                return abs(test_lat) <= ltm_max_abs_lat
         else:
-            is_in_ltm = lambda test_lat: abs(test_lat) < ltm_max_abs_lat
+            def is_in_ltm(test_lat: float) -> bool:
+                return abs(test_lat) < ltm_max_abs_lat
 
     # Evaluate each lat-lon pair.
     lunar_crs_long_names = []
