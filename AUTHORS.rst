@@ -11,3 +11,4 @@ Contributors
 ------------
 
 * Ross Beyer, SETI Institute
+* Mark McClernan, United States Geological Survey
