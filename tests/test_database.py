@@ -21,12 +21,12 @@
 import itertools
 import unittest
 
+# Internal.
+import lgrs.database as database
+
 # External.
 import numpy as np
 import pyproj.aoi
-
-# Internal.
-import lgrs.database as database
 
 
 # endregion
