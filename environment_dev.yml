@@ -4,8 +4,10 @@ channels:
   - defaults
 dependencies:
   - black
+  - build
   - bump-my-version
   - flake8
+  - flake8-pyproject
   - icecream
   - ipympl
   - jupyterlab
