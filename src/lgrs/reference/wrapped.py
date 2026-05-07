@@ -35,9 +35,10 @@ example. Conversely, interconversion between LGRS and ACC is exact.
 ###############################################################################
 # region> IMPORT
 ###############################################################################
-# External.
+# Special.
 from __future__ import annotations
 
+# Standard.
 import contextlib as _contextlib
 import io as _io
 import sys as _sys

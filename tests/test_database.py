@@ -17,12 +17,16 @@
 ###############################################################################
 # region> IMPORT
 ###############################################################################
+# Standard.
 import itertools
 import unittest
 
-import lgrs.database as database
+# External.
 import numpy as np
 import pyproj.aoi
+
+# Internal.
+import lgrs.database as database
 
 
 # endregion

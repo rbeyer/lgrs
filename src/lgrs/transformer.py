@@ -17,10 +17,11 @@
 ###############################################################################
 # region> IMPORT
 ###############################################################################
-# External.
+# Standard.
 import abc as _abc
 import typing as _typing
 
+# External.
 import numpy as _np
 import pyproj as _pyproj
 from pyproj import aoi as _pyproj_aoi
