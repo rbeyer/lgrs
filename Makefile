@@ -57,25 +57,22 @@ clean-test: ## remove test and coverage artifacts
 	rm -fr test-resources
 
 lint/flake8: ## check style with flake8
-	flake8 src/python/synthterrain tests/python/
+	flake8 src/lgrs tests
 
 lint/black: ## check style with black
-	black --check src/python/synthterrain tests
+	black --check src/lgrs tests
 
 lint/ufmt: ## check format with ufmt
-	ufmt check src/python/synthterrain
-	ufmt check tests/python
+	ufmt check src/lgrs
+	ufmt check tests
 
 lint: lint/flake8 lint/black lint/ufmt
 
 test: ## run tests quickly with the default Python
 	pytest -s
 
-test-all: ## run tests on every Python version with tox
-	tox
-
 coverage: ## check code coverage quickly with the default Python
-	coverage run --source src/python/synthterrain -m pytest
+	coverage run --source src/lgrs -m pytest
 	coverage report -m
 	coverage html
 	$(BROWSER) htmlcov/index.html
