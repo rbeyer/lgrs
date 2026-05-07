@@ -23,12 +23,13 @@ import inspect as _inspect
 import pathlib as _pathlib
 import re as _re
 import textwrap as _textwrap
-import typer as _typer
 import types as _types
 import typing as _typing
 
+import typer as _typer
+
 # Internal.
-import easy as _easy
+import lgrs.easy as _easy
 
 # endregion
 ###############################################################################
@@ -86,7 +87,10 @@ def _prep_for_cli(
 
     # Add new examples to docstring.
     populated_examples = examples.format(
-        cmd=f"$ python {_pathlib.Path(__file__).name} {func.__name__.replace('_', '-')}"
+        cmd=(
+            f"$ python {_pathlib.Path(__file__).name} "
+            f"{func.__name__.replace('_', '-')}"
+        )
     )
     clean_examples = _textwrap.dedent(populated_examples).strip()
     new_doc = clean_doc.strip() + "\n\n" + clean_examples

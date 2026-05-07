@@ -33,15 +33,17 @@ True
 ###############################################################################
 # External.
 from __future__ import annotations
+
 import abc as _abc
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
 import math as _math
-import pyproj as _pyproj
-import regex as _regex
 import types as _types
 import typing as _typing
+
+import pyproj as _pyproj
+import regex as _regex
 
 # Internal.
 import lgrs.caching as _caching
@@ -335,8 +337,8 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         if self.polar_ltm:
             if self.prefer_lps or self.extended_ltm:
                 raise _exceptions.MalformedCoordinate(
-                    "If `polar_ltm` is `True`, `prefer_lps` and `extended_ltm` "
-                    "must be `False` (or `None`)."
+                    "If `polar_ltm` is `True`, `prefer_lps` and "
+                    "`extended_ltm` must be `False` (or `None`)."
                 )
 
     _validate_prefer_lps = _return_none
@@ -400,7 +402,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
           ...
         lgrs.exceptions.MalformedCoordinate:
           ...
-        """
+        """  # noqa: E501
 
         # Resolve new initialization kwargs.
         new_init_kwargs = self._init_kwargs.copy()
@@ -582,8 +584,8 @@ class BaseCoordinate(_BaseCoordinate):
 
         Use this method to validate the instance or confirm that it has already
         been validated. Note that validating at initialization instead is
-        generally recommended, as doing so is faster and avoids creating invalid
-        instances.
+        generally recommended, as doing so is faster and avoids creating
+        invalid instances.
 
         Parameters
         ----------
@@ -873,7 +875,8 @@ class BaseCoordinate(_BaseCoordinate):
         constraints: bool = False,
     ) -> bool:
         """
-        Test whether two coordinates are equal, optionally including constraints.
+        Test whether two coordinates are equal, optionally including
+        constraints.
 
         Note that::
 
@@ -892,9 +895,9 @@ class BaseCoordinate(_BaseCoordinate):
         error : bool, default=False
             Whether to raise a descriptive error rather than return `False`.
         constraints : bool, default=False
-            Whether to include constraints when evaluating equality. If `False`,
-            only coordinate values are compared. If `True`, each constraint is
-            also compared.
+            Whether to include constraints when evaluating equality. If
+            `False`, only coordinate values are compared. If `True`, each
+            constraint is also compared.
 
         Returns
         -------
@@ -1153,16 +1156,16 @@ class BaseCoordinate(_BaseCoordinate):
         """
         Transform `self` to the specified coordinate type.
 
-        This is a convenience function to call one or two `._to_*()`s in series.
-        See Examples.
+        This is a convenience function to call one or two `._to_*()`s in
+        series. See Examples.
 
         Parameters
         ----------
         typ : a BaseCoordinate subclass
             The coordinate type to which `self` should be converted.
         any_system : bool, default=False
-            Whether to allow the output coordinate to be from either system (LPS
-            or LTM).
+            Whether to allow the output coordinate to be from either system
+            (LPS or LTM).
 
         Returns
         -------
@@ -1201,7 +1204,7 @@ class BaseCoordinate(_BaseCoordinate):
         and Transform 2 is equivalent to::
 
             lat_lon_point.to_lgrs()
-        """
+        """  # noqa: E501
         force_system, convert = self._get_conversion_sequence(typ)
         if (
             not any_system
@@ -1221,8 +1224,8 @@ class BaseCoordinate(_BaseCoordinate):
         """
         Transform coordinate to `LpsAccBox` or `LtmAccBox`.
 
-        The type of `out` is determined by the combination of `self.constraints`
-        and the location of `self` on the Moon.
+        The type of `out` is determined by the combination of
+        `self.constraints` and the location of `self` on the Moon.
 
         `out` is not validated with this call but should be valid if `self` is
         valid.
@@ -1254,8 +1257,8 @@ class BaseCoordinate(_BaseCoordinate):
         """
         Transform coordinate to `LpsLgrsBox` or `LtmLgrsBox`.
 
-        The type of `out` is determined by the combination of `self.constraints`
-        and the location of `self` on the Moon.
+        The type of `out` is determined by the combination of
+        `self.constraints` and the location of `self` on the Moon.
 
         `out` is not validated with this call but should be valid if `self` is
         valid.
@@ -1300,8 +1303,8 @@ class BaseCoordinate(_BaseCoordinate):
         """
         Transform coordinate to `LpsPoint` or `LtmPoint`.
 
-        The type of `out` is determined by the combination of `self.constraints`
-        and the location of `self` on the Moon.
+        The type of `out` is determined by the combination of
+        `self.constraints` and the location of `self` on the Moon.
 
         `out` is not validated with this call but should be valid if `self` is
         valid.
@@ -1498,7 +1501,7 @@ class LatLonPoint(PointCoordinate):
     >>> latlon_point = LatLonPoint(45, 182)  # Example 5
     >>> latlon_point.longitude == -178  # Conformed.
     True
-    """
+    """  # noqa: E501
 
     # * FIELDS AND VALIDATION. ────────────────────────────────────────
     latitude: float
@@ -1877,8 +1880,8 @@ class BoxCoordinate(BaseCoordinate):
         Returns
         -------
         new : BoxCoordinate
-            The new box coordinate instance. The type is determined by the call.
-            See Examples.
+            The new box coordinate instance. The type is determined by the
+            call. See Examples.
 
         Examples
         --------
@@ -1900,7 +1903,7 @@ class BoxCoordinate(BaseCoordinate):
           ...
         lgrs.exceptions.MalformedCoordinate:
           ...
-        """
+        """  # noqa: E501
         # Support call from `BoxCoordinate` itself.
         if cls is BoxCoordinate:
             for typ in (LpsLgrsBox, LpsAccBox, LtmLgrsBox, LtmAccBox):
@@ -1985,8 +1988,8 @@ class BoxCoordinate(BaseCoordinate):
             The possibly contained coordinate.
         logical : bool, default=False
             Whether to require logical containment. If `True`, and `other` is
-            either not a box coordinate or from a different system (LPS or LTM),
-            `False` is returned.
+            either not a box coordinate or from a different system (LPS or
+            LTM), `False` is returned.
         cross_system : bool, default=True
             Whether to allow cross-system containment. If `False`, and `other`
             is from a different system (LPS or LTM), `False` is returned.
@@ -2058,18 +2061,18 @@ class BoxCoordinate(BaseCoordinate):
         Truncate (or extend) the coordinate to represent a minimum precision.
 
         More precisely, the respective lengths of the relevant easting and
-        northing strings will be truncated, or extended with zeros, as necessary
-        so that `out.precision` is greater than or equal to `min_precision`. The
-        final lengths of these strings will be no longer than what is strictly
-        necessary to satisfy `min_precision`.
+        northing strings will be truncated, or extended with zeros, as
+        necessary so that `out.precision` is greater than or equal to
+        `min_precision`. The final lengths of these strings will be no longer
+        than what is strictly necessary to satisfy `min_precision`.
 
         Parameters
         ----------
         min_precision : float
             The minimum allowed value of `out.precision`.
         copy : bool, default=False
-            Whether to ensure that `out` is not `self`. If `False` and `self` is
-            suitable, it is returned as `out`.
+            Whether to ensure that `out` is not `self`. If `False` and `self`
+            is suitable, it is returned as `out`.
 
         Returns
         -------
@@ -2161,8 +2164,8 @@ class LpsAccBox(_BaseAccBox):
     """
     Create an instance representing an LPS Artemis Condensed Coordinate box.
 
-    Note that each instance represents a square area in LPS space, referenced to
-    its lower-left (grid-southwest) corner.
+    Note that each instance represents a square area in LPS space, referenced
+    to its lower-left (grid-southwest) corner.
 
     Except for `easting` and `northing`, each string argument is a single
     character.
@@ -2315,8 +2318,8 @@ class LpsLgrsBox(_BaseLgrsBox):
     """
     Create an instance representing an LPS Lunar Grid Reference System box.
 
-    Note that each instance represents a square area in LPS space, referenced to
-    its lower-left (grid-southwest) corner.
+    Note that each instance represents a square area in LPS space, referenced
+    to its lower-left (grid-southwest) corner.
 
     Except for `easting` and `northing`, each string argument is a single
     character.
@@ -2482,8 +2485,8 @@ class LtmAccBox(_BaseAccBox):
     """
     Create an instance representing an LTM Artemis Condensed Coordinate box.
 
-    Note that each instance represents a square area in LTM space, referenced to
-    its lower-left (grid-southwest) corner.
+    Note that each instance represents a square area in LTM space, referenced
+    to its lower-left (grid-southwest) corner.
 
     Except for `easting` and `northing`, each string argument is a single
     character.
@@ -2612,8 +2615,8 @@ class LtmLgrsBox(_BaseLgrsBox):
     """
     Create an instance representing an LTM Lunar Grid Reference System box.
 
-    Note that each instance represents a square area in LTM space, referenced to
-    its lower-left (grid-southwest) corner.
+    Note that each instance represents a square area in LTM space, referenced
+    to its lower-left (grid-southwest) corner.
 
     Except for `easting` and `northing`, each string argument is a single
     character.

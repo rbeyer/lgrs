@@ -20,9 +20,6 @@
 # External.
 import enum as _enum
 
-# Internal.
-import lgrs.exceptions as _exceptions
-
 
 # endregion
 ###############################################################################
@@ -134,7 +131,10 @@ def from_lps_or_ltm(
 
     """
     # import sys
-    # _rich.print("[bold red]NonPolarError:[/bold red] Test.", file=sys.stderr, flush=True)
+    # _rich.print(
+    #   "[bold red]NonPolarError:[/bold red] Test.", file=sys.stderr,
+    #   flush=True
+    # )
     ...
 
 

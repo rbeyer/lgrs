@@ -17,15 +17,12 @@
 ###############################################################################
 # region> IMPORT
 ###############################################################################
-# External.
-import pyproj
-import pyproj.crs.crs as crs
 import unittest
 
-# Internal.
-import lgrs.caching as caching
-import lgrs.srs.srs as srs
-import lgrs.srs.wkt as wkt
+import pyproj
+from lgrs import caching
+from lgrs.srs import srs, wkt
+from pyproj.crs import crs
 
 
 # endregion

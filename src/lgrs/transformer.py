@@ -19,14 +19,15 @@
 ###############################################################################
 # External.
 import abc as _abc
+import typing as _typing
+
 import numpy as _np
 import pyproj as _pyproj
 from pyproj import aoi as _pyproj_aoi
-import typing as _typing
 
 # Internal.
-import lgrs.srs.srs as _lgrs_srs
 import lgrs.exceptions as _lgrs_exceptions
+import lgrs.srs.srs as _lgrs_srs
 
 
 # endregion

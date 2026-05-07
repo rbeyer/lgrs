@@ -19,11 +19,13 @@
 ###############################################################################
 # External.
 from __future__ import annotations
+
 import dataclasses as _dataclasses
 import functools as _functools
-import pyproj as _pyproj
 import re as _re
 import typing as _typing
+
+import pyproj as _pyproj
 
 # Internal.
 import lgrs.caching as _caching
@@ -172,7 +174,7 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
 
     Examples
     --------
-    >>> import lgrs.CRS
+    >>> from lgrs import CRS
     >>> crs_utm = CRS.from_user_input(32615)
     >>> crs_utm2 = CRS.from_user_input(32615)
     >>> crs_utm2 is crs_utm
@@ -267,7 +269,9 @@ def make_lunar_crs(
     >>> lps_crs4 = make_lunar_crs("S")
     >>> ltm_crs4 = make_lunar_crs("23N")
     >>> lps_crs4.is_exact_same(lps_crs)
+    True
     >>> ltm_crs4.is_exact_same(lps_crs)
+    False
 
     Finally, as a convenience, a default call returns the underlying
     geographic `CRS`.
@@ -318,8 +322,8 @@ class GRS:
             prefix, that is, the first 3-5 characters of an LGRS coordinate
             which identifies the 25-km-grid area.
         digits : int, optional
-            The number of digits in each northing and easting. If not specified,
-            instance supports all possible digit counts.
+            The number of digits in each northing and easting. If not
+            specified, instance supports all possible digit counts.
                 `digits`    precision
                 --------    ---------
                 0           25 km
@@ -330,8 +334,8 @@ class GRS:
         multi_zone : bool, default=False
             Whether to support multiple zones, where a zone is an LTM zone or
             an LPS-LGRS zone, which spans half of either pole. If `False`, on
-            each call of `LunarTransformer.transform()`, the single zone used is
-            determined by the first coordinate.
+            each call of `LunarTransformer.transform()`, the single zone used
+            is determined by the first coordinate.
         domain : {"LPS", "LTM", "BOTH", "INFER"}, default="INFER"
             Whether the GRS supports the LPS or LTM domain, or both. If
             "INFER", `LunarTransformer.transform()` infers "LPS" or "LTM" on
@@ -342,8 +346,8 @@ class GRS:
             Any number of characters that are guaranteed to start each
             coordinate. For example, for `form="LGRS"`, `prefix="S"` would
             constrain coordinates to the Southern Hemisphere. For `form="ACC"`,
-            `prefix` is required and must identify the 25-km-grid area, which is
-            the first 3-5 characters of an LGRS coordinate.
+            `prefix` is required and must identify the 25-km-grid area, which
+            is the first 3-5 characters of an LGRS coordinate.
 
         Returns
         -------

@@ -14,23 +14,23 @@
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-__author__ = """lgrs Developers"""
-__email__ = "rbeyer@seti.org"  # TODO: Decide which, both?
+__author__ = "lgrs Developers"
+__email__ = "eschaefer@seti.org"
 __version__ = "0.1.0"
 
-# * ENABLE TYPE-CHECKING AT PACKAGE LEVEL. ───────────────────────────
 import beartype.claw
 
+# * BUBBLE-UP MOST USEFUL CLASSES AND FUNCTIONS. ──────────────────────
+# Note: Unlike in `pyproj`:
+from lgrs.caching import enable_caching
+from lgrs.database import query_lunar_crs_info
+from lgrs.easy import from_geographic, from_gridded, from_lps_or_ltm
+
+# Note: Analogous to `pyproj`:
+from lgrs.srs.srs import CRS, GRS, make_lunar_crs
+
+# * ENABLE TYPE-CHECKING AT PACKAGE LEVEL. ───────────────────────────
 beartype.claw.beartype_this_package(
     conf=beartype.BeartypeConf(is_pep484_tower=True)
 )
 del beartype
-
-# * BUBBLE-UP MOST USEFUL CLASSES AND FUNCTIONS. ──────────────────────
-# Note: Analogous to `pyproj`:
-from lgrs.srs.srs import CRS, GRS, make_lunar_crs
-
-# Note: Unlike in `pyproj`:
-from lgrs.caching import enable_caching
-from lgrs.database import query_lunar_crs_info
-from lgrs.easy import from_gridded, from_geographic, from_lps_or_ltm
