@@ -1,8 +1,8 @@
 ===========================
-``lgrs`` Usage and Examples
+lgrs Usage and Examples
 ===========================
 
-We are actively developing the ``lgrs`` Python library to support working with
+We are actively developing the *lgrs* Python library to support working with
 the Lunar Grid Reference System (LGRS) and its two forms of coordinates: LGRS
 and Artemis Condensed Coordinates (ACC).
 
@@ -18,10 +18,10 @@ and even names for these objects and functions may still change.
 Coordinate Transformations
 --------------------------
 
-The ``lgrs`` library provides the ability convert between multiple kinds of
+The *lgrs* library provides the ability convert between multiple kinds of
 point coordinates and grid boxes. You're probably familiar with point
 coordinates like latitude/longitude or easting/northing, but the LGRS uses the
-concept of a grid of boxes, and the conversions ``lgrs`` provides allow a user
+concept of a grid of boxes, and the conversions *lgrs* provides allow a user
 a user to start with a point coordinate and find out what LGRS (or ACC) grid box
 that point falls within.
 
@@ -32,12 +32,12 @@ coordinates of its reference (lower-left) point, this can be easily obtained.
 Convenience functions for LPS and LTM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``lgrs`` library provides some convenience functions for converting lat/lon
+The *lgrs* library provides some convenience functions for converting lat/lon
 coordinates easily into Lunar Polar Stereographic (LPS) or Lunar Transverse
 Mercator (LTM) coordinates (although that can also just be done with
-`pyproj <https://pyproj4.github.io/pyproj/stable/>`__).
+*`pyproj <https://pyproj4.github.io/pyproj/stable/>`__*).
 
-How would you do it via ``pyproj``?  Like this::
+How would you do it via *pyproj*?  Like this::
 
     >>> from pyproj import CRS, Transformer
 
@@ -64,14 +64,14 @@ How would you do it via ``pyproj``?  Like this::
     >>> lps_to_lonlat.transform(500000, 500000)
     (0.0, -90.0)
 
-We hope to get the LPS and LTM definitions into the ``PROJ`` database, so that
-when using ``pyproj`` in the future, you might just be able to do the following
+We hope to get the LPS and LTM definitions into the *PROJ* database, so that
+when using *pyproj* in the future, you might just be able to do the following
 to create LTM and LPS CRSes::
 
     ltm_crs = CRS.from_proj4("+proj=ltm +zone=2")
     lps_south_crs = CRS.from_proj4("+proj=lps +south")
 
-In the meantime, the ``lgrs`` library provides these convenience functions via
+In the meantime, the *lgrs* library provides these convenience functions via
 creating a coordinate object::
 
     >>> from lgrs.coords import LatLonPoint, LpsPoint, LtmPoint
@@ -107,8 +107,8 @@ creating a coordinate object::
 
 Remember that the default polar stereographic projection that is used by the
 LOLA and LROC PDS data, and in lots of data that is derived from those data, is
-different from LPS.  The ``lgrs`` library provides some convenience functions to
-help with those kinds of conversions with ``pyproj``::
+different from LPS.  The *lgrs* library provides some convenience functions to
+help with those kinds of conversions with *pyproj*::
 
     >>> from pyproj import CRS, Transformer
     >>> from lgrs import make_lunar_crs
@@ -120,7 +120,7 @@ help with those kinds of conversions with ``pyproj``::
     >>> polar_to_lps.transform(0, 0)
     (500000.0, 500000.0)
 
-The ``make_lunar_crs()`` function can make ``pyproj`` CRSes for north and south
+The ``make_lunar_crs()`` function can make *pyproj* CRSes for north and south
 LPS, as well as all the zones of LTM, and more.
 
 
@@ -195,7 +195,7 @@ following::
 
 Working with Grid Boxes
 -----------------------
-The ``lgrs`` library also supports convenient access to information and
+The *lgrs* library also supports convenient access to information and
 operations specific to grid boxes::
 
     # Create an ACC box.
