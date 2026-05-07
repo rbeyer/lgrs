@@ -15,7 +15,6 @@
 # permissions and limitations under the License.
 
 import unittest
-
 from unittest.mock import patch
 
 import lgrs.reference.LGRS_Coordinate_Conversion as cconv

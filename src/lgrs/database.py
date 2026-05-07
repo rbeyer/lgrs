@@ -19,16 +19,17 @@
 ###############################################################################
 # External.
 from __future__ import annotations
-import beartype as _beartype
+
 import collections as _collections
 import functools as _functools
 import itertools as _itertools
-import numpy as _np
 import re as _re
-import pyproj as _pyproj
-from pyproj import database as _pyproj_database
-from pyproj import aoi as _pyproj_aoi
 import typing as _typing
+
+import beartype as _beartype
+import numpy as _np
+import pyproj as _pyproj
+from pyproj import aoi as _pyproj_aoi, database as _pyproj_database
 
 # Internal.
 import lgrs.caching as _caching
@@ -598,7 +599,8 @@ def query_lunar_crs_info(
     Examples
     --------
     >>> query_lunar_crs_info(latitude=0., longitude=0.)
-    """
+    [LunarCrsInfo(auth_name='', code='', name='IAU_2015:30100 / LTM zone 23N', type=<PJType.PROJECTED_CRS: 'PROJECTED_CRS'>, deprecated=False, area_of_use=AreaOfUse(west=-4.0, south=0.0, east=4.0, north=80.0, name='Moon - LTM zone 23N'), projection_method_name='Transverse Mercator')]
+    """  # noqa: E501
     # Validate datum.
     if datum_name != _wkt.DATUM_NAME:
         raise TypeError(f"`datum_name` must be {_wkt.DATUM_NAME!r}")

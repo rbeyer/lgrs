@@ -132,9 +132,9 @@ PROJCRS[“Moon (2015) - Sphere / Ocentric / {{north_or_south}} Polar”,
       LENGTHUNIT[“metre”,1]],
   USAGE[
     AREA["Lunar Polar Stereographic Zone LPS_{{hemisphere}}."],
-    {{bbox_string}}],              
+    {{bbox_string}}],
 ID[“USGS”,{{id_num}},{{hemisphere}}]]]
-""".strip().format
+""".strip().format  # noqa: E501
 
 # Below: Format taken from p. 18 of M2025. Only deviations from M2025
 # are that SCOPE is replaced with AREA, which seems better suited for
@@ -176,7 +176,7 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
   USAGE[
     AREA["Lunar Transverse Mercator Zone LTM_{{zone_number}}{{hemisphere}}."],
     {{bbox_string}}]]
-""".strip().format
+""".strip().format  # noqa: E501
 
 
 # endregion
@@ -192,7 +192,7 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
 
     # * UTILITIES. ────────────────────────────────────────────────────
     def _get_bbox_string(self) -> str:
-        return f"BBOX[{self.minimum_latitude},{self.minimum_longitude},{self.maximum_latitude},{self.maximum_longitude}]"
+        return f"BBOX[{self.minimum_latitude},{self.minimum_longitude},{self.maximum_latitude},{self.maximum_longitude}]"  # noqa: E501
 
     def _validate_datum_name(self) -> None:
         if self.datum_name != DATUM_NAME:
