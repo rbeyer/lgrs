@@ -51,7 +51,7 @@ Usage
 -----
 
 Examples and how to get started with the *lgrs* library can be found in our
-`usage guide <usage.rst>__`.
+`usage guide <https://github.com/rbeyer/lgrs/blob/master/usage.rst>`__.
 
 
 Contributing
@@ -69,7 +69,7 @@ The *lgrs* library  was developed in the open at the SETI Institute,
 based on open code originally developed by the United States
 Geological Survey.
 
-See the `AUTHORS <https://github.com/rbeyer/lgrs/blob/master/AUTHORS.rst>`
+See the `AUTHORS <https://github.com/rbeyer/lgrs/blob/master/AUTHORS.rst>`__
 file for a complete list of developers.
 
 
