@@ -8,6 +8,15 @@
 #*     "\{" --> "{" and "\}" --> "}".
 #* (3) `GridName` is now instantiated with equivalent code that avoids
 #*     direct use of `numpy.chararray()`, which is deprecated.
+#
+# Additionally, the original file did not clearly indicate its copyright status,
+# but it should have stated:
+#  Unless otherwise noted, this project is in the public domain in the United States.
+#
+#  It contains materials that originally came from the United States
+#  Geological Survey, an agency of the United States Department of
+#  Interior. For more information on their copyright policies, see
+#  https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits
 
 # =====================================================================
 ''' PROGRAM INFORMATION
@@ -4621,5 +4630,3 @@ except ValueError as e:
     print(e)
 
 # =====================================================================
-
-
