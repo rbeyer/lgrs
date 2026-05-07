@@ -35,7 +35,6 @@ where = ["src"]
 namespaces = false
 
 [tool.setuptools.dynamic]
-# version = {attr = "synthterrain.__version__"}
 version = { attr = "lgrs.__version__" }
 readme = { file = "README.rst" }
 
