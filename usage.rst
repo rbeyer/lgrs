@@ -35,7 +35,7 @@ Convenience functions for LPS and LTM
 The *lgrs* library provides some convenience functions for converting lat/lon
 coordinates easily into Lunar Polar Stereographic (LPS) or Lunar Transverse
 Mercator (LTM) coordinates (although that can also just be done with
-*`pyproj <https://pyproj4.github.io/pyproj/stable/>`__*).
+`*pyproj* <https://pyproj4.github.io/pyproj/stable/>`__).
 
 How would you do it via *pyproj*?  Like this::
 
