@@ -31,9 +31,10 @@ True
 ###############################################################################
 # region> IMPORT
 ###############################################################################
-# External.
+# Special.
 from __future__ import annotations
 
+# Standard.
 import abc as _abc
 import collections as _collections
 import dataclasses as _dataclasses
@@ -42,6 +43,7 @@ import math as _math
 import types as _types
 import typing as _typing
 
+# External.
 import pyproj as _pyproj
 import regex as _regex
 

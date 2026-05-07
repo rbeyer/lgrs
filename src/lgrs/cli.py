@@ -17,7 +17,7 @@
 ###############################################################################
 # region> IMPORT
 ###############################################################################
-# External.
+# Standard.
 import functools as _functools
 import inspect as _inspect
 import pathlib as _pathlib
@@ -26,6 +26,7 @@ import textwrap as _textwrap
 import types as _types
 import typing as _typing
 
+# External.
 import typer as _typer
 
 # Internal.

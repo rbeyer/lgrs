@@ -17,15 +17,17 @@
 ###############################################################################
 # region> IMPORT
 ###############################################################################
-# External.
+# Special.
 from __future__ import annotations
 
+# Standard.
 import collections as _collections
 import functools as _functools
 import itertools as _itertools
 import re as _re
 import typing as _typing
 
+# External.
 import beartype as _beartype
 import numpy as _np
 import pyproj as _pyproj
