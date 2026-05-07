@@ -118,18 +118,19 @@ def from_lps_or_ltm(
         poleward of 80 degrees (if `extended_ltm` is `False`) or 82 degrees
         (if `extended_ltm` is `True`).
 
-    Examples
-    --------
-    >>> import lgrs.easy
-    >>> lgrs.easy.from_lps_or_ltm(488590, 608480)
-    (zone="A", area="ZS", easting=13590, northing=8480,
-     string="AZS1359008480")
-    >>> lgrs.easy.from_lps_or_ltm(488590, 608480, typ=Type.STRING)
-    "AZS1359008480"
-    >>> lgrs.easy.from_lps_or_ltm(488590, 608480, typ=Type.PRETTY)
-    "A ZS 13590 08480"
-
     """
+    # Examples
+    # --------
+    # >>> import lgrs.easy
+    # >>> lgrs.easy.from_lps_or_ltm(488590, 608480)
+    # (zone="A", area="ZS", easting=13590, northing=8480,
+    #  string="AZS1359008480")
+    # >>> lgrs.easy.from_lps_or_ltm(488590, 608480, typ=Type.STRING)
+    # "AZS1359008480"
+    # >>> lgrs.easy.from_lps_or_ltm(488590, 608480, typ=Type.PRETTY)
+    # "A ZS 13590 08480"
+
+    # """
     # import sys
     # _rich.print(
     #   "[bold red]NonPolarError:[/bold red] Test.", file=sys.stderr,
