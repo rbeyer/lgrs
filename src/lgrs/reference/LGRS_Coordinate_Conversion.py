@@ -3,6 +3,15 @@
 #* Version: 7.2
 #* Only changes relative to the original file are to the following
 #* escape sequences in some strings: "\{" --> "{" and "\}" --> "}".
+# Additionally, the original file did not clearly indicate its copyright status,
+# but it should have stated:
+#  Unless otherwise noted, this project is in the public domain in the United States.
+#
+#  It contains materials that originally came from the United States
+#  Geological Survey, an agency of the United States Department of
+#  Interior. For more information on their copyright policies, see
+#  https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits
+
 # =====================================================================
 ''' PROGRAM INFORMATION
 Program:  LGRS_Coordinate_Conversion_mk7.py 
