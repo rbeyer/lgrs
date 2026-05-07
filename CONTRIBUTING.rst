@@ -60,9 +60,9 @@ If you are proposing a feature:
 Get Started!
 ------------
 
-Ready to contribute? Here's how to set up `lgrs` for local development.
+Ready to contribute? Here's how to set up *lgrs* for local development.
 
-1. Fork the `lgrs` repo on GitHub.
+1. Fork the *lgrs* repo on GitHub.
 2. Clone your fork locally::
 
     $> git clone git@github.com:your_name_here/lgrs.git
@@ -113,7 +113,7 @@ Before you submit a pull request, check that it meets these guidelines:
 What to expect
 --------------
 
-Our development of lgrs is not particularly continuous,
+Our development of *lgrs* is not particularly continuous,
 and it is entirely possible that when you submit a PR
 (pull request), none of us will have the time to evaluate or integrate
 your PR.  If we don't, we'll try and communicate that with you via the
@@ -122,8 +122,8 @@ PR.
 For contributions, it is likely that you, or your employer,
 will be retaining your copyrights, but releasing the contributions
 via an open-source license.  It must be compatible with the Apache-2
-license that lgrs is distributed with, so that we can redistribute
-that contribution with lgrs, give you credit, and make lgrs even
+license that *lgrs* is distributed with, so that we can redistribute
+that contribution with *lgrs*, give you credit, and make *lgrs* even
 better!  Please contact us if you have a contribution of that nature,
 so we can be sure to get all of the details right.
 
@@ -131,11 +131,11 @@ so we can be sure to get all of the details right.
 lgrs People
 -------------------
 
-- A lgrs **Contributor** is any individual creating or commenting
+- A *lgrs* **Contributor** is any individual creating or commenting
   on an issue or pull request.  Anyone who has authored a PR that was
   merged should be listed in the AUTHORS.rst file.
 
-- A synthterrain **Committer** is a subset of contributors, typically SETI
+- A *lgrs* **Committer** is a subset of contributors, typically SETI
   employees or contractors, who have been given write access to the
   repository.
 

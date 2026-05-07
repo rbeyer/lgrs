@@ -3,7 +3,7 @@ lgrs
 ====
 
 
-The lgrs package is software to support the Lunar Grid Reference
+The *lgrs* package is software to support the Lunar Grid Reference
 System and also provides utility functions for coordinate projections
 until the Lunar Transverse Mercator (LTM) and Lunar Polar Stereographic
 (LPS) projections are made available in the PROJ library.
@@ -15,7 +15,7 @@ Nothing is guaranteed about structure until we pass the 1.0 version.
 Reference document that this library follows is
 `McClernan, M.T., Dennis, M.L., Theriot, I.H., Hare, T.M., Archinal, B.A., Ostrach, L.R., Hunter, M.A., Miller, M.J., Beyer, R.A., Annex, A.M., and Lawrence, S.J., 2025, Lunar grid systems, coordinate systems, and map projections for the Artemis missions and lunar surface navigation: U.S. Geological Survey Techniques and Methods, book 11, chap. E1, 308 p., DOI: 10.3133/tm11E1 <https://doi.org/10.3133/tm11E1>`__.
 
-The code in the lgrs.reference modules are from Dr. McClernan's "mark 7.2" version.
+The code in the `lgrs.reference` modules are from Dr. McClernan's "mark 7.2" version.
 
 The report is also available here: https://www.usgs.gov/publications/lunar-grid-systems-coordinate-systems-and-map-projections-artemis-missions-and-lunar
 
@@ -47,6 +47,13 @@ $> conda env update --file environment.yml
 $> pip install --no-deps .
 
 
+Usage
+-----
+
+Examples and how to get started with the *lgrs* library can be found in our
+`usage guide <usage.rst>__`.
+
+
 Contributing
 ------------
 
@@ -58,8 +65,9 @@ environment.
 Credits
 -------
 
-lgrs was developed in the open at the SETI Institute, based on open code originally 
-developed by the United States Geological Survey.
+The *lgrs* library  was developed in the open at the SETI Institute,
+based on open code originally developed by the United States
+Geological Survey.
 
 See the `AUTHORS <https://github.com/rbeyer/lgrs/blob/master/AUTHORS.rst>`
 file for a complete list of developers.
@@ -67,7 +75,7 @@ file for a complete list of developers.
 
 License
 -------
-The "lgrs" software is licensed under the Apache License,
+The *lgrs* software is licensed under the Apache License,
 Version 2.0 (the "License"); you may not use this file except in
 compliance with the License. You may obtain a copy of the License
 at http://www.apache.org/licenses/LICENSE-2.0.
