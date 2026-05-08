@@ -2,6 +2,11 @@
 lgrs
 ====
 
+*Lunar Grid Reference System library*
+
+.. image:: https://img.shields.io/pypi/v/lgrs.svg
+        :target: https://pypi.python.org/pypi/lgrs
+
 
 The *lgrs* package is software to support the Lunar Grid Reference
 System and also provides utility functions for coordinate projections
@@ -25,7 +30,12 @@ The report is also available here: https://www.usgs.gov/publications/lunar-grid-
 Installation
 ------------
 
-Clone or download this repository.
+The *lgrs* library is available on PyPI, and can be pip-installed::
+
+$> pip install lgrs
+
+
+Alternately, you can clone or download this repository.
 
 It is highly suggested to install this into a virtual Python environment.
 
