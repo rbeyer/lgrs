@@ -15,10 +15,11 @@ requires-python = ">=3.13"
 classifiers = [
     "Programming Language :: Python :: 3.13",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Development Status :: 2 - Pre-Alpha",
     "Natural Language :: English",
 ]
+license = "Apache-2.0"
+license-files = ["LICENSE", "AUTHORS.rst"]
 
 dependencies = [
     "beartype", "numpy", "pyproj", "regex", "typer"
