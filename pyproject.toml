@@ -28,6 +28,9 @@ dependencies = [
 [project.optional-dependencies]
 reference = ["gdal"]
 
+[project.urls]
+Repository = "https://github.com/rbeyer/lgrs"
+
 # [project.scripts]
 # lgrs = "lgrs.cli:main"
 
