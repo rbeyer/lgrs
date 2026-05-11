@@ -306,7 +306,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         The LTM zone (e.g., "23N"), or `None` if `.is_lps`.
     lps_hemisphere : str | None
         The LPS hemisphere ("N" or "S"), or `None` if `.is_ltm`.
-    ltm_limit : float
+    absolute_ltm_limit : float
         The magnitude of the LTM/LPS boundary: 80, 82, or 90 degrees.
 
     Methods
@@ -505,11 +505,11 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         `query_lunar_crs_info()`.
         >>> first_info = info_list[0]
         >>> all((first_info.lps_hemisphere == "N",
-        ...      first_info.ltm_limit == 80.))
+        ...      first_info.absolute_ltm_limit == 80.))
         True
         >>> last_info = info_list[-1]
         >>> all((last_info.ltm_zone == 45, last_info.hemisphere == "S",
-        ...      last_info.ltm_limit == 90.))
+        ...      last_info.absolute_ltm_limit == 90.))
         True
         """
         return info._sort_tuple
