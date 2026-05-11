@@ -210,7 +210,7 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
 
     # * ATTRIBUTES. ───────────────────────────────────────────────────
     @_functools.cached_property
-    def ltm_limit(self) -> float:
+    def absolute_ltm_limit(self) -> float:
         if self.global_ltm:
             return 90.0
         elif self.extended_ltm:
@@ -261,14 +261,14 @@ class LpsZone(BaseZone):
         if self.hemisphere == "N":
             return 90.0
         else:
-            return -self.ltm_limit
+            return -self.absolute_ltm_limit
 
     @_functools.cached_property
     def minimum_latitude(self) -> float:
         if self.hemisphere == "S":
             return -90.0
         else:
-            return self.ltm_limit
+            return self.absolute_ltm_limit
 
     @_functools.cached_property
     def name(self) -> str:
@@ -332,7 +332,7 @@ class LtmZone(BaseZone):
         if self.hemisphere == "S":
             return 0
         else:
-            return self.ltm_limit
+            return self.absolute_ltm_limit
 
     @_functools.cached_property
     def maximum_longitude(self) -> float:
@@ -343,7 +343,7 @@ class LtmZone(BaseZone):
         if self.hemisphere == "N":
             return 0
         else:
-            return -self.ltm_limit
+            return -self.absolute_ltm_limit
 
     @_functools.cached_property
     def minimum_longitude(self) -> float:
