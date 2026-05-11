@@ -112,14 +112,14 @@ def _get_all_lunar_crs_long_names(
     lps: bool = True,
     ltm: bool = True,
     extended_ltm: bool = False,
-    polar_ltm: bool = False,
+    global_ltm: bool = False,
     prefer_ltm: bool = False,
     prefer_west_ltm: bool = False,
     south: bool | None = None,
 ) -> tuple[str, ...]:
     # Note: `prefer_*` included for call signature compatibility with
     # `_get_lunar_crs_long_names()` but are intentionally unused.
-    if polar_ltm:
+    if global_ltm:
         suffix = "**"
     elif extended_ltm:
         suffix = "*"
@@ -129,19 +129,19 @@ def _get_all_lunar_crs_long_names(
         lps_tuple = _get_all_lunar_crs_long_names(
             ltm=False,
             extended_ltm=extended_ltm,
-            polar_ltm=polar_ltm,
+            global_ltm=global_ltm,
             south=south,
         )
         ltm_tuple = _get_all_lunar_crs_long_names(
             lps=False,
             extended_ltm=extended_ltm,
-            polar_ltm=polar_ltm,
+            global_ltm=global_ltm,
             south=south,
         )
         complete = lps_tuple + ltm_tuple
         return complete
     elif lps:
-        if polar_ltm:
+        if global_ltm:
             lps_tuple = ()
         else:
             lps_tuple = (f"N{suffix}", f"S{suffix}")
@@ -164,13 +164,13 @@ def _get_lunar_crs_long_names(
     conformed_latitudes: _FloatIterable,
     conformed_longitudes: _FloatIterable,
     extended_ltm: bool = False,
-    polar_ltm: bool = False,
+    global_ltm: bool = False,
     prefer_ltm: bool = False,
     prefer_south_ltm: bool = False,
     prefer_west_ltm: bool = False,
 ) -> list[str]:
     # Determine LTM vs. LPS condition. ────────────────────────────────
-    if polar_ltm:
+    if global_ltm:
 
         def is_in_ltm(test_lat: float) -> bool:
             return True
@@ -210,7 +210,7 @@ def _get_lunar_crs_long_names(
             long_name = f"{zone_int:02}{hemi}"
         else:
             long_name = hemi
-        if polar_ltm:
+        if global_ltm:
             long_name += "**"  # *REASSIGNMENT*
         elif extended_ltm:
             long_name += "*"  # *REASSIGNMENT*
@@ -468,7 +468,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             case "*":
                 kwargs["extended_ltm"] = True
             case "**":
-                kwargs["polar_ltm"] = True
+                kwargs["global_ltm"] = True
             case _:
                 raise TypeError(f"`suffix` is not recognized: {suffix!r}")
         crs = _srs.make_lunar_crs(name, **kwargs)
@@ -497,7 +497,9 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
 
         Examples
         --------
-        >>> info_list = query_lunar_crs_info(extended_ltm=True, polar_ltm=True)
+        >>> info_list = query_lunar_crs_info(
+        ...     extended_ltm=True, global_ltm=True
+        ... )
         >>> info_list.sort(key=LunarCrsInfo.sorter)
         But note that the above sort is already applied by
         `query_lunar_crs_info()`.
@@ -543,7 +545,7 @@ def query_lunar_crs_info(
     *,
     primary_ltm: bool = True,
     extended_ltm: bool = False,
-    polar_ltm: bool = False,
+    global_ltm: bool = False,
     inclusive_bounds: bool = False,
     latitude: float | _collections.abc.Iterable[float] | None = None,
     longitude: float | _collections.abc.Iterable[float] | None = None,
@@ -572,7 +574,7 @@ def query_lunar_crs_info(
     extended_ltm : bool, default=False
         Whether to include extended LTM zones, which span from the equator
         to 82 degrees N and S.
-    polar_ltm : bool, default=False
+    global_ltm : bool, default=False
         Whether to include polar LTM zones, which span from the equator to
         90 degrees N and S.
     inclusive_bounds : bool, default=False
@@ -659,11 +661,11 @@ def query_lunar_crs_info(
         latlon_kwargs = {}
     ltm_kwargs_list = []
     if primary_ltm:
-        ltm_kwargs_list.append({"extended_ltm": False, "polar_ltm": False})
+        ltm_kwargs_list.append({"extended_ltm": False, "global_ltm": False})
     if extended_ltm:
-        ltm_kwargs_list.append({"extended_ltm": True, "polar_ltm": False})
-    if polar_ltm:
-        ltm_kwargs_list.append({"extended_ltm": False, "polar_ltm": True})
+        ltm_kwargs_list.append({"extended_ltm": True, "global_ltm": False})
+    if global_ltm:
+        ltm_kwargs_list.append({"extended_ltm": False, "global_ltm": True})
     if inclusive_bounds:
         prefer_ltms = (False, True)
         prefer_south_ltms = (False, True)
@@ -722,7 +724,7 @@ def query_lunar_crs_info(
         )
 
     # Treat special case of all polar LTM zones meeting at the pole.
-    if inclusive_bounds and has_spatial_filter and polar_ltm:
+    if inclusive_bounds and has_spatial_filter and global_ltm:
         conformed_lat_set = set(conformed_lats)
         if contains:
             has_np = conformed_lat_set == {90}
@@ -730,7 +732,7 @@ def query_lunar_crs_info(
         else:
             has_np = 90 in conformed_lat_set
             has_sp = -90 in conformed_lat_set
-        kwargs2 = {"polar_ltm": True}
+        kwargs2 = {"global_ltm": True}
         if has_np and has_sp:
             kwargs2["south"] = None
         elif has_sp:

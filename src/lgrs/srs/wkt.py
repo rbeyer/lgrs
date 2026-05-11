@@ -186,7 +186,7 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class BaseZone(metaclass=_caching._AbstractMetaMultiton):
     extended_ltm: bool = False
-    polar_ltm: bool = False
+    global_ltm: bool = False
     hemisphere: str
     datum_name: str = DATUM_NAME
 
@@ -211,7 +211,7 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
     # * ATTRIBUTES. ───────────────────────────────────────────────────
     @_functools.cached_property
     def ltm_limit(self) -> float:
-        if self.polar_ltm:
+        if self.global_ltm:
             return 90.0
         elif self.extended_ltm:
             return LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE

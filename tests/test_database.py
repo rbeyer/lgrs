@@ -38,7 +38,7 @@ class TestQueryDatabase(unittest.TestCase):
         "contains": False,
         "primary_ltm": True,
         "extended_ltm": False,
-        "polar_ltm": False,
+        "global_ltm": False,
         "inclusive_bounds": False,
     }
 
@@ -127,14 +127,14 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=81,
             longitude=0,
             extended_ltm=True,
-            polar_ltm=True,
+            global_ltm=True,
             expected_long_names=["N", "23N*", "23N**"],
         )
         self.check_query(
             latitude=81,
             longitude=0,
             extended_ltm=False,
-            polar_ltm=True,
+            global_ltm=True,
             expected_long_names=["N", "23N**"],
         )
         self.check_query(
@@ -142,7 +142,7 @@ class TestQueryDatabase(unittest.TestCase):
             longitude=0,
             primary_ltm=False,
             extended_ltm=False,
-            polar_ltm=True,
+            global_ltm=True,
             expected_long_names=["23N**"],
         )
 
@@ -158,14 +158,14 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=83,
             longitude=0,
             extended_ltm=True,
-            polar_ltm=True,
+            global_ltm=True,
             expected_long_names=["N", "N*", "23N**"],
         )
         self.check_query(
             latitude=83,
             longitude=0,
             extended_ltm=False,
-            polar_ltm=True,
+            global_ltm=True,
             expected_long_names=["N", "23N**"],
         )
         self.check_query(
@@ -173,7 +173,7 @@ class TestQueryDatabase(unittest.TestCase):
             longitude=0,
             primary_ltm=False,
             extended_ltm=False,
-            polar_ltm=True,
+            global_ltm=True,
             expected_long_names=["23N**"],
         )
 
@@ -182,14 +182,14 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=90,
             longitude=0,
             extended_ltm=True,
-            polar_ltm=True,
+            global_ltm=True,
             expected_long_names=["N", "N*", "23N**"],
         )
         self.check_query(
             latitude=-90,
             longitude=0,
             extended_ltm=True,
-            polar_ltm=True,
+            global_ltm=True,
             expected_long_names=["S", "S*", "23S**"],
         )
         long_name_formatters = [f"{i:02}{{}}**".format for i in range(1, 46)]
@@ -201,7 +201,7 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=90,
             longitude=0,
             extended_ltm=True,
-            polar_ltm=True,
+            global_ltm=True,
             inclusive_bounds=True,
             expected_long_names=north_pole_long_names,
         )
@@ -212,7 +212,7 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=-90,
             longitude=0,
             extended_ltm=True,
-            polar_ltm=True,
+            global_ltm=True,
             inclusive_bounds=True,
             expected_long_names=south_pole_long_names,
         )
@@ -226,7 +226,7 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=[-90, 90],
             longitude=[0, 0],
             extended_ltm=True,
-            polar_ltm=True,
+            global_ltm=True,
             inclusive_bounds=True,
             expected_long_names=both_pole_long_names,
         )
@@ -257,7 +257,7 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=[-90, 90],
             longitude=[0, 0],
             extended_ltm=True,
-            polar_ltm=True,
+            global_ltm=True,
             inclusive_bounds=True,
             contains=True,
             expected_long_names=[],
@@ -266,7 +266,7 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=[-90, 90],
             longitude=[0, 0],
             extended_ltm=True,
-            polar_ltm=True,
+            global_ltm=True,
             inclusive_bounds=True,
             contains=True,
             expected_long_names=[],
@@ -334,14 +334,14 @@ class TestQueryDatabase(unittest.TestCase):
             aoi_crs_list = database.query_lunar_crs_info(
                 area_of_interest=aoi,
                 extended_ltm=True,
-                polar_ltm=True,
+                global_ltm=True,
             )
             aoi_long_names = [crs._long_name for crs in aoi_crs_list]
             self.check_query(
                 latitude=dense_lats,
                 longitude=dense_lons,
                 extended_ltm=True,
-                polar_ltm=True,
+                global_ltm=True,
                 expected_long_names=aoi_long_names,
             )
 
