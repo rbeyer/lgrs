@@ -313,10 +313,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
     prefer_lps: bool = False
     extended_ltm: bool = False
-    # TODO: How useful is `polar_ltm`? If useful, should something like
-    #  it be added for LPS?
-    # TODO: Would `global_ltm` be a better name?
-    polar_ltm: bool = False
+    global_ltm: bool = False
     validate: _dataclasses.InitVar[bool] = True
 
     def _register_validation(self) -> None:
@@ -335,11 +332,11 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         assert "_init_kwargs" not in self.__dict__
         self._register_validation()
 
-    def _validate_polar_ltm(self) -> None:
-        if self.polar_ltm:
+    def _validate_global_ltm(self) -> None:
+        if self.global_ltm:
             if self.prefer_lps or self.extended_ltm:
                 raise _exceptions.MalformedCoordinate(
-                    "If `polar_ltm` is `True`, `prefer_lps` and "
+                    "If `global_ltm` is `True`, `prefer_lps` and "
                     "`extended_ltm` must be `False` (or `None`)."
                 )
 
@@ -364,7 +361,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         *,
         prefer_lps: bool | None = None,
         extended_ltm: bool | None = None,
-        polar_ltm: bool | None = None,
+        global_ltm: bool | None = None,
         validate: bool | None = None,
         copy: bool = False,
     ) -> _typing.Self:
@@ -380,7 +377,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
             See `LatLonPoint` documentation.
         extended_ltm : bool, optional
             See `LatLonPoint` documentation.
-        polar_ltm : bool, optional
+        global_ltm : bool, optional
             See `LatLonPoint` documentation.
         validate : bool, optional
             See `LatLonPoint` documentation.
@@ -410,8 +407,8 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         new_init_kwargs = self._init_kwargs.copy()
         if prefer_lps is not None:
             new_init_kwargs["prefer_lps"] = prefer_lps
-        if polar_ltm is not None:
-            new_init_kwargs["polar_ltm"] = polar_ltm
+        if global_ltm is not None:
+            new_init_kwargs["global_ltm"] = global_ltm
         if extended_ltm is not None:
             new_init_kwargs["extended_ltm"] = extended_ltm
 
@@ -1296,7 +1293,7 @@ class BaseCoordinate(_BaseCoordinate):
             LpsPoint,
             prefer_lps=True,
             extended_ltm=False,
-            polar_ltm=False,
+            global_ltm=False,
         )
         return lps_point
 
@@ -1332,7 +1329,7 @@ class BaseCoordinate(_BaseCoordinate):
             returned. If caching is enabled, a cached instance may be returned.
         """
         ltm_point = self._force_type_or_error(
-            self.to_lps_or_ltm, LtmPoint, polar_ltm=True
+            self.to_lps_or_ltm, LtmPoint, global_ltm=True
         )
         return ltm_point
 
@@ -1417,7 +1414,7 @@ class LatLonPoint(PointCoordinate):
     """
     Create an instance representing a latitude-longitude point.
 
-    The final four parameters--`prefer_lps`, `extended_ltm`, `polar_ltm`,
+    The final four parameters--`prefer_lps`, `extended_ltm`, `global_ltm`,
     and `validate`--are common to all coordinates classes. The first three
     are called "constraints" (e.g., `.constraints`). Together, they
     partition the lunar surface into discrete regions that support either
@@ -1427,7 +1424,7 @@ class LatLonPoint(PointCoordinate):
     (Example 3). Conceptually, `extended_ltm` determines the maximum
     poleward extent of the LTM region and `prefer_lps` determines how the
     LPS-LTM overlap immediately equatorward of that boundary is handled. In
-    the `polar_ltm=True` case, the LTM region is global, so there is no LPS
+    the `global_ltm=True` case, the LTM region is global, so there is no LPS
     region.
 
     Parameters
@@ -1445,7 +1442,7 @@ class LatLonPoint(PointCoordinate):
         Whether to use the extended LTM region. If `True`, the nominal
         poleward extent of the LTM region is 82° N/S instead of 80° N/S.
         This nominal extent can be modified by `prefer_lps`.
-    polar_ltm : bool, default=False
+    global_ltm : bool, default=False
         Whether to extend the LTM region globally. If `True`, there is no
         LPS region. If this option is enabled, enabling `prefer_lps` and/or
         `extended_ltm` will render the instance invalid.
@@ -1491,7 +1488,7 @@ class LatLonPoint(PointCoordinate):
       ...
     lgrs.exceptions.MalformedCoordinate:
       ...
-    >>> LatLonPoint(0, 0, prefer_lps=True, polar_ltm=True)  # Example 4  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> LatLonPoint(0, 0, prefer_lps=True, global_ltm=True)  # Example 4  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
       ...
     lgrs.exceptions.MalformedCoordinate:
@@ -1546,7 +1543,7 @@ class LatLonPoint(PointCoordinate):
     def _to_lps_or_ltm(self, *, allow_lps: bool = True) -> LpsPoint | LtmPoint:
         # Determine projected CRS.
         proj_crs = self._get_proj_crs(
-            extended_ltm=self.extended_ltm, polar_ltm=self.polar_ltm
+            extended_ltm=self.extended_ltm, global_ltm=self.global_ltm
         )
         # TODO: Determine minimum absolute latitude for which conversion
         #  to LPS should be attempted.
@@ -1613,7 +1610,7 @@ class LpsPoint(PointCoordinate):
         See `LatLonPoint` documentation.
     extended_ltm : bool, default=False
         See `LatLonPoint` documentation.
-    polar_ltm : bool, default=False
+    global_ltm : bool, default=False
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -1740,7 +1737,7 @@ class LtmPoint(PointCoordinate):
         See `LatLonPoint` documentation.
     extended_ltm : bool, default=False
         See `LatLonPoint` documentation.
-    polar_ltm : bool, default=False
+    global_ltm : bool, default=False
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2193,7 +2190,7 @@ class LpsAccBox(_BaseAccBox):
         See `LatLonPoint` documentation.
     extended_ltm : bool, default=False
         See `LatLonPoint` documentation.
-    polar_ltm : bool, default=False
+    global_ltm : bool, default=False
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2343,7 +2340,7 @@ class LpsLgrsBox(_BaseLgrsBox):
         See `LatLonPoint` documentation.
     extended_ltm : bool, default=False
         See `LatLonPoint` documentation.
-    polar_ltm : bool, default=False
+    global_ltm : bool, default=False
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2515,7 +2512,7 @@ class LtmAccBox(_BaseAccBox):
         See `LatLonPoint` documentation.
     extended_ltm : bool, default=False
         See `LatLonPoint` documentation.
-    polar_ltm : bool, default=False
+    global_ltm : bool, default=False
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2641,7 +2638,7 @@ class LtmLgrsBox(_BaseLgrsBox):
         See `LatLonPoint` documentation.
     extended_ltm : bool, default=False
         See `LatLonPoint` documentation.
-    polar_ltm : bool, default=False
+    global_ltm : bool, default=False
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.

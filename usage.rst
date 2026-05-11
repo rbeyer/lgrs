@@ -82,7 +82,7 @@ creating a coordinate object::
     # be placed into the LPS or LTM systems.
     >>> converted = geo_point.to_lps_or_ltm()
     >>> converted
-    LtmPoint(zone_number=23, hemisphere='N', easting=310589.1246840328, northing=30311.488262646784, prefer_lps=False, extended_ltm=False, polar_ltm=False)
+    LtmPoint(zone_number=23, hemisphere='N', easting=310589.1246840328, northing=30311.488262646784, prefer_lps=False, extended_ltm=False, global_ltm=False)
 
     # Lots of ways to get at the returned information:
     >>> str(converted)
@@ -98,12 +98,12 @@ creating a coordinate object::
     # preferred.
     >>> south_converted = south_geo_point.to_lps()
     >>> south_converted
-    LpsPoint(hemisphere='S', easting=505262.9406400493, northing=650710.9011814011, prefer_lps=False, extended_ltm=False, polar_ltm=False)
+    LpsPoint(hemisphere='S', easting=505262.9406400493, northing=650710.9011814011, prefer_lps=False, extended_ltm=False, global_ltm=False)
 
     # Inversely, take an LPS coordinate and convert to lat/lon:
     >>> lps_coord = LpsPoint(hemisphere="S", easting=500000, northing=500000)
     >>> lps_coord.to_latlon()
-    LatLonPoint(latitude=-90.0, longitude=0.0, prefer_lps=False, extended_ltm=False, polar_ltm=False)
+    LatLonPoint(latitude=-90.0, longitude=0.0, prefer_lps=False, extended_ltm=False, global_ltm=False)
 
 Remember that the default polar stereographic projection that is used by the
 LOLA and LROC PDS data, and in lots of data that is derived from those data, is
@@ -134,7 +134,7 @@ To convert a lon/lat coordinate to an LGRS grid box::
     >>> geo_point = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
     >>> grid_converted = geo_point.to_lgrs()
     >>> grid_converted
-    LtmLgrsBox(longitudinal_band=35, latitudinal_band='J', easting_area='F', northing_area='J', easting='12711', northing='12229', prefer_lps=False, extended_ltm=False, polar_ltm=False)
+    LtmLgrsBox(longitudinal_band=35, latitudinal_band='J', easting_area='F', northing_area='J', easting='12711', northing='12229', prefer_lps=False, extended_ltm=False, global_ltm=False)
 
     >>> str(grid_converted)
     '35JFJ1271112229'
@@ -145,7 +145,7 @@ Here's a polar coordinate::
     >>> polar_geo_point = LatLonPoint(latitude=-86, longitude=30)
     >>> polar_grid_converted = polar_geo_point.to_lgrs()
     >>> polar_grid_converted
-    LpsLgrsBox(longitudinal_band='B', easting_area='C', northing_area='S', easting='10307', northing='04455', prefer_lps=False, extended_ltm=False, polar_ltm=False)
+    LpsLgrsBox(longitudinal_band='B', easting_area='C', northing_area='S', easting='10307', northing='04455', prefer_lps=False, extended_ltm=False, global_ltm=False)
 
     >>> str(polar_grid_converted)
     'BCS1030704455'
@@ -159,23 +159,23 @@ By default, this coordinate falls in the LPS zone, but if you use
 
     >>> overlap_geo_point = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
     >>> overlap_geo_point.to_lgrs()
-    LpsLgrsBox(longitudinal_band='B', easting_area='L', northing_area='L', easting='16160', northing='19744', prefer_lps=False, extended_ltm=False, polar_ltm=False)
+    LpsLgrsBox(longitudinal_band='B', easting_area='L', northing_area='L', easting='16160', northing='19744', prefer_lps=False, extended_ltm=False, global_ltm=False)
 
     >>> constrained_geo_point = overlap_geo_point.with_constraints(extended_ltm=True)
     >>> constrained_geo_point.to_lgrs()
-    LtmLgrsBox(longitudinal_band=35, latitudinal_band='C', easting_area='F', northing_area='G', easting='02265', northing='17302', prefer_lps=False, extended_ltm=True, polar_ltm=False)
+    LtmLgrsBox(longitudinal_band=35, latitudinal_band='C', easting_area='F', northing_area='G', easting='02265', northing='17302', prefer_lps=False, extended_ltm=True, global_ltm=False)
 
 And all of these LGRS grids can be converted to the ACC shorthand (or you could
 go there directly)::
 
     >>> grid_converted.to_acc()
-    LtmAccBox(longitudinal_band=35, latitudinal_band='J', easting_area='F', northing_area='J', easting_1k='M', easting='711', northing_1k='M', northing='229', prefer_lps=False, extended_ltm=False, polar_ltm=False)
+    LtmAccBox(longitudinal_band=35, latitudinal_band='J', easting_area='F', northing_area='J', easting_1k='M', easting='711', northing_1k='M', northing='229', prefer_lps=False, extended_ltm=False, global_ltm=False)
 
     >>> str(geo_point.to_acc())  # Straight from a lat/lon coordinate, but same result as above.
     '35JFJM711M229'
 
     >>> polar_grid_converted.to_acc()
-    LpsAccBox(longitudinal_band='B', easting_area='C', northing_area='S', easting_1k='K', easting='307', northing_1k='D', northing='455', prefer_lps=False, extended_ltm=False, polar_ltm=False)
+    LpsAccBox(longitudinal_band='B', easting_area='C', northing_area='S', easting_1k='K', easting='307', northing_1k='D', northing='455', prefer_lps=False, extended_ltm=False, global_ltm=False)
 
     >>> str(polar_geo_point.to_acc())
     'BCSK307D455'
@@ -190,7 +190,7 @@ following::
 
     >>> lgrs_box = LpsLgrsBox.from_string("BCS1030704455")
     >>> lgrs_box.to_latlon()
-    LatLonPoint(latitude=-86.0000149160353, longitude=29.9999496588117, prefer_lps=False, extended_ltm=False, polar_ltm=False)
+    LatLonPoint(latitude=-86.0000149160353, longitude=29.9999496588117, prefer_lps=False, extended_ltm=False, global_ltm=False)
 
 
 Working with Grid Boxes
