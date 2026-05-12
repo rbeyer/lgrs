@@ -181,14 +181,35 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
 
 # endregion
 ###############################################################################
+# region> UTILITIES
+###############################################################################
+def _validate_constraints(
+        extended_ltm: bool, global_lps: bool, global_ltm: bool, **ignore
+) -> None:
+    mutually_exclusive_count = (
+        extended_ltm, global_ltm, global_lps
+    ).count(True)
+    if mutually_exclusive_count > 1:
+        raise TypeError(
+            "At most, only one of the following constraints may be True: "
+            "`extended_ltm`, `global_lps`, `global_ltm`"
+        )
+
+
+# endregion
+###############################################################################
 # region> ZONES
 ###############################################################################
 @_dataclasses.dataclass(kw_only=True, frozen=True)
 class BaseZone(metaclass=_caching._AbstractMetaMultiton):
     extended_ltm: bool = False
+    global_lps: bool = False
     global_ltm: bool = False
     hemisphere: str
     datum_name: str = DATUM_NAME
+
+    def __post_init__(self):
+        _validate_constraints(**self.__dict__)
 
     # * UTILITIES. ────────────────────────────────────────────────────
     def _get_bbox_string(self) -> str:
@@ -211,7 +232,9 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
     # * ATTRIBUTES. ───────────────────────────────────────────────────
     @_functools.cached_property
     def absolute_ltm_limit(self) -> float:
-        if self.global_ltm:
+        if self.global_lps:
+            return 0.0
+        elif self.global_ltm:
             return 90.0
         elif self.extended_ltm:
             return LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE

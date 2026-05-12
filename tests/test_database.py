@@ -36,8 +36,9 @@ import pyproj.aoi
 class TestQueryDatabase(unittest.TestCase):
     default_kwargs = {
         "contains": False,
-        "primary_ltm": True,
+        "primary": True,
         "extended_ltm": False,
+        "global_lps": False,
         "global_ltm": False,
         "inclusive_bounds": False,
     }
@@ -47,7 +48,7 @@ class TestQueryDatabase(unittest.TestCase):
         full_kwargs.update(kwargs)
         infos = database.query_lunar_crs_info(**full_kwargs)
         actual_long_names = [info._long_name for info in infos]
-        self.assertEqual(actual_long_names, expected_long_names)
+        self.assertEqual(expected_long_names, actual_long_names)
 
     def test_ltm_zone_center(self) -> None:
         self.check_query(
@@ -229,6 +230,15 @@ class TestQueryDatabase(unittest.TestCase):
             global_ltm=True,
             inclusive_bounds=True,
             expected_long_names=both_pole_long_names,
+        )
+
+    def test_global_lps(self) -> None:
+        self.check_query(
+            latitude=[-10, 10],
+            longitude=[0, 0],
+            global_lps=True,
+            inclusive_bounds=True,
+            expected_long_names=["N**", "S**", "23N", "23S"],
         )
 
     def test_contains(self) -> None:

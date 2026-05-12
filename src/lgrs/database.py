@@ -112,6 +112,7 @@ def _get_all_lunar_crs_long_names(
     lps: bool = True,
     ltm: bool = True,
     extended_ltm: bool = False,
+    global_lps: bool = False,
     global_ltm: bool = False,
     prefer_ltm: bool = False,
     prefer_west_ltm: bool = False,
@@ -119,7 +120,8 @@ def _get_all_lunar_crs_long_names(
 ) -> tuple[str, ...]:
     # Note: `prefer_*` included for call signature compatibility with
     # `_get_lunar_crs_long_names()` but are intentionally unused.
-    if global_ltm:
+    _wkt._validate_constraints(**locals())
+    if global_lps or global_ltm:
         suffix = "**"
     elif extended_ltm:
         suffix = "*"
@@ -129,12 +131,14 @@ def _get_all_lunar_crs_long_names(
         lps_tuple = _get_all_lunar_crs_long_names(
             ltm=False,
             extended_ltm=extended_ltm,
+            global_lps=global_lps,
             global_ltm=global_ltm,
             south=south,
         )
         ltm_tuple = _get_all_lunar_crs_long_names(
             lps=False,
             extended_ltm=extended_ltm,
+            global_lps=global_lps,
             global_ltm=global_ltm,
             south=south,
         )
@@ -143,19 +147,26 @@ def _get_all_lunar_crs_long_names(
     elif lps:
         if global_ltm:
             lps_tuple = ()
-        else:
+        elif south:
+            lps_tuple = (f"S{suffix}",)
+        elif south is None:
             lps_tuple = (f"N{suffix}", f"S{suffix}")
+        else:
+            lps_tuple = (f"N{suffix}",)
         return lps_tuple
     else:
-        north_iter = (f"{i:02}N{suffix}" for i in range(1, 46))
-        south_iter = (f"{i:02}S{suffix}" for i in range(1, 46))
-        if south is None:
-            final_iter = _itertools.chain(north_iter, south_iter)
-        elif south:
-            final_iter = south_iter
+        if global_lps:
+            ltm_tuple = ()
         else:
-            final_iter = north_iter
-        ltm_tuple = tuple(final_iter)
+            north_iter = (f"{i:02}N{suffix}" for i in range(1, 46))
+            south_iter = (f"{i:02}S{suffix}" for i in range(1, 46))
+            if south is None:
+                final_iter = _itertools.chain(north_iter, south_iter)
+            elif south:
+                final_iter = south_iter
+            else:
+                final_iter = north_iter
+            ltm_tuple = tuple(final_iter)
         return ltm_tuple
 
 
@@ -164,13 +175,20 @@ def _get_lunar_crs_long_names(
     conformed_latitudes: _FloatIterable,
     conformed_longitudes: _FloatIterable,
     extended_ltm: bool = False,
+    global_lps: bool = False,
     global_ltm: bool = False,
     prefer_ltm: bool = False,
     prefer_south_ltm: bool = False,
     prefer_west_ltm: bool = False,
 ) -> list[str]:
     # Determine LTM vs. LPS condition. ────────────────────────────────
-    if global_ltm:
+    _wkt._validate_constraints(**locals())
+    if global_lps:
+
+        def is_in_ltm(test_lat: float) -> bool:
+            return False
+
+    elif global_ltm:
 
         def is_in_ltm(test_lat: float) -> bool:
             return True
@@ -210,7 +228,7 @@ def _get_lunar_crs_long_names(
             long_name = f"{zone_int:02}{hemi}"
         else:
             long_name = hemi
-        if global_ltm:
+        if global_lps or global_ltm:
             long_name += "**"  # *REASSIGNMENT*
         elif extended_ltm:
             long_name += "*"  # *REASSIGNMENT*
@@ -334,7 +352,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             0 if self.is_lps else 1,
             0 if self.hemisphere == "N" else 1,
             self.ltm_zone,
-            self.ltm_limit,
+            self.absolute_ltm_limit,
         )
         return tup
 
@@ -432,7 +450,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             return None
 
     @_functools.cached_property
-    def ltm_limit(self) -> float:
+    def absolute_ltm_limit(self) -> float:
         suffix = self._long_name_parsed.suffix
         match suffix:
             case "":
@@ -440,7 +458,10 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             case "*":
                 limit = _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
             case "**":
-                limit = 90.0
+                if self.is_lps:
+                    limit = 0.0
+                else:
+                    limit = 90.0
             case _:
                 raise TypeError(f"`suffix` is not recognized: {suffix!r}")
         return limit
@@ -468,7 +489,10 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             case "*":
                 kwargs["extended_ltm"] = True
             case "**":
-                kwargs["global_ltm"] = True
+                if self.is_lps:
+                    kwargs["global_lps"] = True
+                else:
+                    kwargs["global_ltm"] = True
             case _:
                 raise TypeError(f"`suffix` is not recognized: {suffix!r}")
         crs = _srs.make_lunar_crs(name, **kwargs)
@@ -483,7 +507,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             1) `.is_lps` before `.is_ltm`
             2) by `.hemisphere` ("N" before "S")
             3) by `.ltm_zone` (numerically)
-            4) by `.ltm_limit`
+            4) by `.absolute_ltm_limit`
 
         Parameters
         ----------
@@ -543,8 +567,9 @@ def query_lunar_crs_info(
     area_of_interest: _pyproj_aoi.AreaOfInterest | None = None,
     contains: bool = False,
     *,
-    primary_ltm: bool = True,
+    primary: bool = True,
     extended_ltm: bool = False,
+    global_lps: bool = False,
     global_ltm: bool = False,
     inclusive_bounds: bool = False,
     latitude: float | _collections.abc.Iterable[float] | None = None,
@@ -568,15 +593,20 @@ def query_lunar_crs_info(
         entirely contains all spatial inputs, that is, `area_of_interest` or
         all `latitude` and `longitude`. If `False`, `infos` will reference a
         CRS if its area of use intersects any part of a spatial filter.
-    primary_ltm : bool, default=True
-        Whether to include the primary (unextended) LTM zones, which span
-        from the equator to 80 degrees N and S.
+    primary : bool, default=True
+        Whether to include the primary configuration, in which the Moon is
+        subdivided at 80 degrees N and S, with LTM zones equatorward and
+        LPS regions (one per pole) poleward.
     extended_ltm : bool, default=False
-        Whether to include extended LTM zones, which span from the equator
-        to 82 degrees N and S.
+        Whether to include the extended LTM configuration, in which the Moon
+        is subdivided at 82 degrees N and S, with LTM zones equatorward and
+        LPS regions (one per pole) poleward.
+    global_lps : bool, default=False
+        Whether to include LPS regions that span from either pole to the
+        equator.
     global_ltm : bool, default=False
-        Whether to include polar LTM zones, which span from the equator to
-        90 degrees N and S.
+        Whether to include LTM zones that span from the equator to either
+        pole.
     inclusive_bounds : bool, default=False
         Whether to treat LPS and LTM boundaries as inclusive when applying
         spatial filters (`area_of_interest`, `latitude`, and `longitude`).
@@ -659,13 +689,15 @@ def query_lunar_crs_info(
     else:
         get_lunar_crs_long_names = _get_all_lunar_crs_long_names
         latlon_kwargs = {}
-    ltm_kwargs_list = []
-    if primary_ltm:
-        ltm_kwargs_list.append({"extended_ltm": False, "global_ltm": False})
+    lps_and_ltm_kwargs_list = []
+    if primary:
+        lps_and_ltm_kwargs_list.append({})
     if extended_ltm:
-        ltm_kwargs_list.append({"extended_ltm": True, "global_ltm": False})
+        lps_and_ltm_kwargs_list.append({"extended_ltm": True})
+    if global_lps:
+        lps_and_ltm_kwargs_list.append({"global_lps": True})
     if global_ltm:
-        ltm_kwargs_list.append({"extended_ltm": False, "global_ltm": True})
+        lps_and_ltm_kwargs_list.append({"global_ltm": True})
     if inclusive_bounds:
         prefer_ltms = (False, True)
         prefer_south_ltms = (False, True)
@@ -677,7 +709,7 @@ def query_lunar_crs_info(
 
     # Determine CRS long names.
     cum_crs_long_names = []
-    for ltm_kwargs in ltm_kwargs_list:
+    for lps_and_ltm_kwargs in lps_and_ltm_kwargs_list:
         inner_crs_long_names = []
         # Note: `prefer_ltm` and `prefer_south_ltm` can be iterated in
         # parallel, because they apply at disjoint latitudes: the LTM/
@@ -691,7 +723,7 @@ def query_lunar_crs_info(
                     prefer_south_ltm=this_prefer_south_ltm,
                     prefer_west_ltm=this_prefer_west_ltm,
                     **latlon_kwargs,
-                    **ltm_kwargs,
+                    **lps_and_ltm_kwargs,
                 )
                 inner_crs_long_names.append(crs_long_names)
         if contains:
