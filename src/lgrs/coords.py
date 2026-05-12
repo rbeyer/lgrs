@@ -225,61 +225,6 @@ def _as_str(str_or_none: str | None) -> str:
         return str_or_none
 
 
-def _easy_dataclass(cls: type[BaseCoordinate]) -> type[BaseCoordinate]:
-    """
-    Force constraints to end of call signature, string representation.
-
-    Decorating a `BaseCoordinate` subclass with this function makes it a
-    frozen dataclass and ensures that field order has `_BaseCoordinate`
-    fields--assumed to be constraints--pushed to the end of both
-    `cls.__init__()` call signatures and the output of `cls.__repr__()`.
-    Since constraints are assumed to be less important to most users,
-    pushing them to the end is preferable.
-
-    Parameters
-    ----------
-    cls : type
-        The `BaseCoordinate` subclass to decorate.
-
-    Returns
-    -------
-    decorated : type
-        The decorated `cls`.
-    """
-    # Isolate non-universal fields.
-    naive_dataclass = _dataclasses.dataclass(cls, frozen=True)
-    univ_field_name_set = {
-        field.name for field in _dataclasses.fields(_BaseCoordinate)
-    }
-    non_univ_fields = [
-        field
-        for field in _dataclasses.fields(naive_dataclass)
-        if field.name not in univ_field_name_set
-    ]
-
-    # Insert "shadow" dataclass in inheritance, to push universal fields
-    # to end.
-    field_annotations = {field.name: field.type for field in non_univ_fields}
-    shadow_cls = type(
-        f"_Shadow{cls.__name__}",
-        (_AbstractBaseCoordinate,),
-        {"__annotations__": field_annotations},
-    )
-    shadow_dataclass = _dataclasses.dataclass(shadow_cls, frozen=True)
-    mro = (
-        *cls.__mro__[: cls.__mro__.index(_AbstractBaseCoordinate)],
-        *shadow_dataclass.__mro__,
-    )
-    twin_cls = type(cls.__name__, mro, {})
-    # Note: Copies docstring, etc. from `cls` to `twin_cls`.
-    _functools.update_wrapper(twin_cls, cls, updated=())
-    del twin_cls.__wrapped__  # Avoid confusion, duplicate doctests.
-
-    # Create and return outer dataclass.
-    dataclass = _dataclasses.dataclass(frozen=True)(twin_cls)
-    return dataclass
-
-
 def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
     # TODO: Determine whether `tolerance` is a good choice. Code
     #  mimics `check_decimal_round()` of reference code and presumably
@@ -290,6 +235,68 @@ def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
         return nearest_int
     else:
         return _floor(f)
+
+
+# endregion
+###############################################################################
+# region> CONSTRAINTS
+###############################################################################
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class Constraints(metaclass=_caching._MetaMultiton):
+    """
+    Create a set of constraints for coordinates and their transforms.
+
+    Together, constraints partition the lunar surface into discrete regions
+    that support either the Lunar Polar Stereographic (LPS) or Lunar
+    Transverse Mercator (LTM) system. Conceptually, `extended_ltm`,
+    `global_ltm`, and `global_lps` determine the maximum poleward extent of
+    the LTM region, or equivalently, the two latitudes (north and south) of
+    the LTM/LPS boundary. (At most, only one of those constraints may be
+    enabled.) If none of these constraints are enabled, the preferred
+    boundary at 80° N/S is used. The constraints `prefer_lps` and
+    `prefer_ltm_zone` determine how to handle locations near (1) the nominal
+    latitudinal boundaries between the LTM and LPS systems and (2) the
+    nominal longitudinal boundary between adjacent LTM zones, respectively.
+    If neither of these constraints is specified, the nominal latitudinal
+    and longitudinal boundaries are used, which cut LGRS boxes along curved
+    traces.
+
+    prefer_lps : bool, default=False
+        Whether to prefer the LPS system for a location where both LPS
+        and LTM systems are supported by `lgrs`. This overlap only occurs
+        slightly equatorward of the nominal latitudinal LTM/LPS boundary
+        between the systems.
+    prefer_ltm_zone : int, optional
+        An LTM zone to prefer over the LTM zones on either side (to the west
+        and east).
+    extended_ltm : bool, default=False
+        Whether to use the extended LTM region. If `True`, the nominal
+        poleward extent of the LTM region is 82° N/S instead of 80° N/S.
+    global_lps : bool, default=False
+        Whether to extend the LPS region globally. If `True`, there is no
+        LTM region.
+    global_ltm : bool, default=False
+        Whether to extend the LTM region globally. If `True`, there is no
+        LPS region.
+
+    """
+
+    prefer_lps: bool = False
+    prefer_ltm_zone: int | None = None
+    extended_ltm: bool = False
+    global_lps: bool = False
+    global_ltm: bool = False
+
+    @_functools.cached_property
+    def _nonpref_kwargs(self) -> dict[str, bool]:
+        return {
+            "extended_ltm": self.extended_ltm,
+            "global_lps": self.global_lps,
+            "global_ltm": self.global_ltm,
+        }
+
+
+_default_constraints = Constraints()
 
 
 # endregion
@@ -306,13 +313,13 @@ class _AbstractBaseCoordinate(_abc.ABC):
 # accidentally implying dataclass fields).
 @_dataclasses.dataclass(frozen=True, kw_only=True)
 class _BaseCoordinate(_AbstractBaseCoordinate):
+    constraints: Constraints = _dataclasses.field(
+        default=_default_constraints, compare=False, repr=False
+    )
+    validate: _dataclasses.InitVar[bool] = True
 
     # * FIELDS AND VALIDATION. ────────────────────────────────────────
     _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
-    prefer_lps: bool = False
-    extended_ltm: bool = False
-    global_ltm: bool = False
-    validate: _dataclasses.InitVar[bool] = True
 
     def _register_validation(self) -> None:
         object.__setattr__(self, "_was_validated", True)
@@ -330,16 +337,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         assert "_init_kwargs" not in self.__dict__
         self._register_validation()
 
-    def _validate_global_ltm(self) -> None:
-        if self.global_ltm:
-            if self.prefer_lps or self.extended_ltm:
-                raise _exceptions.MalformedCoordinate(
-                    "If `global_ltm` is `True`, `prefer_lps` and "
-                    "`extended_ltm` must be `False` (or `None`)."
-                )
-
-    _validate_prefer_lps = _return_none
-    _validate_extended_ltm = _return_none
+    _validate_constraints = _return_none
 
     # * INITIALIZATION. ───────────────────────────────────────────────
     def __post_init__(self, validate: bool) -> None:
@@ -354,89 +352,80 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         }
 
     # TODO: Un-skip doctest once complete validation is implemented.
-    def with_constraints(
-        self,
-        *,
-        prefer_lps: bool | None = None,
-        extended_ltm: bool | None = None,
-        global_ltm: bool | None = None,
-        validate: bool | None = None,
-        copy: bool = False,
-    ) -> _typing.Self:
-        """
-        Get a version of `self` with the specified constraints.
-
-        For any constraint that is not specified (or specified as `None`), the
-        corresponding value from `self` is used.
-
-        Parameters
-        ----------
-        prefer_lps : bool, optional
-            See `LatLonPoint` documentation.
-        extended_ltm : bool, optional
-            See `LatLonPoint` documentation.
-        global_ltm : bool, optional
-            See `LatLonPoint` documentation.
-        validate : bool, optional
-            See `LatLonPoint` documentation.
-        copy : bool, optional
-            Whether to ensure that the returned instance is not `self`. If not
-            specified (`None`), set to `True` unless `self` is suitable.
-
-        Returns
-        -------
-        version : BaseCoordinate
-            Version of `self` with the specified constraints.
-
-        Examples
-        --------
-        >>> geo_point = LatLonPoint(81, 0, extended_ltm=True)
-        >>> ltm_point = geo_point.to_lps_or_ltm()
-        >>> isinstance(ltm_point, LtmPoint)
-        True
-        >>> illegal_point = ltm_point.with_constraints(extended_ltm=False)  # doctest: +SKIP
-        Traceback (most recent call last):
-          ...
-        lgrs.exceptions.MalformedCoordinate:
-          ...
-        """  # noqa: E501
-
-        # Resolve new initialization kwargs.
-        new_init_kwargs = self._init_kwargs.copy()
-        if prefer_lps is not None:
-            new_init_kwargs["prefer_lps"] = prefer_lps
-        if global_ltm is not None:
-            new_init_kwargs["global_ltm"] = global_ltm
-        if extended_ltm is not None:
-            new_init_kwargs["extended_ltm"] = extended_ltm
-
-        # Return `self`, if suitable and allowed.
-        if (
-            not copy
-            and not validate  # May be `None`.
-            and new_init_kwargs == self._init_kwargs
-        ):
-            return self
-
-        # Create and return copy, constrained as specified.
-        if validate is None:
-            validate = True  # *REASSIGNMENT*
-        new = type(self)(**new_init_kwargs, validate=validate)
-        return new
+    # TODO: Merge with `.replace()`.
+    # def with_constraints(
+    #     self,
+    #     *,
+    #     prefer_lps: bool | None = None,
+    #     extended_ltm: bool | None = None,
+    #     global_ltm: bool | None = None,
+    #     validate: bool | None = None,
+    #     copy: bool = False,
+    # ) -> _typing.Self:
+    #     """
+    #     Get a version of `self` with the specified constraints.
+    #
+    #     For any constraint that is not specified (or specified as `None`), the
+    #     corresponding value from `self` is used.
+    #
+    #     Parameters
+    #     ----------
+    #     prefer_lps : bool, optional
+    #         See `LatLonPoint` documentation.
+    #     extended_ltm : bool, optional
+    #         See `LatLonPoint` documentation.
+    #     global_ltm : bool, optional
+    #         See `LatLonPoint` documentation.
+    #     validate : bool, optional
+    #         See `LatLonPoint` documentation.
+    #     copy : bool, optional
+    #         Whether to ensure that the returned instance is not `self`. If not
+    #         specified (`None`), set to `True` unless `self` is suitable.
+    #
+    #     Returns
+    #     -------
+    #     version : BaseCoordinate
+    #         Version of `self` with the specified constraints.
+    #
+    #     Examples
+    #     --------
+    #     >>> geo_point = LatLonPoint(81, 0, extended_ltm=True)
+    #     >>> ltm_point = geo_point.to_lps_or_ltm()
+    #     >>> isinstance(ltm_point, LtmPoint)
+    #     True
+    #     >>> illegal_point = ltm_point.with_constraints(extended_ltm=False)  # doctest: +SKIP
+    #     Traceback (most recent call last):
+    #       ...
+    #     lgrs.exceptions.MalformedCoordinate:
+    #       ...
+    #     """  # noqa: E501
+    #
+    #     # Resolve new initialization kwargs.
+    #     new_init_kwargs = self._init_kwargs.copy()
+    #     if prefer_lps is not None:
+    #         new_init_kwargs["prefer_lps"] = prefer_lps
+    #     if global_ltm is not None:
+    #         new_init_kwargs["global_ltm"] = global_ltm
+    #     if extended_ltm is not None:
+    #         new_init_kwargs["extended_ltm"] = extended_ltm
+    #
+    #     # Return `self`, if suitable and allowed.
+    #     if (
+    #         not copy
+    #         and not validate  # May be `None`.
+    #         and new_init_kwargs == self._init_kwargs
+    #     ):
+    #         return self
+    #
+    #     # Create and return copy, constrained as specified.
+    #     if validate is None:
+    #         validate = True  # *REASSIGNMENT*
+    #     new = type(self)(**new_init_kwargs, validate=validate)
+    #     return new
 
     # * FIELD SUPPORT. ────────────────────────────────────────────────
     def __iter__(self) -> _collections.abc.Iterable:
         return iter(self._init_kwargs.values())
-
-    @_functools.cached_property
-    def _constraint_keys(self) -> tuple[str, ...]:
-        # Note: Assumes that all fields of `_BaseCoordinate` are
-        # constraints, consistent with `_easy_dataclass()`.
-        constraint_keys = tuple(
-            field.name for field in _BaseCoordinate._get_fields()
-        )
-        _BaseCoordinate._constraint_keys = constraint_keys
-        return constraint_keys
 
     @classmethod
     @_functools.cache
@@ -458,20 +447,19 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
             name_to_type[name] = typ
         return name_to_type
 
-    @_functools.cached_property
-    def _nonconstraint_kwargs(self) -> dict[str, _typing.Any]:
-        return {
-            field_name: field_val
-            for field_name, field_val in self._init_kwargs.items()
-            if field_name not in self._constraint_keys
-        }
 
-
-class BaseCoordinate(_BaseCoordinate):
+class BaseCoordinate:
     """The base class for all coordinates, both points and grid boxes."""
 
     _template: _collections.abc.Callable | str | None = None
     _was_validated: bool = False
+    # Note: Hints below are "promises" that are realized when an
+    # instantiable class inherits from both `BaseCoordinate` and
+    # `_BaseCoordinate`. This inheritance is postponed so that the
+    # `constraints` and `validate` fields appear at the end of the
+    # auto-generated initialization function.
+    constraints: Constraints
+    validate: bool
 
     # * BASIC BEHAVIOR. ───────────────────────────────────────────────
     def __copy__(self) -> _typing.Self:
@@ -881,7 +869,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         is equivalent to::
 
-            coord_1.is_equal_to(coord_2, constraints=True)
+            coord_1.is_equal_to(coord_2, constraints=False)
 
         except that the latter does not support mixed types.
 
@@ -893,8 +881,8 @@ class BaseCoordinate(_BaseCoordinate):
             Whether to raise a descriptive error rather than return `False`.
         constraints : bool, default=False
             Whether to include constraints when evaluating equality. If
-            `False`, only coordinate values are compared. If `True`, each
-            constraint is also compared.
+            `False`, only coordinate values are compared. If `True`,
+            `.constraints` is also compared.
 
         Returns
         -------
@@ -909,20 +897,18 @@ class BaseCoordinate(_BaseCoordinate):
         Examples
         --------
         >>> latlon_point_1 = LatLonPoint(0, 0)
-        >>> latlon_point_2 = LatLonPoint(0, 0, extended_ltm=True)
+        >>> latlon_point_2 = LatLonPoint(
+        ...     0, 0, constraints=Constraints(extended_ltm=True)
+        ... )
         >>> latlon_point_1.is_equal_to(latlon_point_2)
         True
         >>> latlon_point_1.is_equal_to(latlon_point_2, constraints=True)
         False
         """
         # Compare.
-        if constraints:
-            excluded_field_names = ()
-        else:
-            excluded_field_names = self._constraint_keys
         err_lines = []
         for field_name, self_val in self._init_kwargs.items():
-            if field_name in excluded_field_names:
+            if not constraints and field_name == "constraints":
                 continue
             other_val = getattr(other, field_name)
             if self_val != other_val:
@@ -1097,24 +1083,17 @@ class BaseCoordinate(_BaseCoordinate):
             for cousin in cousins:
                 self._cousins.remove(cousin)
 
-    @_functools.cached_property
-    def constraints(self) -> _types.MappingProxyType[str, bool]:
-        """The constraints on the instance, as a read-only mapping."""
-        return _types.MappingProxyType(
-            {key: self._init_kwargs[key] for key in self._constraint_keys}
-        )
-
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     def _force_type_or_error(
         self,
         bound_method: _collections.abc.Callable,
         targ_typ: type[BaseCoordinate],
-        **constraints: bool,
+        constraints: Constraints,
     ) -> BaseCoordinate:
         cand = bound_method()
         if isinstance(cand, targ_typ):
             return cand
-        reconstrained = self.with_constraints(**constraints)
+        reconstrained = self.replace(constraints=constraints)
         cand = bound_method.__func__(reconstrained)
         if isinstance(cand, targ_typ):
             return cand
@@ -1289,9 +1268,7 @@ class BaseCoordinate(_BaseCoordinate):
         lps_point = self._force_type_or_error(
             self.to_lps_or_ltm,
             LpsPoint,
-            prefer_lps=True,
-            extended_ltm=False,
-            global_ltm=False,
+            constraints=Constraints(global_lps=True),
         )
         return lps_point
 
@@ -1327,7 +1304,9 @@ class BaseCoordinate(_BaseCoordinate):
             returned. If caching is enabled, a cached instance may be returned.
         """
         ltm_point = self._force_type_or_error(
-            self.to_lps_or_ltm, LtmPoint, global_ltm=True
+            self.to_lps_or_ltm,
+            LtmPoint,
+            constraints=Constraints(global_ltm=True),
         )
         return ltm_point
 
@@ -1371,7 +1350,7 @@ class BaseCoordinate(_BaseCoordinate):
             match value:
                 case str():
                     yield value
-                case bool() | None:
+                case Constraints() | None:
                     continue
                 case int() | float():
                     yield repr(value)
@@ -1407,23 +1386,10 @@ class PointCoordinate(BaseCoordinate):
 
 
 # TODO: Un-skip Example 3 once complete validation is implemented.
-@_easy_dataclass
-class LatLonPoint(PointCoordinate):
+@_dataclasses.dataclass(frozen=True)
+class _LatLonPoint(PointCoordinate):
     """
     Create an instance representing a latitude-longitude point.
-
-    The final four parameters--`prefer_lps`, `extended_ltm`, `global_ltm`,
-    and `validate`--are common to all coordinates classes. The first three
-    are called "constraints" (e.g., `.constraints`). Together, they
-    partition the lunar surface into discrete regions that support either
-    the Lunar Polar Stereographic (LPS) or Lunar Transverse Mercator (LTM)
-    system. Once set, these constraints are honored in all derived
-    coordinate instances (Example 1), except where explicitly overridden
-    (Example 3). Conceptually, `extended_ltm` determines the maximum
-    poleward extent of the LTM region and `prefer_lps` determines how the
-    LPS-LTM overlap immediately equatorward of that boundary is handled. In
-    the `global_ltm=True` case, the LTM region is global, so there is no LPS
-    region.
 
     Parameters
     ----------
@@ -1431,19 +1397,14 @@ class LatLonPoint(PointCoordinate):
         The latitude of `new`, in decimal degrees.
     longitude : float
         The longitude of `new`, in decimal degrees.
-    prefer_lps : bool, default=False
-        Whether to prefer the LPS system for a location where both LPS
-        and LTM systems are supported by `lgrs`. This overlap only occurs
-        slightly equatorward of the nominal latitudinal boundary between
-        the systems, as determined by `extended_ltm`.
-    extended_ltm : bool, default=False
-        Whether to use the extended LTM region. If `True`, the nominal
-        poleward extent of the LTM region is 82° N/S instead of 80° N/S.
-        This nominal extent can be modified by `prefer_lps`.
-    global_ltm : bool, default=False
-        Whether to extend the LTM region globally. If `True`, there is no
-        LPS region. If this option is enabled, enabling `prefer_lps` and/or
-        `extended_ltm` will render the instance invalid.
+    constraints : Constraints
+        The constraints together determine whether the location is assigned
+        to the Lunar Polar Stereographic (LPS) or Lunar Transverse Mercator
+        (LTM) systems and, in the latter case, to which LTM zone the
+        location is assigned. See `Constraints` for additional
+        documentation. Although these constraints do not directly apply to
+        `LatLonPoint`, they are honored in all future transformations of
+        this instance.
     validate : bool, default=True
         Whether to validate that the coordinate's values are supported,
         subject to the constraints. This validation also conforms any
@@ -1455,6 +1416,10 @@ class LatLonPoint(PointCoordinate):
         If the instance is invalid. Both values and constraints are
         considered.
 
+    See Also
+    --------
+    Constraints : Additional documentation on constraints.
+
     Examples
     --------
     >>> point = LatLonPoint(0, 0)
@@ -1465,28 +1430,23 @@ class LatLonPoint(PointCoordinate):
     constraint is remembered and determines that `proj_point` belongs to the
     extended LTM region rather than the LPS region.
 
-    >>> geo_point = LatLonPoint(81, 0, extended_ltm=True)
+    >>> extended_ltm = Constraints(extended_ltm=True)
+    >>> geo_point = LatLonPoint(81, 0, constraints=extended_ltm)
     >>> proj_point = geo_point.to_lps_or_ltm()  # Example 1
     >>> isinstance(proj_point, LtmPoint)
     True
 
     A coordinate may be invalid because its values are disallowed
     universally (Example 2) or because its type or values are disallowed by
-    the applied constraints (Example 3). Conflicting constraints also render
-     a coordinate invalid (Example 4).
+    the applied constraints (Example 3).
 
     >>> LatLonPoint(1000, -1000)  # Example 2  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
       ...
     lgrs.exceptions.MalformedCoordinate:
       ...
-    >>> ltm_point = geo_point.to_ltm()
-    >>> ltm_point.with_constraints(extended_ltm=False)  # Example 3  # doctest: +SKIP
-    Traceback (most recent call last):
-      ...
-    lgrs.exceptions.MalformedCoordinate:
-      ...
-    >>> LatLonPoint(0, 0, prefer_lps=True, global_ltm=True)  # Example 4  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> lps_point = geo_point.to_ltm()
+    >>> lps_point.replace(constraints=extended_ltm)  # Example 3  # doctest: +SKIP
     Traceback (most recent call last):
       ...
     lgrs.exceptions.MalformedCoordinate:
@@ -1495,7 +1455,7 @@ class LatLonPoint(PointCoordinate):
     Finally, validation may conform values where those can be confidently
     interpreted.
 
-    >>> latlon_point = LatLonPoint(45, 182)  # Example 5
+    >>> latlon_point = LatLonPoint(45, 182)  # Example 4
     >>> latlon_point.longitude == -178  # Conformed.
     True
     """  # noqa: E501
@@ -1540,13 +1500,13 @@ class LatLonPoint(PointCoordinate):
     @_cache_new_cousin
     def _to_lps_or_ltm(self, *, allow_lps: bool = True) -> LpsPoint | LtmPoint:
         # Determine projected CRS.
-        proj_crs = self._get_proj_crs(
-            extended_ltm=self.extended_ltm, global_ltm=self.global_ltm
-        )
+        proj_crs = self._get_proj_crs(**self.constraints._nonpref_kwargs)
         # TODO: Determine minimum absolute latitude for which conversion
         #  to LPS should be attempted.
         force_lps_attempt = (
-            self.prefer_lps and allow_lps and proj_crs.lps_hemisphere is None
+            self.constraints.prefer_lps
+            and allow_lps
+            and proj_crs.lps_hemisphere is None
         )
         if force_lps_attempt:
             # *REASSIGNMENT*
@@ -1565,7 +1525,7 @@ class LatLonPoint(PointCoordinate):
                     hemisphere=proj_crs.lps_hemisphere,
                     easting=e,
                     northing=n,
-                    **self._root.constraints,
+                    constraints=self.constraints,
                     validate=force_lps_attempt,
                 )
             except _exceptions.MalformedCoordinate:
@@ -1585,14 +1545,19 @@ class LatLonPoint(PointCoordinate):
                 hemisphere=hemi,
                 easting=e,
                 northing=n,
-                **self._root.constraints,
+                constraints=self.constraints,
                 validate=False,
             )
             return ltm
 
 
-@_easy_dataclass
-class LpsPoint(PointCoordinate):
+@_dataclasses.dataclass(frozen=True)
+class LatLonPoint(_LatLonPoint, _BaseCoordinate):
+    pass
+
+
+@_dataclasses.dataclass(frozen=True)
+class _LpsPoint(PointCoordinate):
     """
     Create an instance representing a Lunar Polar Stereographic (LPS) point.
 
@@ -1604,11 +1569,7 @@ class LpsPoint(PointCoordinate):
         The point's easting (meters).
     northing : float
         The point's northing (meters).
-    prefer_lps : bool, default=False
-        See `LatLonPoint` documentation.
-    extended_ltm : bool, default=False
-        See `LatLonPoint` documentation.
-    global_ltm : bool, default=False
+    constraints : Constraints
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -1664,7 +1625,7 @@ class LpsPoint(PointCoordinate):
         latlon = LatLonPoint(
             latitude=lat,
             longitude=lon,
-            **self._root.constraints,
+            constraints=self.constraints,
             validate=False,
         )
         return latlon
@@ -1710,14 +1671,19 @@ class LpsPoint(PointCoordinate):
             northing_area=na,
             easting=_format_as_five_digit_int(e),
             northing=_format_as_five_digit_int(n),
-            **self._root.constraints,
+            constraints=self.constraints,
             validate=False,
         )
         return lps_lrgs
 
 
-@_easy_dataclass
-class LtmPoint(PointCoordinate):
+@_dataclasses.dataclass(frozen=True)
+class LpsPoint(_LpsPoint, _BaseCoordinate):
+    pass
+
+
+@_dataclasses.dataclass(frozen=True)
+class _LtmPoint(PointCoordinate):
     """
     Create an instance representing a Lunar Transverse Mercator (LTM) point.
 
@@ -1731,11 +1697,7 @@ class LtmPoint(PointCoordinate):
         The point's easting (meters).
     northing : float
         The point's northing (meters).
-    prefer_lps : bool, default=False
-        See `LatLonPoint` documentation.
-    extended_ltm : bool, default=False
-        See `LatLonPoint` documentation.
-    global_ltm : bool, default=False
+    constraints : Constraints
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -1822,10 +1784,15 @@ class LtmPoint(PointCoordinate):
             northing_area=na,
             easting=_format_as_five_digit_int(e),
             northing=_format_as_five_digit_int(n),
-            **self._root.constraints,
+            constraints=self.constraints,
             validate=False,
         )
         return ltm_lgrs
+
+
+@_dataclasses.dataclass(frozen=True)
+class LtmPoint(_LtmPoint, _BaseCoordinate):
+    pass
 
 
 # endregion
@@ -2156,8 +2123,8 @@ class _BaseLgrsBox(BoxCoordinate):
 # TODO: Think about what best field names are, e.g., `easting_area`,
 #  `easting_25k`, `easting_25km`, `easting_25k_area`, or
 #  `easting_25km_area`.
-@_easy_dataclass
-class LpsAccBox(_BaseAccBox):
+@_dataclasses.dataclass(frozen=True)
+class _LpsAccBox(_BaseAccBox):
     """
     Create an instance representing an LPS Artemis Condensed Coordinate box.
 
@@ -2184,11 +2151,7 @@ class LpsAccBox(_BaseAccBox):
         The point's 1-kilometer-grid northing area designator.
     northing : str, optional
         The point's northing (meters).
-    prefer_lps : bool, default=False
-        See `LatLonPoint` documentation.
-    extended_ltm : bool, default=False
-        See `LatLonPoint` documentation.
-    global_ltm : bool, default=False
+    constraints : Constraints
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2305,13 +2268,18 @@ class LpsAccBox(_BaseAccBox):
             lgrs_type = LtmLgrsBox
             init_kwargs["latitudinal_band"] = self.latitudinal_band
         lgrs = lgrs_type(
-            **init_kwargs, **self._root.constraints, validate=False
+            **init_kwargs, constraints=self.constraints, validate=False
         )
         return lgrs
 
 
-@_easy_dataclass
-class LpsLgrsBox(_BaseLgrsBox):
+@_dataclasses.dataclass(frozen=True)
+class LpsAccBox(_LpsAccBox, _BaseCoordinate):
+    pass
+
+
+@_dataclasses.dataclass(frozen=True)
+class _LpsLgrsBox(_BaseLgrsBox):
     """
     Create an instance representing an LPS Lunar Grid Reference System box.
 
@@ -2334,11 +2302,7 @@ class LpsLgrsBox(_BaseLgrsBox):
         The point's easting (meters).
     northing : str, optional
         The point's northing (meters).
-    prefer_lps : bool, default=False
-        See `LatLonPoint` documentation.
-    extended_ltm : bool, default=False
-        See `LatLonPoint` documentation.
-    global_ltm : bool, default=False
+    constraints : Constraints
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2423,7 +2387,9 @@ class LpsLgrsBox(_BaseLgrsBox):
         else:
             acc_type = LtmAccBox
             init_kwargs["latitudinal_band"] = self.latitudinal_band
-        acc = acc_type(**init_kwargs, **self._root.constraints, validate=False)
+        acc = acc_type(
+            **init_kwargs, constraints=self.constraints, validate=False
+        )
         return acc
 
     @_cache_new_cousin
@@ -2471,14 +2437,19 @@ class LpsLgrsBox(_BaseLgrsBox):
             hemisphere=hemi,
             easting=easting,
             northing=northing,
-            **self.constraints,
+            constraints=self.constraints,
             validate=False,
         )
         return lps
 
 
-@_easy_dataclass
-class LtmAccBox(_BaseAccBox):
+@_dataclasses.dataclass(frozen=True)
+class LpsLgrsBox(_LpsLgrsBox, _BaseCoordinate):
+    pass
+
+
+@_dataclasses.dataclass(frozen=True)
+class _LtmAccBox(_BaseAccBox):
     """
     Create an instance representing an LTM Artemis Condensed Coordinate box.
 
@@ -2506,11 +2477,7 @@ class LtmAccBox(_BaseAccBox):
         The point's 1-kilometer-grid northing area designator.
     northing : str, optional
         The point's northing (meters).
-    prefer_lps : bool, default=False
-        See `LatLonPoint` documentation.
-    extended_ltm : bool, default=False
-        See `LatLonPoint` documentation.
-    global_ltm : bool, default=False
+    constraints : Constraints
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2607,8 +2574,13 @@ class LtmAccBox(_BaseAccBox):
     _to_lgrs = LpsAccBox._to_lgrs
 
 
-@_easy_dataclass
-class LtmLgrsBox(_BaseLgrsBox):
+@_dataclasses.dataclass(frozen=True)
+class LtmAccBox(_LtmAccBox, _BaseCoordinate):
+    pass
+
+
+@_dataclasses.dataclass(frozen=True)
+class _LtmLgrsBox(_BaseLgrsBox):
     """
     Create an instance representing an LTM Lunar Grid Reference System box.
 
@@ -2632,11 +2604,7 @@ class LtmLgrsBox(_BaseLgrsBox):
         The point's easting (meters).
     northing : str, optional
         The point's northing (meters).
-    prefer_lps : bool, default=False
-        See `LatLonPoint` documentation.
-    extended_ltm : bool, default=False
-        See `LatLonPoint` documentation.
-    global_ltm : bool, default=False
+    constraints : Constraints
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2764,6 +2732,11 @@ class LtmLgrsBox(_BaseLgrsBox):
         return ltm
 
 
+@_dataclasses.dataclass(frozen=True)
+class LtmLgrsBox(_LtmLgrsBox, _BaseCoordinate):
+    pass
+
+
 # endregion
 
 
@@ -2785,7 +2758,8 @@ if __name__ == "__main__":
     lgrs1 = lps_or_ltm1.to_lgrs()
     assert isinstance(lgrs1, LpsLgrsBox)
 
-    lat_lon2 = lat_lon1.with_constraints(extended_ltm=True)
+    extended_ltm = Constraints(extended_ltm=True)
+    lat_lon2 = lat_lon1.replace(constraints=extended_ltm)
     lps_or_ltm2 = lat_lon2.to_lps_or_ltm()
     lgrs2 = lps_or_ltm2.to_lgrs()
     assert isinstance(lgrs2, LtmLgrsBox)
