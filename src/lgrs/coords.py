@@ -40,6 +40,7 @@ import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
 import math as _math
+from math import floor as _floor
 import types as _types
 import typing as _typing
 
@@ -289,9 +290,6 @@ def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
         return nearest_int
     else:
         return _floor(f)
-
-
-_floor = _math.floor
 
 
 # endregion
