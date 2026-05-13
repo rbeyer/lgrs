@@ -382,13 +382,20 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     #     return new
 
     # * FIELD SUPPORT. ────────────────────────────────────────────────
-    def __iter__(self) -> _collections.abc.Iterable:
-        return iter(self._init_kwargs.values())
+    def __iter__(self) -> _collections.abc.Iterator:
+        for key, value in self._init_kwargs.items():
+            if key == "constraints":
+                continue
+            yield value
 
     @classmethod
     @_functools.cache
     def _get_fields(cls) -> tuple[_dataclasses.Field, ...]:
-        return _dataclasses.fields(cls)
+        name_to_field = {
+            field.name: field for field in _dataclasses.fields(cls)
+        }
+        name_to_field["constraints"] = name_to_field.pop("constraints")
+        return tuple(name_to_field.values())
 
     @classmethod
     @_functools.cache
@@ -406,7 +413,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         return name_to_type
 
 
-class BaseCoordinate:
+class BaseCoordinate(_BaseCoordinate):
     """The base class for all coordinates, both points and grid boxes."""
 
     _template: _collections.abc.Callable | str | None = None
@@ -1388,7 +1395,7 @@ class PointCoordinate(BaseCoordinate):
 
 # TODO: Un-skip Example 3 once complete validation is implemented.
 @_dataclasses.dataclass(frozen=True)
-class _LatLonPoint(PointCoordinate):
+class LatLonPoint(PointCoordinate):
     """
     Create an instance representing a latitude-longitude point.
 
@@ -1553,12 +1560,7 @@ class _LatLonPoint(PointCoordinate):
 
 
 @_dataclasses.dataclass(frozen=True)
-class LatLonPoint(_LatLonPoint, _BaseCoordinate):
-    pass
-
-
-@_dataclasses.dataclass(frozen=True)
-class _LpsPoint(PointCoordinate):
+class LpsPoint(PointCoordinate):
     """
     Create an instance representing a Lunar Polar Stereographic (LPS) point.
 
@@ -1679,12 +1681,7 @@ class _LpsPoint(PointCoordinate):
 
 
 @_dataclasses.dataclass(frozen=True)
-class LpsPoint(_LpsPoint, _BaseCoordinate):
-    pass
-
-
-@_dataclasses.dataclass(frozen=True)
-class _LtmPoint(PointCoordinate):
+class LtmPoint(PointCoordinate):
     """
     Create an instance representing a Lunar Transverse Mercator (LTM) point.
 
@@ -1789,11 +1786,6 @@ class _LtmPoint(PointCoordinate):
             validate=False,
         )
         return ltm_lgrs
-
-
-@_dataclasses.dataclass(frozen=True)
-class LtmPoint(_LtmPoint, _BaseCoordinate):
-    pass
 
 
 # endregion
@@ -2125,7 +2117,7 @@ class _BaseLgrsBox(BoxCoordinate):
 #  `easting_25k`, `easting_25km`, `easting_25k_area`, or
 #  `easting_25km_area`.
 @_dataclasses.dataclass(frozen=True)
-class _LpsAccBox(_BaseAccBox):
+class LpsAccBox(_BaseAccBox):
     """
     Create an instance representing an LPS Artemis Condensed Coordinate box.
 
@@ -2275,12 +2267,7 @@ class _LpsAccBox(_BaseAccBox):
 
 
 @_dataclasses.dataclass(frozen=True)
-class LpsAccBox(_LpsAccBox, _BaseCoordinate):
-    pass
-
-
-@_dataclasses.dataclass(frozen=True)
-class _LpsLgrsBox(_BaseLgrsBox):
+class LpsLgrsBox(_BaseLgrsBox):
     """
     Create an instance representing an LPS Lunar Grid Reference System box.
 
@@ -2445,12 +2432,7 @@ class _LpsLgrsBox(_BaseLgrsBox):
 
 
 @_dataclasses.dataclass(frozen=True)
-class LpsLgrsBox(_LpsLgrsBox, _BaseCoordinate):
-    pass
-
-
-@_dataclasses.dataclass(frozen=True)
-class _LtmAccBox(_BaseAccBox):
+class LtmAccBox(_BaseAccBox):
     """
     Create an instance representing an LTM Artemis Condensed Coordinate box.
 
@@ -2576,12 +2558,7 @@ class _LtmAccBox(_BaseAccBox):
 
 
 @_dataclasses.dataclass(frozen=True)
-class LtmAccBox(_LtmAccBox, _BaseCoordinate):
-    pass
-
-
-@_dataclasses.dataclass(frozen=True)
-class _LtmLgrsBox(_BaseLgrsBox):
+class LtmLgrsBox(_BaseLgrsBox):
     """
     Create an instance representing an LTM Lunar Grid Reference System box.
 
@@ -2731,11 +2708,6 @@ class _LtmLgrsBox(_BaseLgrsBox):
             validate=False,
         )
         return ltm
-
-
-@_dataclasses.dataclass(frozen=True)
-class LtmLgrsBox(_LtmLgrsBox, _BaseCoordinate):
-    pass
 
 
 # endregion
