@@ -34,10 +34,11 @@ For brevity, this paper is referred to as M2025 hereinafter.
 ###############################################################################
 # region> IMPORT
 ###############################################################################
-# External.
+# Standard.
 import abc as _abc
 import dataclasses as _dataclasses
 import functools as _functools
+import itertools as _itertools
 import typing as _typing
 
 # Internal.
@@ -184,16 +185,41 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
 # region> UTILITIES
 ###############################################################################
 def _validate_constraints(
-        extended_ltm: bool, global_lps: bool, global_ltm: bool, **ignore
-) -> None:
-    mutually_exclusive_count = (
-        extended_ltm, global_ltm, global_lps
-    ).count(True)
-    if mutually_exclusive_count > 1:
-        raise TypeError(
-            "At most, only one of the following constraints may be True: "
-            "`extended_ltm`, `global_lps`, `global_ltm`"
-        )
+    *,
+    # Note: `prefer*` arguments are only used outside this module.
+    prefer_lps: bool = False,
+    prefer_ltm: bool = False,
+    preferred_ltm_zone: int | None = None,
+    extended_ltm: bool,
+    global_lps: bool,
+    global_ltm: bool,
+    **ignore,
+) -> int:
+    all_kwargs = locals().copy()
+    all_kwargs.update(ignore)
+    del all_kwargs["ignore"]
+    tot_enabled_count = sum(
+        (v not in (False, None)) for v in all_kwargs.values()
+    )
+    for mutually_exclusive_arg_names in (
+        ("prefer_lps", "prefer_ltm"),
+        ("extended_ltm", "global_lps", "global_ltm"),
+        *_itertools.product(
+            ("prefer_lps", "prefer_ltm", "preferred_ltm_zone"),
+            ("global_lps", "global_ltm"),
+        ),
+    ):
+        enabled_count = 0
+        for arg_name in mutually_exclusive_arg_names:
+            if locals()[arg_name] in (False, None):
+                continue
+            enabled_count += 1
+            if enabled_count > 1:
+                raise TypeError(
+                    "At most one of the following constraints may be enabled: "
+                    f"`{'`, `'.join(mutually_exclusive_arg_names)}`"
+                )
+    return tot_enabled_count
 
 
 # endregion

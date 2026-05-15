@@ -30,12 +30,8 @@ import weakref as _weakref
 _CACHING_IS_ENABLED: bool = True
 _NOT_FOUND = object()
 
-# TODO: Reimplement coordinate caching to be self clearing (on garbage
-#  collection), as originally intended.
 _cache: dict = {}
-_weak_cache: _weakref.WeakKeyDictionary[
-    _typing.Any, dict[str, _typing.Any]
-] = _weakref.WeakKeyDictionary()
+_coord_weak_set = _weakref.WeakSet()
 
 
 def _query_cache(
@@ -67,39 +63,11 @@ def _query_cache(
     return (key, cached)
 
 
-def _query_weak_cache(
-    instance: _collections.abc.Hashable,
-    *,
-    key: str,
-    default: _typing.Any = _NOT_FOUND,
-) -> _typing.Any:
-    if _CACHING_IS_ENABLED:
-        cached_dict = _weak_cache.get(instance, default)
-        if cached_dict is default:
-            return default
-        cached_val = cached_dict.get(key, default)
-        return cached_val
-    else:
-        return default
-
-
 def _store_to_cache(
     key: _collections.abc.Hashable, value: _typing.Any
 ) -> None:
     if key is not None:
         _cache[key] = value
-
-
-def _store_to_weak_cache(
-    instance: _collections.abc.Hashable, *, key: str, value: _typing.Any
-) -> None:
-    if not _CACHING_IS_ENABLED:
-        return
-    cached_dict = _weak_cache.get(instance)
-    if cached_dict is None:
-        cached_dict = {}
-        _weak_cache[instance] = cached_dict
-    cached_dict[key] = value
 
 
 # endregion
@@ -151,9 +119,9 @@ class _AbstractMetaMultiton(_abc.ABCMeta):
     __call__ = _MetaMultiton.__call__
 
 
-def _optionally_cache(
-    func: _collections.abc.Callable,
-) -> _collections.abc.Callable:
+def _optionally_cache[T](
+    func: _collections.abc.Callable[..., T],
+) -> _collections.abc.Callable[..., T]:
     """
     Decorate a function to optionally cache its results.
 
@@ -218,7 +186,10 @@ def enable_caching(enable: bool = True, *, clear: bool = False) -> None:
     _CACHING_IS_ENABLED = enable
     if clear:
         _cache.clear()
-        _weak_cache.clear()
+        for coord in _coord_weak_set:
+            record = coord.__dict__.get("_constraints_to_cousins", None)
+            if record is not None:
+                record.clear()
 
 
 # endregion
