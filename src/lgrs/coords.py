@@ -657,6 +657,90 @@ class BaseCoordinate(_BaseCoordinate):
         }
         return cls(**init_kwargs)
 
+    # * TRANSFORMATION CACHING. ───────────────────────────────────────
+    # Note: See `._get_cached_or_create()` for a description of what a
+    # "cousin" is.
+    _has_box_origin: bool
+
+    @_functools.cached_property
+    def _cache_key(self) -> _collections.abc.Hashable:
+        return self._make_cache_key(type(self), constraints=self.constraints)
+
+    @_functools.cached_property
+    def _cache_key_to_cousins(
+        self,
+    ) -> _collections.abc.Mapping[
+        _collections.abc.Hashable, _collections.deque[BaseCoordinate]
+    ]:
+        cache_key_to_cousins = _collections.defaultdict(_collections.deque)
+        cache_key_to_cousins[self._cache_key].appendleft(self)
+        return cache_key_to_cousins
+
+    def _get_cached_cousin(
+        self, func: _ToMethod, constraints: Constraints
+    ) -> BaseCoordinate | None:
+        # Ensure that `self` is invariably returned, if suitable.
+        # Note: If caching is disabled or cache was cleared, `self` may
+        # not be otherwise available.
+        targ_types = _resolve_out_types(func)
+        targ_cache_key = self._make_cache_key(
+            *targ_types, constraints=constraints
+        )
+        if isinstance(self, targ_types) and targ_cache_key == self._cache_key:
+            return self
+
+        # If caching is disabled, do nothing more.
+        if not _caching._CACHING_IS_ENABLED:
+            return None
+
+        # Return suitable cached cousin, if any.
+        for cousin in self._cache_key_to_cousins[targ_cache_key]:
+            if isinstance(cousin, targ_types):
+                return cousin
+        return None
+
+    def _make_cache_key(
+        self, *types: type[BaseCoordinate], constraints: Constraints
+    ) -> _typing.Hashable:
+        if issubclass(types[0], BoxCoordinate):
+            has_box_origin = True
+        else:
+            has_box_origin = self._has_box_origin
+        return (constraints, has_box_origin)
+
+    def _register_cousin(self, cousin: BaseCoordinate) -> None:
+        # Record cousin's disposition, if necessary.
+        if isinstance(cousin, PointCoordinate):
+            object.__setattr__(cousin, "_has_box_origin", self._has_box_origin)
+
+        # Invariably register for possible later clearing of the cache.
+        _caching._coord_weak_set.add(cousin)
+
+        # If caching is disabled, do nothing more.
+        if not _caching._CACHING_IS_ENABLED:
+            return
+
+        # Attach cousins record and update it.
+        # Note: Effectively, the references to a given instance of
+        # `._cache_key_to_cousins` keeps all cousins in the group alive
+        # until all direct references to cousins in the group are dead.
+        # Then, all cousins are garbage collected.
+        object.__setattr__(
+            cousin,
+            "_cache_key_to_cousins",
+            self._cache_key_to_cousins,
+        )
+        self._cache_key_to_cousins[cousin._cache_key].appendleft(cousin)
+
+    def _unregister_cousins(self, *cousins: BaseCoordinate) -> None:
+        if not _caching._CACHING_IS_ENABLED:
+            return
+        for cousin in cousins:
+            try:
+                self._cache_key_to_cousins[cousin._cache_key].remove(cousin)
+            except ValueError:
+                pass
+
     # * VALIDATION. ───────────────────────────────────────────────────
     def _raise_malformed_coordinate(
         self,
@@ -1275,70 +1359,6 @@ class BaseCoordinate(_BaseCoordinate):
             init_kwargs["constraints"] = constraints
         return type(self)(**init_kwargs, validate=validate)
 
-    # * TRANSFORMATION CACHING. ───────────────────────────────────────
-    # Note: See `._get_cached_or_create()` for a description of what a
-    # "cousin" is.
-
-    @_functools.cached_property
-    def _constraints_to_cousins(
-        self,
-    ) -> _collections.abc.Mapping[
-        Constraints, _collections.deque[BaseCoordinate]
-    ]:
-        constraints_to_cousins = _collections.defaultdict(_collections.deque)
-        constraints_to_cousins[self.constraints].appendleft(self)
-        return constraints_to_cousins
-
-    def _get_cached_cousin(
-        self, func: _ToMethod, constraints: Constraints
-    ) -> BaseCoordinate | None:
-        # Ensure that `self` is invariably returned, if suitable.
-        # Note: If caching is disabled or cache was cleared, `self` may
-        # not be otherwise available.
-        targ_types = _resolve_out_types(func)
-        if isinstance(self, targ_types) and self.constraints == constraints:
-            return self
-        elif not _caching._CACHING_IS_ENABLED:
-            return None
-
-        # Return suitable cached cousin, if any.
-        for cousin in self._constraints_to_cousins[constraints]:
-            if isinstance(cousin, targ_types):
-                return cousin
-        return None
-
-    def _register_cousin(self, cousin: BaseCoordinate) -> None:
-        # If caching is disabled or transform is not reversible
-        # (lossless), do nothing.
-        if not _caching._CACHING_IS_ENABLED:
-            return
-        _caching._coord_weak_set.add(cousin)
-        is_lossless = not isinstance(cousin, BoxCoordinate) or isinstance(
-            self, BoxCoordinate
-        )
-        if not is_lossless:
-            return
-
-        # Attach cousins record and update it, being careful to work
-        # around frozen dataclass.
-        # Note: Effectively, the references to a given instance of
-        # `._constraints_to_cousins` keeps all cousins in the group
-        # alive until all direct references to cousins in the group are
-        # dead. Then, all cousins are garbage collected.
-        object.__setattr__(
-            cousin, "_constraints_to_cousins", self._constraints_to_cousins
-        )
-        self._constraints_to_cousins[cousin.constraints].appendleft(cousin)
-
-    def _unregister_cousins(self, *cousins: BaseCoordinate) -> None:
-        if not _caching._CACHING_IS_ENABLED:
-            return
-        for cousin in cousins:
-            try:
-                self._constraints_to_cousins[cousin.constraints].remove(cousin)
-            except ValueError:
-                pass
-
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     def _force_type_or_error(
         self,
@@ -1820,6 +1840,9 @@ class BaseCoordinate(_BaseCoordinate):
 class PointCoordinate(BaseCoordinate):
     """The base class for all point coordinates."""
 
+    # * TRANSFORMATION CACHING. ───────────────────────────────────────
+    _has_box_origin: bool = False  # Default.
+
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     @staticmethod
     @_caching._optionally_cache
@@ -2257,6 +2280,9 @@ class BoxCoordinate(BaseCoordinate):
             raise _exceptions.MalformedCoordinate(
                 f"`.string` does not have the form: {self._pattern.pattern!r}"
             )
+
+    # * TRANSFORMATION CACHING. ───────────────────────────────────────
+    _has_box_origin: bool = True  # Default.
 
     # * UTILITIES. ────────────────────────────────────────────────────
     @staticmethod
@@ -3319,56 +3345,57 @@ class LtmLgrsBox(_BaseLgrsBox):
 
 # TODO: Move to a proper test script.
 if __name__ == "__main__":
-    _caching.enable_caching(False)
+    _caching.enable_caching(True)
 
     latlon = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)  # p. 45
     lps_or_ltm = latlon.to_lps_or_ltm()
     lgrs_ = lps_or_ltm.to_lgrs()
-    lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
-
-    # lgrs_.to_latlon().is_equal_to(latlon, error=True)
-
-    latlon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
-    lps_or_ltm1 = latlon1.to_lps_or_ltm()
-    lgrs1 = lps_or_ltm1.to_lgrs()
-    assert isinstance(lgrs1, LpsLgrsBox)
-
-    extended_ltm = Constraints(extended_ltm=True)
-    latlon2 = latlon1.replace(constraints=extended_ltm)
-    lps_or_ltm2 = latlon2.to_lps_or_ltm()
-    lgrs2 = lps_or_ltm2.to_lgrs()
-    assert isinstance(lgrs2, LtmLgrsBox)
-
-    latlon4 = LatLonPoint(
-        latitude=-86.38231380366628, longitude=-6.004331982958013
-    )  # p. 53, 64
-    lps_or_ltm4 = latlon4.to_lps_or_ltm()
-    lgrs4 = lps_or_ltm4.to_lgrs()
-    assert lgrs4.is_equal_to(
-        LpsLgrsBox.from_string("AZS1359008480"), error=True
-    )
-
-    lgrs4.to_latlon()
-
-    latlon5 = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
-    latlon5.to_latlon()
-
-    lps = LpsPoint(hemisphere="S", easting=197000, northing=197000)
-    extreme_latlon = lps.to_latlon()
-
-    lps_acc = lgrs1.to_acc()
-    ltm_acc = lgrs2.to_acc()
-
-    lps_acc.truncate(100_000).to_latlon()
-
-    lgrs_.distance_to(lgrs1)
-
-    latlon_point = LatLonPoint(90, 0)
-    latlon_point.to_acc().validate()
-
-    x = LatLonPoint(79.99, 1, constraints=Constraints(prefer_lps=True))
-    x.to_lgrs().corners_latlon
-    x.to_lps_or_ltm()
-
-    y = LatLonPoint(78.81, 1, constraints=Constraints(prefer_lps=True))
-    y.to_lps_or_ltm()
+    lps_or_ltm.to_lgrs()
+    # lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
+    #
+    # # lgrs_.to_latlon().is_equal_to(latlon, error=True)
+    #
+    # latlon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
+    # lps_or_ltm1 = latlon1.to_lps_or_ltm()
+    # lgrs1 = lps_or_ltm1.to_lgrs()
+    # assert isinstance(lgrs1, LpsLgrsBox)
+    #
+    # extended_ltm = Constraints(extended_ltm=True)
+    # latlon2 = latlon1.replace(constraints=extended_ltm)
+    # lps_or_ltm2 = latlon2.to_lps_or_ltm()
+    # lgrs2 = lps_or_ltm2.to_lgrs()
+    # assert isinstance(lgrs2, LtmLgrsBox)
+    #
+    # latlon4 = LatLonPoint(
+    #     latitude=-86.38231380366628, longitude=-6.004331982958013
+    # )  # p. 53, 64
+    # lps_or_ltm4 = latlon4.to_lps_or_ltm()
+    # lgrs4 = lps_or_ltm4.to_lgrs()
+    # assert lgrs4.is_equal_to(
+    #     LpsLgrsBox.from_string("AZS1359008480"), error=True
+    # )
+    #
+    # lgrs4.to_latlon()
+    #
+    # latlon5 = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
+    # latlon5.to_latlon()
+    #
+    # lps = LpsPoint(hemisphere="S", easting=197000, northing=197000)
+    # extreme_latlon = lps.to_latlon()
+    #
+    # lps_acc = lgrs1.to_acc()
+    # ltm_acc = lgrs2.to_acc()
+    #
+    # lps_acc.truncate(100_000).to_latlon()
+    #
+    # lgrs_.distance_to(lgrs1)
+    #
+    # latlon_point = LatLonPoint(90, 0)
+    # latlon_point.to_acc().validate()
+    #
+    # x = LatLonPoint(79.99, 1, constraints=Constraints(prefer_lps=True))
+    # x.to_lgrs().corners_latlon
+    # x.to_lps_or_ltm()
+    #
+    # y = LatLonPoint(78.81, 1, constraints=Constraints(prefer_lps=True))
+    # y.to_lps_or_ltm()
