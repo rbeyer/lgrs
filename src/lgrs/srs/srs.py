@@ -56,6 +56,7 @@ class _CrsParameters:
     south: bool | None = None
     ellps: str | None = None
     extended_ltm: bool = False
+    global_lps: bool = False
     global_ltm: bool = False
 
     def __post_init__(self, name: str | None) -> None:
@@ -64,7 +65,8 @@ class _CrsParameters:
             if self._spec_count:
                 raise TypeError(
                     "If `name` is specified, all other arguments, except for "
-                    "`extended_ltm` and `global_ltm`, must be `None`"
+                    "`extended_ltm`, `global_lps`, and `global_ltm`, must be "
+                    "`None`"
                 )
             self._parse_name(name)
 
@@ -122,10 +124,16 @@ class _CrsParameters:
                     f"If `proj` is {self.proj!r}, "
                     "`global_ltm` must be `False`."
                 )
-        elif self.zone is None:
-            raise TypeError(
-                f"If `proj` is {self.proj!r}, `zone` must be specified."
-            )
+        else:
+            if self.zone is None:
+                raise TypeError(
+                    f"If `proj` is {self.proj!r}, `zone` must be specified."
+                )
+            if self.global_lps:
+                raise TypeError(
+                    f"If `proj` is {self.proj!r}, "
+                    "`global_lps` must be `False`."
+                )
 
     @_functools.cached_property
     def _spec_count(self) -> int:
@@ -152,6 +160,7 @@ class _CrsParameters:
             number=self.zone,
             hemisphere=hemisphere,
             extended_ltm=self.extended_ltm,
+            global_lps=self.global_lps,
             global_ltm=self.global_ltm,
             datum_name=self.ellps,
         )
@@ -190,6 +199,9 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     False
     """
 
+    lps_hemisphere: _typing.Literal["N", "S", None]
+    ltm_zone: str | None  # Parallels `pyproj.CRS.utm_zone`.
+
 
 # Note: Only identical calls are cached here. Compare:
 # `_CrsParameters.make_crs()`.
@@ -202,6 +214,7 @@ def make_lunar_crs(
     south: bool | None = None,
     ellps: str | None = None,
     extended_ltm: bool = False,
+    global_lps: bool = False,
     global_ltm: bool = False,
 ) -> CRS:
     """
@@ -214,8 +227,8 @@ def make_lunar_crs(
     ----------
     name : str, optional
         String name of `crs`. If specified, all remaining arguments, except
-        for `extended_ltm` and `global_ltm`, are interpreted from `name` and
-        cannot be independently specified.
+        for `extended_ltm`, `global_lps`, and `global_ltm`, are interpreted
+        from `name` and cannot be independently specified.
     proj : str, optional
         "LTM" or "LPS". If not specified, `proj` is inferred from `zone`.
         That is, `zone=None` implies `proj="LPS"`, otherwise `proj="LTM"`.
@@ -227,9 +240,14 @@ def make_lunar_crs(
     ellps : str, default="IAU_2015:30100"
         The name of the `crs` ellipsoid. Only "IAU_2015:30100" is supported.
     extended_ltm : bool, default=False
-        Whether to extend the LTM/LPS boundary to 82 degrees N or S.
+        Whether to use the extended LTM region. If `True`, the nominal
+        poleward extent of the LTM region is 82° N/S instead of 80° N/S.
+    global_lps : bool, default=False
+        Whether to extend the LPS region globally. If `True`, there is no
+        LTM region.
     global_ltm : bool, default=False
-        Whether to extend LTM zones to 90 degrees N or S.
+        Whether to extend the LTM region globally. If `True`, there is no
+        LPS region.
 
     Returns
     -------
@@ -239,8 +257,8 @@ def make_lunar_crs(
     Raises
     ------
     TypeError
-        If CRS is under- or over-specified, or if `proj` is "LPS" but
-        `global_ltm` is `True`.
+        If CRS is under- or over-specified, or if `proj` is `"LPS"`/`"LTM"`
+        but `global_ltm`/`global_lps` is `True`.
 
     Examples
     --------

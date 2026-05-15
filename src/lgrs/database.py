@@ -467,7 +467,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         return limit
 
     @_functools.cached_property
-    def ltm_zone(self) -> str | None:
+    def ltm_zone(self) -> int | None:
         return self._long_name_parsed.zone_number
 
     # * PUBLIC METHODS. ───────────────────────────────────────────────
