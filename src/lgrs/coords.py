@@ -510,78 +510,6 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
             for field in self._get_fields()
         }
 
-    # TODO: Un-skip doctest once complete validation is implemented.
-    # TODO: Merge with `.replace()`.
-    # def with_constraints(
-    #     self,
-    #     *,
-    #     prefer_lps: bool | None = None,
-    #     extended_ltm: bool | None = None,
-    #     global_ltm: bool | None = None,
-    #     validate: bool | None = None,
-    #     copy: bool = False,
-    # ) -> _typing.Self:
-    #     """
-    #     Get a version of `self` with the specified constraints.
-    #
-    #     For any constraint that is not specified (or specified as `None`), the
-    #     corresponding value from `self` is used.
-    #
-    #     Parameters
-    #     ----------
-    #     prefer_lps : bool, optional
-    #         See `LatLonPoint` documentation.
-    #     extended_ltm : bool, optional
-    #         See `LatLonPoint` documentation.
-    #     global_ltm : bool, optional
-    #         See `LatLonPoint` documentation.
-    #     validate : bool, optional
-    #         See `LatLonPoint` documentation.
-    #     copy : bool, optional
-    #         Whether to ensure that the returned instance is not `self`. If not
-    #         specified (`None`), set to `True` unless `self` is suitable.
-    #
-    #     Returns
-    #     -------
-    #     version : BaseCoordinate
-    #         Version of `self` with the specified constraints.
-    #
-    #     Examples
-    #     --------
-    #     >>> geo_point = LatLonPoint(81, 0, extended_ltm=True)
-    #     >>> ltm_point = geo_point.to_lps_or_ltm()
-    #     >>> isinstance(ltm_point, LtmPoint)
-    #     True
-    #     >>> illegal_point = ltm_point.with_constraints(extended_ltm=False)  # doctest: +SKIP
-    #     Traceback (most recent call last):
-    #       ...
-    #     lgrs.exceptions.MalformedCoordinate:
-    #       ...
-    #     """  # noqa: E501
-    #
-    #     # Resolve new initialization kwargs.
-    #     new_init_kwargs = self._init_kwargs.copy()
-    #     if prefer_lps is not None:
-    #         new_init_kwargs["prefer_lps"] = prefer_lps
-    #     if global_ltm is not None:
-    #         new_init_kwargs["global_ltm"] = global_ltm
-    #     if extended_ltm is not None:
-    #         new_init_kwargs["extended_ltm"] = extended_ltm
-    #
-    #     # Return `self`, if suitable and allowed.
-    #     if (
-    #         not copy
-    #         and not validate  # May be `None`.
-    #         and new_init_kwargs == self._init_kwargs
-    #     ):
-    #         return self
-    #
-    #     # Create and return copy, constrained as specified.
-    #     if validate is None:
-    #         validate = True  # *REASSIGNMENT*
-    #     new = type(self)(**new_init_kwargs, validate=validate)
-    #     return new
-
     # * FIELD SUPPORT. ────────────────────────────────────────────────
     def __iter__(self) -> _collections.abc.Iterator:
         for key, value in self._init_kwargs.items():
@@ -1229,14 +1157,6 @@ class BaseCoordinate(_BaseCoordinate):
             raise TypeError("\n" + "\n".join(err_lines))
         return True
 
-    # TODO: Consider an `.is_close_to()` that automatically accounts for
-    #  both `.precision` (where applicable) and the inferred conversion
-    #  sequence. For example, comparing a `LatLonPoint` and a
-    #  `LpsAccBox` would allow for expected imprecision in the
-    #  `LatLonPoint` --> `LpsPoint` --> `LpsLgrs` sequence, and
-    #  comparing a `LatLonPoint` to a `LatLonPoint` would allow for the
-    #  expected round-trip disparity.
-
     @classmethod
     @_functools.cache
     def is_lps_based(cls):
@@ -1303,13 +1223,13 @@ class BaseCoordinate(_BaseCoordinate):
         """
         return cls._is_x_based("Ltm")
 
-    # TODO: When only constraints are changed, register as cousin.
+    # TODO: Un-skip doctest once complete validation is implemented.
     def replace(
         self,
         constraints: Constraints | None = None,
         *,
         validate: bool = True,
-        copy: bool = True,
+        copy: bool = False,
         **overrides,
     ) -> _typing.Self:
         """
@@ -1326,18 +1246,18 @@ class BaseCoordinate(_BaseCoordinate):
             constraints as `self`.
         validate : bool, default=True
             Whether to validate the new instance.
-        copy : bool, default=True
-            Whether to ensure that the new instance is not `self`. If `False`
-            and any `overrides` have the same values as `self`, `self` is
-            returned.
+        copy : bool, default=False
+            Whether to ensure that the new instance is not `self` and is not
+            cached in association with `self`. If `False` and all `overrides`
+            have the same values as `self`, `self` is returned.
         **overrides
             Keyword arguments specifying initialization parameters (values) for
             the new instance.
 
         Returns
         -------
-        new : typing.Self
-            The new instance.
+        replaced : typing.Self
+            The new instance, or possibly `self` if `copy` is `False`.
 
         Raises
         ------
@@ -1350,14 +1270,36 @@ class BaseCoordinate(_BaseCoordinate):
         >>> latlon_point_2 = latlon_point_1.replace(longitude=1)
         >>> latlon_point_2 == LatLonPoint(0, 1)
         True
-        """
+        Examples
+        --------
+        >>> extended_ltm = Constraints(extended_ltm=True)
+        >>> geo_point = LatLonPoint(81, 0, constraints=extended_ltm)
+        >>> ltm_point = geo_point.to_lps_or_ltm()
+        >>> isinstance(ltm_point, LtmPoint)
+        True
+        >>> illegal_point = ltm_point.replace(Constraints())  # doctest: +SKIP
+        Traceback (most recent call last):
+          ...
+        lgrs.exceptions.MalformedCoordinate:
+          ...
+        """  # noqa: E501
+        # Treat trivial case.
         if not copy and constraints is None and not overrides:
             return self
+
+        # Construct initialization kwargs for `replaced`.
         init_kwargs = self._init_kwargs.copy()
         init_kwargs.update(overrides)
         if constraints is not None:
             init_kwargs["constraints"] = constraints
-        return type(self)(**init_kwargs, validate=validate)
+        if not copy and init_kwargs == self._init_kwargs:
+            return self
+
+        # Construct new instance and possibly register as a cousin.
+        replaced = type(self)(**init_kwargs, validate=validate)
+        if not copy and not overrides:
+            self._register_cousin(replaced)
+        return replaced
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     def _force_type_or_error(
@@ -3351,7 +3293,13 @@ if __name__ == "__main__":
     lps_or_ltm = latlon.to_lps_or_ltm()
     lgrs_ = lps_or_ltm.to_lgrs()
     lps_or_ltm.to_lgrs()
-    # lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
+    lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
+
+    extended_ltm = Constraints(extended_ltm=True)
+    test_lps_or_ltm = latlon.to_lps_or_ltm(extended_ltm)
+    assert lps_or_ltm is not test_lps_or_ltm
+    assert lps_or_ltm.constraints == Constraints()
+    assert test_lps_or_ltm.constraints == extended_ltm
     #
     # # lgrs_.to_latlon().is_equal_to(latlon, error=True)
     #
