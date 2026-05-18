@@ -48,32 +48,43 @@ import lgrs.caching as _caching
 ###############################################################################
 # region> CONFIGURATION
 ###############################################################################
-# Note: See Table 4 of M2025 for most of these variables.
 # Note: If any of these variables are modified from their M2025 values,
 # additional changes to the code will likely be necessary.
+# Note: See Tables 4 and 5 of M2025 for most of these variables.
 
+# * GENERAL VALUES. ───────────────────────────────────────────────────
 # Datum.
 DATUM_NAME = "IAU_2015:30100"
 DATUM_WKT_ID = "ID[“IAU”,30100,2015]"
 
+# Shape parameters.
+LUNAR_RADIUS: float = 1_737_400.0  # `a` in M2025 (meters)
+
+# * LTM VALUES. ───────────────────────────────────────────────────────
 # Boundaries.
 LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE: float = 82.0  # (degrees)
 LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE: float = 80.0  # (degrees)
 
-# False northing and easting.
+# False easting and northing.
 LTM_FALSE_EASTING: float = 250_000.0  # `F_E` in M2025 (meters)
 LTM_N_FALSE_NORTHING: float = 0.0  # `F_N` in M2025 (meters)
 LTM_S_FALSE_NORTHING: float = 2_500_000.0  # `F_N` in M2025 (meters)
-
-# Shape parameters.
-LUNAR_RADIUS: float = 1_737_400.0  # `a` in M2025 (meters)
 
 # Other parameters.
 LTM_CENTRAL_SCALE_FACTOR: float = 0.999  # `k_0` in M2025 (exact, unitless)
 LTM_LATITUDE_OF_PROJECTION_AXIS: float = 0.0  # `phi_0` in M2025 (degrees)
 LTM_ZONE_HALF_WIDTH: float = 4.0  # `W` in M2025 (degrees)
 
-# Note: See Table 5 of M2025 for most of these variables.
+# * LPS VALUES. ───────────────────────────────────────────────────────
+# Projection IDs.
+LPS_N_ID = 7190092
+LPS_S_ID = 7190091
+
+# False easting and northing.
+LPS_FALSE_EASTING: float = 500_000.0  # `F_E` in M2025 (meters)
+LPS_FALSE_NORTHING: float = 500_000.0  # `F_N` in M2025 (meters)
+
+# Other parameters.
 LPS_CENTRAL_SCALE_FACTOR: float = 0.994  # `k_0` in M2025 (exact, unitless)
 LPS_N_LATITUDE_OF_PROJECTION_ORIGIN: float = (
     +90.0
@@ -84,10 +95,6 @@ LPS_S_LATITUDE_OF_PROJECTION_ORIGIN: float = (
 LPS_LONGITUDE_OF_PROJECTION_ORIGIN: float = (
     0.0  # `lambda_0` in M2025 (degrees)
 )
-LPS_FALSE_EASTING: float = 500_000.0  # `F_E` in M2025 (meters)
-LPS_FALSE_NORTHING: float = 500_000.0  # `F_N` in M2025 (meters)
-LPS_N_ID = 7190092
-LPS_S_ID = 7190091
 
 
 # endregion

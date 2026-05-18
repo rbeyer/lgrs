@@ -36,6 +36,7 @@ from __future__ import annotations
 
 # Standard.
 import abc as _abc
+import builtins as _builtins
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
@@ -46,8 +47,12 @@ import types as _types
 import typing as _typing
 
 # External.
+from beartype._check.forward.reference.fwdrefmeta import (
+    BeartypeForwardRefMeta as _BeartypeForwardRefMeta,
+)
 import pyproj as _pyproj
 import regex as _regex
+import shapely as _shapely
 
 # Internal.
 import lgrs.caching as _caching
@@ -55,30 +60,41 @@ import lgrs.database as _database
 import lgrs.exceptions as _exceptions
 import lgrs.srs.srs as _srs
 import lgrs.srs.wkt as _wkt
+import lgrs.values as _values
 
 # endregion
 ###############################################################################
 # region> TYPE ALIASES
 ###############################################################################
 type _ToMethod = _collections.abc.Callable[..., BaseCoordinate]
+type FieldData = dict[str, _typing.Any] | _types.MappingProxyType[
+    str, _typing.Any
+]
 
 
 # endregion
 ###############################################################################
 # region> NAMED TUPLES
 ###############################################################################
-class Corners(_typing.NamedTuple):
+class GeographicCorners(_typing.NamedTuple):
     lower_left: LatLonPoint
     lower_right: LatLonPoint
     upper_right: LatLonPoint
     upper_left: LatLonPoint
 
 
+class ProjectedCorners(_typing.NamedTuple):
+    lower_left: LpsPoint | LtmPoint
+    lower_right: LpsPoint | LtmPoint
+    upper_right: LpsPoint | LtmPoint
+    upper_left: LpsPoint | LtmPoint
+
+
 class ProjectedBounds(_typing.NamedTuple):
-    min_easting: float
-    min_northing: float
-    max_easting: float
-    max_northing: float
+    min_easting: _builtins.float | _builtins.int
+    min_northing: _builtins.float | _builtins.int
+    max_easting: _builtins.float | _builtins.int
+    max_northing: _builtins.float | _builtins.int
 
 
 # endregion
@@ -114,11 +130,38 @@ def _cache_new_cousin(func: _ToMethod) -> _ToMethod:
     return wrapped
 
 
+def _resolve_beartype_fwd_refs(refs: _typing.Any) -> _typing.Any:
+    # Somewhat ugly patch to undo some `beartype` magic.
+    was_tup = isinstance(refs, tuple)
+    if not was_tup:
+        if isinstance(refs, _BeartypeForwardRefMeta):
+            refs = (refs,)
+        else:
+            return refs
+    resolved = (
+        (
+            globals()[ref.__name__]
+            if isinstance(ref, _BeartypeForwardRefMeta)
+            else ref
+        )
+        for ref in refs
+    )
+    if was_tup:
+        return tuple(resolved)
+    else:
+        (single_resolved,) = resolved
+        return single_resolved
+
+
 @_functools.cache
 def _resolve_out_types(func: _collections.abc.Callable) -> tuple[type, ...]:
-    out_hint = _typing.get_type_hints(func)["return"]
+    out_hint = _resolve_beartype_fwd_refs(
+        _typing.get_type_hints(func)["return"]
+    )
+    if isinstance(out_hint, _BeartypeForwardRefMeta):
+        out_hint = globals()[out_hint.__name__]
     if isinstance(out_hint, _types.UnionType):
-        out_types = _typing.get_args(out_hint)
+        out_types = _resolve_beartype_fwd_refs(_typing.get_args(out_hint))
     else:
         out_types = (out_hint,)
     return out_types
@@ -200,6 +243,11 @@ def _as_str(str_or_none: str | None) -> str:
         return ""
     else:
         return str_or_none
+
+
+@_functools.cache
+def _get_geod() -> _pyproj.Geod:
+    return _pyproj.Geod(sphere=True, a=_wkt.LUNAR_RADIUS)
 
 
 def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
@@ -298,6 +346,11 @@ class Constraints(metaclass=_caching._MetaMultiton):
                 "If `global_crs` is specified, no other constraint can be set."
             )
 
+    _max_geod_length_of_25km_box_diag_in_deg_lat = (
+        _values.calculate_diagonal_length(25_000, safe_up=True)
+        / _values.M_PER_DEGREE_LATITUDE
+    )
+
     def _get_proj_crs_and_new_cousins(
         self, point: LatLonPoint
     ) -> tuple[_srs.CRS, _collections.abc.Sequence[BaseCoordinate]]:
@@ -330,12 +383,9 @@ class Constraints(metaclass=_caching._MetaMultiton):
             )
         )
         if other_sys_is_preferred:
-            # Note: 1.17 degrees latitude is upper limit (with some
-            # tolerance), that is, it exceeds the lenght of the diagonal
-            # of a 25-km box.
             is_close_to_lps_ltm_boundary = (
                 self._min_abs_lps_lat - abs(point.latitude)
-            ) < 1.17
+            ) < self._max_geod_length_of_25km_box_diag_in_deg_lat
             if is_close_to_lps_ltm_boundary:
                 crs, new_cousins = self._test_forced_lgrs_box(
                     point, target_lps=self.prefer_lps
@@ -511,7 +561,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         }
 
     # * FIELD SUPPORT. ────────────────────────────────────────────────
-    def __iter__(self) -> _collections.abc.Iterator:
+    def __iter__(self) -> _collections.abc.Iterator[_typing.Any]:
         for key, value in self._init_kwargs.items():
             if key == "constraints":
                 continue
@@ -903,12 +953,6 @@ class BaseCoordinate(_BaseCoordinate):
             else:
                 yield coord.to_latlon()
 
-    @property
-    def _geod(self) -> _pyproj.Geod:
-        geod = _pyproj.Geod(sphere=True, a=_wkt.LUNAR_RADIUS)
-        type(self)._geod = geod  # Reuse this instance.
-        return geod
-
     @classmethod
     def _is_x_based(cls, prefix: str) -> bool:
         if issubclass(cls, LatLonPoint):
@@ -1000,7 +1044,7 @@ class BaseCoordinate(_BaseCoordinate):
         self_latlon_point, other_latlon_point = self._conform_to_latlon_points(
             self, other, center=center
         )
-        _, _, dist = self._geod.inv(
+        _, _, dist = _get_geod().inv(
             self_latlon_point.longitude,
             self_latlon_point.latitude,
             other_latlon_point.longitude,
@@ -2330,9 +2374,8 @@ class BoxCoordinate(BaseCoordinate):
         return self.to_lps_or_ltm()._get_crs_name()
 
     # * REFERENCE POINTS. ─────────────────────────────────────────────
-    @_functools.cached_property
-    def _corners_raw(self) -> tuple[LpsPoint | LtmPoint, ...]:
-        return tuple(self._sample_boundary(1))
+    _global_lps = Constraints(global_lps=True)
+    _global_ltm = Constraints(global_ltm=True)
 
     def _make_reference_point(
         self,
@@ -2343,10 +2386,14 @@ class BoxCoordinate(BaseCoordinate):
         preserve_constraints: bool = False,
     ) -> LpsPoint | LtmPoint | LatLonPoint:
         lps_or_ltm_point = self.to_lps_or_ltm()
+        if lps_or_ltm_point.is_lps_based():
+            constraints = self._global_lps
+        else:
+            constraints = self._global_ltm
         proj_point = lps_or_ltm_point.replace(
             easting=lps_or_ltm_point.easting + easting_delta,
             northing=lps_or_ltm_point.northing + northing_delta,
-            constraints=Constraints(global_crs=self.to_lps_or_ltm().crs),
+            constraints=constraints,
             validate=False,  # For efficiency only. Known to be valid.
         )
         if as_latlon:
@@ -2364,7 +2411,16 @@ class BoxCoordinate(BaseCoordinate):
         *,
         as_latlon: bool = False,
         preserve_constraints: bool = False,
+        use_cache: bool = True,
     ) -> _collections.abc.Iterator[LpsPoint | LtmPoint | LatLonPoint]:
+        if use_cache and count_per_side == 1:
+            if as_latlon:
+                points = self.corners_latlon
+            else:
+                points = self.corners
+            for point in points:
+                yield point
+            return
         step_size = self.precision / count_per_side
         deltas = _np.arange(
             0, self.precision + (0.5 * step_size), step_size
@@ -2391,7 +2447,7 @@ class BoxCoordinate(BaseCoordinate):
         Box's bounds as a named tuple of coordinates in the underlying CRS.
         """
         (x_sw, y_sw), (x_se, y_se), (x_ne, y_ne), (x_nw, y_nw) = (
-            (point.easting, point.northing) for point in self._corners_raw
+            (point.easting, point.northing) for point in self.corners
         )
         bounds = ProjectedBounds(
             min_easting=min(x_nw, x_sw),
@@ -2414,16 +2470,51 @@ class BoxCoordinate(BaseCoordinate):
         return center
 
     @_functools.cached_property
-    def corners_latlon(self) -> Corners:
+    def corners(self) -> ProjectedCorners:
+        return ProjectedCorners(*self._sample_boundary(1, use_cache=False))
+
+    @_functools.cached_property
+    def corners_latlon(self) -> GeographicCorners:
         """
         Box's bounds as a named tuple of coordinates in the underlying CRS.
         """
-        return Corners(
+        return GeographicCorners(
             *(
                 point.to_latlon(constraints=self.constraints)
-                for point in self._corners_raw
+                for point in self.corners
             )
         )
+
+    # * OUTPUT SUPPORT. ───────────────────────────────────────────────
+    _extra_field_names: tuple[str, ...]
+    _field_data: FieldData
+
+    @_functools.cached_property
+    def default_field_data(self) -> FieldData:
+        field_data = self._init_kwargs.copy()
+        del field_data["constraints"]
+        for field_name in self._extra_field_names:
+            field_data[field_name] = getattr(self, field_name)
+        return _types.MappingProxyType(field_data)
+
+    @property
+    def field_data(self) -> FieldData:
+        try:
+            return self._field_data
+        except AttributeError:
+            return self.default_field_data
+
+    @_functools.cached_property
+    def geometry(self) -> _shapely.Polygon:
+        return _shapely.box(*self.bounds)
+
+    def set_field_data(
+        self, field_data: _collections.abc.Mapping[str, _typing.Any]
+    ) -> FieldData:
+        if not isinstance(field_data, (dict, _types.MappingProxyType)):
+            field_data = dict(field_data)  # *REASSIGNMENT*
+        object.__setattr__(self, "_field_data", field_data)
+        return field_data
 
     # * PUBLIC DATA AND METHODS. ──────────────────────────────────────
     def contains(
@@ -2501,7 +2592,10 @@ class BoxCoordinate(BaseCoordinate):
             return is_child
 
         # Rule out containment cheaply, if possible.
-        if self.distance_to(other) > (1.005 * self.diagonal) + tolerance:
+        if (
+            self.distance_to(other)
+            > (_values.SAFETY_FACTOR * self.diagonal) + tolerance
+        ):
             return False
 
         # Perform spatial (non-logical) test.
@@ -2543,7 +2637,7 @@ class BoxCoordinate(BaseCoordinate):
         Strictly, this length is expressed in grid meters and therefore
         inherits the distortion of the underlying CRS.
         """
-        return (2 * self.precision**2) ** 0.5
+        return _values.calculate_diagonal_length(self.precision, safe_up=False)
 
     @_functools.cached_property
     def precision(self) -> int:
@@ -2637,6 +2731,12 @@ class BoxCoordinate(BaseCoordinate):
 
 class _BaseAccBox(BoxCoordinate):
     _condensed_prefix_template: str
+    _extra_field_names = (
+        "precision",
+        "string",
+        "condensed",
+        "condensed_prefix",
+    )
 
     @_functools.cached_property
     def condensed(self) -> str:
@@ -2651,6 +2751,7 @@ class _BaseAccBox(BoxCoordinate):
 
 
 class _BaseLgrsBox(BoxCoordinate):
+    _extra_field_names = ("precision", "string")
 
     @_functools.cached_property
     def _easting_int(self) -> int:
@@ -3074,10 +3175,10 @@ class LtmAccBox(_BaseAccBox):
     latitudinal_band: str
     easting_area: str
     northing_area: str
-    easting_1k: str
-    easting: str | None
-    northing_1k: str
-    northing: str | None
+    easting_1k: str | None = None
+    easting: str | None = None
+    northing_1k: str | None = None
+    northing: str | None = None
 
     def _validate_longitudinal_band(self) -> None:
         return self._validate_against_closed_interval(
