@@ -786,10 +786,6 @@ class BaseCoordinate(_BaseCoordinate):
                 middle=middle, attr_name=attr_name, if_attr_name=if_attr_name
             )
 
-    def _validate_constraints(self) -> None:
-        # TODO: Implement.
-        ...
-
     def _validate_hemisphere(self) -> None:
         self._validate_against_sequence(
             attr_name="hemisphere", sequence=("N", "S")
@@ -1826,6 +1822,10 @@ class BaseCoordinate(_BaseCoordinate):
 class PointCoordinate(BaseCoordinate):
     """The base class for all point coordinates."""
 
+    # * FIELDS AND VALIDATION. ────────────────────────────────────────
+    # Note: All constraints are compatible with points.
+    _validate_constraints = _return_none
+
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
     _has_box_origin: bool = False  # Default.
 
@@ -2265,6 +2265,18 @@ class BoxCoordinate(BaseCoordinate):
         if self._pattern.search(self.string) is None:
             raise _exceptions.MalformedCoordinate(
                 f"`.string` does not have the form: {self._pattern.pattern!r}"
+            )
+
+    def _validate_constraints(self) -> None:
+        if any(
+            (
+                self.constraints.global_lps,
+                self.constraints.global_ltm,
+                self.constraints.global_crs,
+            )
+        ):
+            raise _exceptions.MalformedCoordinate(
+                "Global constraints are not compatible with `BoxCoordinate`."
             )
 
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
