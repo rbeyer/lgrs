@@ -200,9 +200,9 @@ def make_gdfs(
     -------
     gdfs : list of GeoDataFrame instances
         The created `GeoDataFrame` instances. Note that each instance
-        has the added attribute `.crs_name`, which is a string
-        providing a nickname for the CRS, suitable for use in layer and
-        file names.
+        has the added attribute `.name_hint`, which is a string
+        providing a suggested name suitable for use in layer and file
+        names.
 
     Examples
     --------
@@ -247,10 +247,10 @@ def make_gdfs(
         data["geometry"] = [box.geometry for box in boxes]
         gdf = _geopandas.GeoDataFrame(data, crs=crs)
         if crs.lps_hemisphere is not None:
-            crs_nick = f"LPS_{crs.lps_hemisphere}_polygon_grid"
+            name_hint = f"LPS_{crs.lps_hemisphere}_polygon_grid"
         else:
-            crs_nick = f"LTM_{crs.ltm_zone}_polygon_grid"
-        gdf.crs_name = crs_nick
+            name_hint = f"LTM_{crs.ltm_zone}_polygon_grid"
+        gdf.name_hint = name_hint
         gdfs.append(gdf)
     return gdfs
 
@@ -278,5 +278,5 @@ if __name__ == "__main__":
     out_dir_path = pathlib.Path("out")
     out_dir_path.mkdir(parents=True, exist_ok=False)
     for gdf in gdfs:
-        out_path = out_dir_path / f"{gdf.crs_name}.gpkg"
+        out_path = out_dir_path / f"{gdf.name_hint}.gpkg"
         gdf.to_file(out_path, index=True)
