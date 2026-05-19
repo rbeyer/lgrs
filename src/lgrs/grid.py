@@ -182,6 +182,7 @@ def make_box_grid(
     return box_list
 
 
+# TODO: Implement `LgrsGeoDataFrame` to better document `.name_hint`.
 def make_gdfs(
     boxes: _collections.abc.Sequence[_coords.BoxCoordinate],
 ) -> dict[str, _geopandas.GeoDataFrame]:
