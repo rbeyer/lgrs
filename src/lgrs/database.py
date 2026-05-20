@@ -61,32 +61,25 @@ class _LongNameParsed(_typing.NamedTuple):
     suffix: str
 
 
-def _conform_latitudes(latitudes: _FloatIterable) -> list[float]:
-    conformed = []
-    for lat in latitudes:
-        if abs(lat) > 90:
-            raise _exceptions.MalformedCoordinate(
-                "`latitude` must be in [-90, 90] interval"
-            )
-        conformed.append(lat)
-    return conformed
+def _conform_latitude(latitude: float) -> float:
+    if abs(latitude) > 90:
+        raise _exceptions.MalformedCoordinate(
+            "`latitude` must be in [-90, 90] interval"
+        )
+    return latitude
 
 
-def _conform_longitudes(longitudes: _FloatIterable) -> list[float]:
-    conformed = []
-    for lon in longitudes:
-        # TODO: Decide acceptable input range.
-        if abs(lon) > 360:
-            raise _exceptions.MalformedCoordinate(
-                "`longitude` must be in [-360, 360] interval"
-            )
-        # Note: Conformity to [-180, 180) interval required by Eq. 13 of
-        # M2025 and by WKT.
-        lon %= 360  # Conforms to [0, 360) interval.
-        if lon >= 180:
-            lon -= 360  # Conforms to [-180, 180) interval.
-        conformed.append(lon)
-    return conformed
+def _conform_longitude(longitude: float) -> float:
+    if abs(longitude) > 360:
+        raise _exceptions.MalformedCoordinate(
+            "`longitude` must be in [-360, 360] interval"
+        )
+    # Note: Conformity to [-180, 180) interval required by Eq. 13 of
+    # M2025 and by WKT.
+    longitude %= 360  # Conforms to [0, 360) interval.
+    if longitude >= 180:
+        longitude -= 360  # Conforms to [-180, 180) interval.
+    return longitude
 
 
 def _ensure_float_iterable(
@@ -680,8 +673,8 @@ def query_lunar_crs_info(
     # Prepare for function calls.
     if has_spatial_filter:
         get_lunar_crs_long_names = _get_lunar_crs_long_names
-        conformed_lats = _conform_latitudes(raw_lats)
-        conformed_lons = _conform_longitudes(raw_lons)
+        conformed_lats = list(map(_conform_latitude, raw_lats))
+        conformed_lons = list(map(_conform_longitude, raw_lons))
         latlon_kwargs = {
             "conformed_latitudes": conformed_lats,
             "conformed_longitudes": conformed_lons,
