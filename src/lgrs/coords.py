@@ -184,7 +184,8 @@ def _calc_na_letterset(zone_number: int) -> int:
 
 def _compile_regex_without_i_and_o(pattern: str) -> _regex.Pattern:
     clean_pattern = _regex.sub("[A-Z]-[A-Z]", _remove_i_and_o, pattern)
-    return _regex.compile(clean_pattern)
+    annotated_clean_pattern = f"{clean_pattern}(?# {_regex.escape(pattern)})"
+    return _regex.compile(annotated_clean_pattern)
 
 
 def _expand_char_range(char_range: str) -> list[str]:
@@ -359,6 +360,8 @@ class Constraints(metaclass=_caching._MetaMultiton):
             return (self.global_crs, ())
 
         # Get nominal CRS.
+        # Note: These lines are equivalent to, but faster than, calling
+        # `lgrs.query_lunar_crs_info(...)`.
         (long_name,) = _database._get_lunar_crs_long_names(
             conformed_latitudes=(point.latitude,),
             conformed_longitudes=(point.longitude,),
@@ -476,7 +479,9 @@ class Constraints(metaclass=_caching._MetaMultiton):
         # Insofar as possible, force creation of a reference 25-km box.
         point_copy: LatLonPoint = point.copy()
         try:
-            proj_point = point_copy._to_lps_or_ltm(proj_crs=proj_crs)
+            proj_point = point_copy._to_lps_or_ltm(
+                proj_crs=proj_crs, validate=False
+            )
             box: BoxCoordinate = proj_point.to_lgrs(validate=False)
             # Note: Transform may yield most extreme supported box
             # rather than a box containing `point`.
@@ -532,21 +537,57 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     # * FIELDS AND VALIDATION. ────────────────────────────────────────
     _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
 
+    def _raise_fallback_exception(self) -> _typing.NoReturn:
+        raise _exceptions.MalformedCoordinate(
+            f"Coordinate is not valid: {self!r}"
+        )
+
     def _register_validation(self) -> None:
         object.__setattr__(self, "_was_validated", True)
 
-    def _validate(self) -> None:
+    def _validate(self, *, raise_fallback: bool = True) -> bool:
+        # First, attempt validation by reconstruction.
+        # Note: This also tests that constraints are consistent with
+        # `self`.
+        try:
+            self._validate_by_reconstruction()
+        except _exceptions.MalformedCoordinate:
+            raise
+        except Exception:
+            pass
+        else:
+            self._register_validation()
+            return True
+
+        # Reconstruction failed, so instance is invalid, but try to
+        # diagnose cause for user.
+        try:
+            self._validate_each_field()
+        except _exceptions.MalformedCoordinate:
+            raise
+        except Exception:
+            pass
+        if raise_fallback:
+            self._raise_fallback_exception()
+        return False
+
+    @_abc.abstractmethod
+    def _validate_by_reconstruction(self) -> None: ...
+
+    def _validate_each_field(self) -> None:
+        first_other_error = None  # Initialize.
         for field in self._get_fields():
-            result = getattr(self, f"_validate_{field.name}")()
-            if result is not None:
-                # Note: Cannot assign directly, because `self` is a
-                # frozen dataclass.
-                object.__setattr__(self, field.name, result)
-        # Note: `._init_kwargs` effectively freezes values, which may
-        # not be finalized until validation completes. It should not be
-        # assigned until after validation.
-        assert "_init_kwargs" not in self.__dict__
-        self._register_validation()
+            func = getattr(self, f"_validate_{field.name}", None)
+            if func is not None:
+                try:
+                    func()
+                except _exceptions.MalformedCoordinate:
+                    raise
+                except Exception as e:
+                    if first_other_error is None:
+                        first_other_error = e
+        if first_other_error:
+            raise first_other_error from None
 
     # * INITIALIZATION. ───────────────────────────────────────────────
     def __post_init__(self, validate: bool) -> None:
@@ -785,6 +826,38 @@ class BaseCoordinate(_BaseCoordinate):
             self._raise_malformed_coordinate(
                 middle=middle, attr_name=attr_name, if_attr_name=if_attr_name
             )
+
+    def _validate_by_reconstruction(self) -> None:
+        # Create forward-converted equivalent and compare.
+        (latlon_point,) = self._conform_to_latlon_points(self, center=True)
+        twin = latlon_point.copy().to(type(self), any_system=True)
+        if self.is_lps_based() != twin.is_lps_based():
+            raise _exceptions.MalformedCoordinate(
+                f"For the given constraints, {self.constraints!r}, location "
+                f"should be in {'LPS' if twin.is_lps_based() else 'LTM'} "
+                f"region, not: {self!r}"
+            )
+        if self._init_kwargs == twin._init_kwargs:
+            return
+        # Note: This test is included for completeness but should never
+        # fail.
+        if self._init_kwargs.keys() != twin._init_kwargs.keys():
+            raise _exceptions.MalformedCoordinate(
+                f"Cannot compare `self` to `twin`: {self!r}"
+            )
+        for field_name in self._init_kwargs:
+            # Note: Easting and northing may have small precision
+            # discrepancies.
+            if field_name in ("easting", "northing"):
+                continue
+            self_val = getattr(self, field_name)
+            twin_val = getattr(twin, field_name)
+            if self_val != twin_val:
+                raise _exceptions.MalformedCoordinate(
+                    f"For the given constraints, {self.constraints!r}, "
+                    f"location should have `{field_name}` set to "
+                    f"`{twin_val}`, not: {self!r}"
+                )
 
     def _validate_hemisphere(self) -> None:
         self._validate_against_sequence(
@@ -1048,7 +1121,8 @@ class BaseCoordinate(_BaseCoordinate):
         )
         return dist
 
-    # TODO: Probably delete this, as unneeded.
+    # TODO: Probably delete, especially since both LPS and LTM systems
+    #  have regions/zones not accommodated here.
     def grid_distance_to(
         self,
         other: BaseCoordinate,
@@ -1085,9 +1159,13 @@ class BaseCoordinate(_BaseCoordinate):
         TypeError
             If `system` is not recognized, or if `system` is not specified
             (`None`) and `self` and `other` use different systems.
-        lgrs.Exceptions.MalformedCoordinate
-            If `system="LPS"` but `self` and/or `other` are outside the LPS
-            region supported by LGRS.
+
+        Warnings
+        --------
+        Note that grid distances can be very different from geodesic distances,
+        especially when using `global_*` constraints or specifying `system`,
+        as such choices may extend a system beyond its region of preferred use.
+        (See Examples.)
 
         See Also
         --------
@@ -1102,29 +1180,54 @@ class BaseCoordinate(_BaseCoordinate):
         1.4142135623730951
         >>> latlon_point.distance_to(acc_box, center=True)
         2.1234979460292074
+
+        Although supported, calculating grid distances outside the region of
+        preferred use can yield results of limited value.
+
+        >>> on_equator = LatLonPoint(0, 0)
+        >>> near_equator = LatLonPoint(1, 1)
+        >>> north_pole = LatLonPoint(90, 0)
+        >>> on_equator.grid_distance_to(near_equator, system="LTM")
+        42841.896671738505
+        >>> on_equator.distance_to(near_equator)
+        42882.604775055
+        >>> on_equator.grid_distance_to(north_pole, system="LPS")
+        3453951.1999999997
+        >>> on_equator.distance_to(north_pole)
+        2729101.5381734534
         """
+        # Resolve system.
+        if system is None:
+            if isinstance(self, LatLonPoint) or isinstance(other, LatLonPoint):
+                raise TypeError(
+                    "Must specify `system` when a `LatLonPoint` is involved."
+                )
+            if self.is_lps_based() and other.is_lps_based():
+                system = "LPS"
+            elif self.is_ltm_based() and other.is_ltm_based():
+                system = "LTM"
+            else:
+                raise TypeError(
+                    "Must specify `system` when a `self` and `other` are not "
+                    "from the same system."
+                )
+        else:
+            system = system.upper()
+
+        # Convert to points in targeted system.
         match system:
             case "LPS":
                 convert = BaseCoordinate.to_lps
             case "LTM":
                 convert = BaseCoordinate.to_ltm
-            case None:
-                convert = BaseCoordinate.to_lps_or_ltm
             case _:
                 raise TypeError(f"`system` not recognized: {system!r}")
-        self_box, other_box = map(
+        self_point, other_point = map(
             convert, self._conform_to_latlon_points(self, other, center=center)
         )
-        if (
-            system is None
-            and self_box.is_lps_based() != other_box.is_lps_based()
-        ):
-            raise TypeError(
-                "`self` and `other` are not in the same system (LPS or LTM)"
-            )
         dist = _math.dist(
-            (self_box.easting, self_box.northing),
-            (other_box.easting, other_box.northing),
+            (self_point.easting, self_point.northing),
+            (other_point.easting, other_point.northing),
         )
         return dist
 
@@ -1822,10 +1925,6 @@ class BaseCoordinate(_BaseCoordinate):
 class PointCoordinate(BaseCoordinate):
     """The base class for all point coordinates."""
 
-    # * FIELDS AND VALIDATION. ────────────────────────────────────────
-    # Note: All constraints are compatible with points.
-    _validate_constraints = _return_none
-
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
     _has_box_origin: bool = False  # Default.
 
@@ -1939,15 +2038,14 @@ class LatLonPoint(PointCoordinate):
             f"{abs(self.longitude)!r}°{e_or_w}"
         )
 
-    def _validate_latitude(self) -> float:
-        (conformed_lat,) = _database._conform_latitudes((self.latitude,))
-        return conformed_lat
-
-    def _validate_longitude(self) -> float:
-        (conformed_lon,) = _database._conform_longitudes((self.longitude,))
-        return conformed_lon
-
-    _validate_constraints = _return_none
+    def _validate(self) -> None:
+        if not (0 <= self.latitude <= 90):
+            conformed_lat = _database._conform_latitude(self.latitude)
+            object.__setattr__(self, "latitude", conformed_lat)
+        if not (-180 <= self.longitude < 180):
+            conformed_lon = _database._conform_longitude(self.longitude)
+            object.__setattr__(self, "longitude", conformed_lon)
+        self._register_validation()
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     _get_crs_name = _return_none
@@ -1958,7 +2056,7 @@ class LatLonPoint(PointCoordinate):
         *,
         proj_crs: _srs.CRS | None = None,
         constraints: Constraints | None = None,
-        validate: bool | None = None,
+        validate: bool | None,
     ) -> LpsPoint | LtmPoint:
         # Find projected CRS, which depends on constraints.
         if proj_crs is None:
@@ -2040,20 +2138,6 @@ class LpsPoint(PointCoordinate):
 
     # Note: `._validate_hemisphere()` is defined on base class.
 
-    def _validate_easting(self) -> None:
-        # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        # Note: Limits from reference code, adapted from p. 54 of M2025.
-        return self._validate_against_closed_interval(
-            attr_name="easting", minimum=197_000, maximum=805_000
-        )
-
-    def _validate_northing(self) -> None:
-        # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        # Note: Limits from reference code, adapted from p. 54 of M2025.
-        return self._validate_against_closed_interval(
-            attr_name="northing", minimum=197_000, maximum=805_000
-        )
-
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     def _get_crs_name(self) -> str | None:
         return self.hemisphere
@@ -2069,7 +2153,7 @@ class LpsPoint(PointCoordinate):
         self,
         *,
         constraints: Constraints | None = None,
-        validate: bool | None = None,
+        validate: bool | None,
     ) -> LatLonPoint:
         transformer = self._get_transformer(to_geographic=True)
         lat, lon = transformer.transform(self.easting, self.northing)
@@ -2086,8 +2170,10 @@ class LpsPoint(PointCoordinate):
         self,
         *,
         constraints: Constraints | None = None,
-        validate: bool | None = None,
+        validate: bool | None,
     ) -> LpsLgrsBox:
+        if validate or validate is None:
+            LpsLgrsBox._validate_that_constraints_are_nonglobal(constraints)
         is_in_west_half = self.easting < _wkt.LPS_FALSE_EASTING
         match (self.hemisphere, is_in_west_half):
             case ("S", True):  # Eq. 100
@@ -2176,31 +2262,7 @@ class LtmPoint(PointCoordinate):
             attr_name="zone_number", minimum=1, maximum=45
         )
 
-    _validate_hemisphere = LpsPoint._validate_hemisphere
-
-    def _validate_easting(self) -> None:
-        # TODO: Confirm limits empirically.
-        # Note: Limits from p. 47 of M2025.
-        return self._validate_against_closed_interval(
-            attr_name="easting", minimum=125_000, maximum=375_000
-        )
-
-    def _validate_northing(self) -> None:
-        # TODO: Confirm limits empirically, including for extended and
-        #  polar LTM. Note that reference code uses [0, 2_500_000].
-        # Note: Limits from p. 47 of M2025.
-        match self.hemisphere:
-            case "N":
-                minimum = 0
-                maximum = 2_487_500
-            case "S":
-                minimum = 12_500
-                maximum = 2_500_000
-            case _:
-                self._raise_unexpected(self._validate_hemisphere)
-        return self._validate_against_closed_interval(
-            attr_name="northing", minimum=minimum, maximum=maximum
-        )
+    # Note: `._validate_hemisphere()` is defined on base class.
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     def _get_crs_name(self) -> str | None:
@@ -2215,8 +2277,10 @@ class LtmPoint(PointCoordinate):
         self,
         *,
         constraints: Constraints | None = None,
-        validate: bool | None = None,
+        validate: bool | None,
     ) -> LtmLgrsBox:
+        if validate or validate is None:
+            LtmLgrsBox._validate_that_constraints_are_nonglobal(constraints)
         lon_band = self.zone_number
         latlon_point = self.to_latlon()
         lat_band_idx = _floor(latlon_point.latitude // 8)  # Eq. 81
@@ -2257,26 +2321,55 @@ class BoxCoordinate(BaseCoordinate):
     easting: str | None
     northing: str | None
 
-    def _validate(self) -> None:
-        super()._validate()
-        self._validate_against_pattern()
+    def _validate(self) -> bool:
+        # First, attempt inherited validation.
+        if super()._validate(raise_fallback=False):
+            return True
 
-    def _validate_against_pattern(self) -> None:
-        if self._pattern.search(self.string) is None:
-            raise _exceptions.MalformedCoordinate(
-                f"`.string` does not have the form: {self._pattern.pattern!r}"
-            )
+        # Instance is invalid, but try to diagnose cause for user.
+        try:
+            self._validate_against_pattern(self.string)
+        except _exceptions.MalformedCoordinate:
+            raise
+        except Exception:
+            pass
+        self._raise_fallback_exception()
+
+    @classmethod
+    def _validate_against_pattern(cls, string: str) -> _regex.Match:
+        match = cls._pattern.search(string)
+        if match:
+            return match
+        simple_pattern = cls._get_simple_pattern()
+        if simple_pattern.search(string):
+            if "I" in string or "O" in string:
+                raise _exceptions.MalformedCoordinate(
+                    "`.string` contains the letters 'I' or 'O', which are "
+                    "not used by LGRS"
+                )
+            else:
+                # Note: This line should never be seen but is included
+                # for compleness.
+                failed_pattern = cls._pattern
+        else:
+            failed_pattern = simple_pattern
+        raise _exceptions.MalformedCoordinate(
+            f"`.string` does not have the form: {failed_pattern.pattern!r}"
+        )
 
     def _validate_constraints(self) -> None:
-        if any(
-            (
-                self.constraints.global_lps,
-                self.constraints.global_ltm,
-                self.constraints.global_crs,
-            )
-        ):
+        return self._validate_that_constraints_are_nonglobal(self.constraints)
+
+    @classmethod
+    def _validate_that_constraints_are_nonglobal(
+        cls, constraints: Constraints
+    ) -> None:
+        for name in ("global_lps", "global_ltm", "global_crs"):
+            if not getattr(constraints, name):
+                continue
             raise _exceptions.MalformedCoordinate(
-                "Global constraints are not compatible with `BoxCoordinate`."
+                "Global constraints are not compatible with "
+                f"`{cls.__name__}`, including: `{name}`"
             )
 
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
@@ -2300,6 +2393,15 @@ class BoxCoordinate(BaseCoordinate):
 
     # * INSTANTIATION FROM STRING. ────────────────────────────────────
     _pattern: _regex.Pattern
+
+    @classmethod
+    @_functools.cache
+    def _get_simple_pattern(cls) -> _regex.Pattern:
+        match = _regex.search(r"\(\?# *(?P<s>.*)\)$", cls._pattern.pattern)
+        orig_pattern = match.group("s")
+        unescaped = orig_pattern.replace("\\", "")
+        simple_pattern = _regex.sub(r"\(\?P<.+?>(.*?)\)", r"\1", unescaped)
+        return _regex.compile(simple_pattern)
 
     # TODO: Test why `LpsLgrsBox.from_string("YZ+")` doesn't work.
     @classmethod
@@ -2357,12 +2459,7 @@ class BoxCoordinate(BaseCoordinate):
             )
 
         # Match to pattern.
-        match = cls._pattern.search(string)
-        if match is None:
-            raise _exceptions.MalformedCoordinate(
-                f"`string` {string!r} is not in the supported format: "
-                f"{cls._pattern.pattern!r}"
-            )
+        match = cls._validate_against_pattern(string)
         match_dict = match.groupdict()
 
         # Coerce each argument to the correct type.
@@ -2858,8 +2955,6 @@ class LpsAccBox(_BaseAccBox):
     northing_1k: str | None = None
     northing: str | None = None
 
-    _validate_longitudinal_band = _return_none  # `._pattern` is sufficient.
-
     def _validate_easting_area(self) -> None:
         match self.longitudinal_band:
             case "A" | "Y":
@@ -2869,7 +2964,7 @@ class LpsAccBox(_BaseAccBox):
                 minimum = "A"
                 maximum = "N"
             case _:
-                self._raise_unexpected(self._validate_longitudinal_band)
+                self._raise_unexpected()
         self._validate_against_closed_interval(
             attr_name="easting_area",
             minimum=minimum,
@@ -2877,18 +2972,12 @@ class LpsAccBox(_BaseAccBox):
             if_attr_name="longitudinal_band",
         )
 
-    _validate_northing_area = _return_none  # `._pattern` is sufficient.
-    _validate_easting_1k = _return_none  # `._pattern` is sufficient.
-
     def _validate_easting(self) -> None:
         if (self.easting is None) != (self.northing is None):
             raise _exceptions.MalformedCoordinate(
                 "`easting` and `northing` must both be specified "
                 "or both be `None`."
             )
-
-    _validate_northing_1k = _return_none  # `._pattern` is sufficient.
-    _validate_northing = _return_none  # `._pattern` is sufficient.
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     # Tables 13, 14
@@ -2906,7 +2995,7 @@ class LpsAccBox(_BaseAccBox):
         self,
         *,
         constraints: Constraints | None = None,
-        validate: bool | None = None,
+        validate: bool | None,
     ) -> LpsLgrsBox | LtmLgrsBox:
         if self.easting_1k is None:
             easting = None
@@ -3000,24 +3089,7 @@ class LpsLgrsBox(_BaseLgrsBox):
     easting: str | None = None
     northing: str | None = None
 
-    _validate_longitudinal_band = LpsAccBox._validate_longitudinal_band
     _validate_easting_area = LpsAccBox._validate_easting_area
-    _validate_northing_area = LpsAccBox._validate_northing_area
-
-    def _validate_easting(self) -> None:
-        # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        #  Should upper limit be 24_999?
-        # Note: Limits from reference code.
-        return self._validate_against_closed_interval(
-            attr_name="easting", minimum=0, maximum=25_000, coerce_str=True
-        )
-
-    def _validate_northing(self) -> None:
-        # TODO: Implement, with consideration of `.prefer_lps`, etc.
-        #  Should upper limit be 24_999?
-        return self._validate_against_closed_interval(
-            attr_name="northing", minimum=0, maximum=25_000, coerce_str=True
-        )
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     _easting_area_chars = LpsAccBox._easting_area_chars
@@ -3028,7 +3100,7 @@ class LpsLgrsBox(_BaseLgrsBox):
         self,
         *,
         constraints: Constraints | None = None,
-        validate: bool | None = None,
+        validate: bool | None,
     ) -> LpsAccBox | LtmAccBox:
         init_kwargs = {
             "longitudinal_band": self.longitudinal_band,
@@ -3060,7 +3132,7 @@ class LpsLgrsBox(_BaseLgrsBox):
         self,
         *,
         constraints: Constraints | None = None,
-        validate: bool | None = None,
+        validate: bool | None,
     ) -> LpsPoint:
         # Determine hemisphere and whether in the western half.
         # p. 92 (parags. 1, 3)
@@ -3197,9 +3269,6 @@ class LtmAccBox(_BaseAccBox):
             attr_name="longitudinal_band", minimum=1, maximum=45
         )
 
-    _validate_latitudinal_band = _return_none  # `._pattern` is sufficient.
-    _validate_easting_area = _return_none  # `._pattern` is sufficient.
-
     def _validate_northing_area(self) -> None:
         na_letterset = _calc_na_letterset(self.longitudinal_band)  # Eq. 83
         na_chars = LtmLgrsBox._northing_area__letterset_to_chars[na_letterset]
@@ -3208,11 +3277,6 @@ class LtmAccBox(_BaseAccBox):
             sequence=na_chars,
             if_attr_name="longitudinal_band",
         )
-
-    _validate_easting_1k = LpsAccBox._validate_easting_1k
-    _validate_easting = LpsAccBox._validate_easting
-    _validate_northing_1k = LpsAccBox._validate_northing_1k
-    _validate_northing = LpsAccBox._validate_northing
 
     @property
     def zone_number(self) -> int:
@@ -3306,11 +3370,7 @@ class LtmLgrsBox(_BaseLgrsBox):
     northing: str | None = None
 
     _validate_longitudinal_band = LtmAccBox._validate_longitudinal_band
-    _validate_latitudinal_band = LtmAccBox._validate_latitudinal_band
-    _validate_easting_area = LtmAccBox._validate_easting_area
     _validate_northing_area = LtmAccBox._validate_northing_area
-    _validate_easting = LpsLgrsBox._validate_easting
-    _validate_northing = LpsLgrsBox._validate_northing
 
     zone_number = LtmAccBox.zone_number
 
@@ -3341,7 +3401,7 @@ class LtmLgrsBox(_BaseLgrsBox):
         self,
         *,
         constraints: Constraints | None = None,
-        validate: bool | None = None,
+        validate: bool | None,
     ) -> LtmPoint:
         # Determine hemisphere.
         # Eq. 92 (also Fig. 15)
@@ -3413,50 +3473,60 @@ if __name__ == "__main__":
     assert lps_or_ltm is not test_lps_or_ltm
     assert lps_or_ltm.constraints == Constraints()
     assert test_lps_or_ltm.constraints == extended_ltm
-    #
-    # # lgrs_.to_latlon().is_equal_to(latlon, error=True)
-    #
-    # latlon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
-    # lps_or_ltm1 = latlon1.to_lps_or_ltm()
-    # lgrs1 = lps_or_ltm1.to_lgrs()
-    # assert isinstance(lgrs1, LpsLgrsBox)
-    #
-    # extended_ltm = Constraints(extended_ltm=True)
-    # latlon2 = latlon1.replace(constraints=extended_ltm)
-    # lps_or_ltm2 = latlon2.to_lps_or_ltm()
-    # lgrs2 = lps_or_ltm2.to_lgrs()
-    # assert isinstance(lgrs2, LtmLgrsBox)
-    #
-    # latlon4 = LatLonPoint(
-    #     latitude=-86.38231380366628, longitude=-6.004331982958013
-    # )  # p. 53, 64
-    # lps_or_ltm4 = latlon4.to_lps_or_ltm()
-    # lgrs4 = lps_or_ltm4.to_lgrs()
-    # assert lgrs4.is_equal_to(
-    #     LpsLgrsBox.from_string("AZS1359008480"), error=True
-    # )
-    #
-    # lgrs4.to_latlon()
-    #
-    # latlon5 = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
-    # latlon5.to_latlon()
-    #
+
+    # lgrs_.to_latlon().is_equal_to(latlon, error=True)
+
+    latlon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
+    lps_or_ltm1 = latlon1.to_lps_or_ltm()
+    lgrs1 = lps_or_ltm1.to_lgrs()
+    assert isinstance(lgrs1, LpsLgrsBox)
+
+    extended_ltm = Constraints(extended_ltm=True)
+    latlon2 = latlon1.replace(constraints=extended_ltm)
+    lps_or_ltm2 = latlon2.to_lps_or_ltm()
+    lgrs2 = lps_or_ltm2.to_lgrs()
+    assert isinstance(lgrs2, LtmLgrsBox)
+
+    latlon4 = LatLonPoint(
+        latitude=-86.38231380366628, longitude=-6.004331982958013
+    )  # p. 53, 64
+    lps_or_ltm4 = latlon4.to_lps_or_ltm()
+    lgrs4 = lps_or_ltm4.to_lgrs()
+    assert lgrs4.is_equal_to(
+        LpsLgrsBox.from_string("AZS1359008480"), error=True
+    )
+
+    lgrs4.to_latlon()
+
+    latlon5 = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
+    latlon5.to_latlon()
+
     # lps = LpsPoint(hemisphere="S", easting=197000, northing=197000)
     # extreme_latlon = lps.to_latlon()
-    #
-    # lps_acc = lgrs1.to_acc()
-    # ltm_acc = lgrs2.to_acc()
-    #
-    # lps_acc.truncate(100_000).to_latlon()
-    #
-    # lgrs_.distance_to(lgrs1)
-    #
-    # latlon_point = LatLonPoint(90, 0)
-    # latlon_point.to_acc().validate()
-    #
-    # x = LatLonPoint(79.99, 1, constraints=Constraints(prefer_lps=True))
-    # x.to_lgrs().corners_latlon
-    # x.to_lps_or_ltm()
-    #
-    # y = LatLonPoint(78.81, 1, constraints=Constraints(prefer_lps=True))
-    # y.to_lps_or_ltm()
+
+    lps_acc = lgrs1.to_acc()
+    ltm_acc = lgrs2.to_acc()
+
+    lps_acc.truncate(100_000).to_latlon()
+
+    lgrs_.distance_to(lgrs1)
+
+    latlon_point = LatLonPoint(90, 0)
+    latlon_point.to_acc().validate()
+
+    x = LatLonPoint(79.99, 1, constraints=Constraints(prefer_lps=True))
+    x.to_lgrs().corners_latlon
+    x.to_lps_or_ltm()
+
+    y = LatLonPoint(78.81, 1, constraints=Constraints(prefer_lps=True))
+    y.to_lps_or_ltm()
+
+    latlon_point = LatLonPoint(latitude=-81, longitude=0)
+    lps_point = latlon_point.to_lps_or_ltm()
+    twin_lps_point = LpsPoint(*lps_point, constraints=latlon_point.constraints)
+
+    LpsLgrsBox._get_simple_pattern()
+
+    # LtmPoint(23, "N", 400_000, 1_000_000)
+
+    LpsLgrsBox(0, 1, 2, constraints=Constraints(global_lps=True))
