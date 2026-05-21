@@ -19,12 +19,14 @@
 ###############################################################################
 # Standard.
 import collections as _collections
+import dataclasses as _dataclasses
 import math as _math
 import typing as _typing
 
 # External.
 import geopandas as _geopandas
 import numpy as _np
+from pyproj import aoi as _pyproj_aoi
 
 # Internal.
 import lgrs.coords as _coords
@@ -37,17 +39,154 @@ import lgrs.values as _values
 _precision_array = _np.array((1, 10, 100, 1_000, 25_000))
 
 
-class GeographicBounds(_typing.NamedTuple):
+@_dataclasses.dataclass(frozen=True)
+class GeographicBounds:
+    """
+    Create an instance describing a geographic bounding box (envelope).
+
+    Parameters
+    ----------
+    min_longitude : float
+        The minimum longitude, in degrees.
+    min_latitude : float
+        The minimum latitude, in degrees.
+    max_longitude : float
+        The maximum longitude, in degrees.
+    max_latitude : float
+        That maximum latitude, in degrees.
+
+    Raises
+    ------
+    TypeError
+        If values are invalid. Namely, if the absolute value of any
+        longitude exceeds 360, the absolute value of any latitude exceeds
+        90, any maximum is not greater than its counterpart minimum, or
+        the range implied by the minimum and maximum longitudes exceeds 360.
+
+    Examples
+    --------
+    >>> bounds_1 = GeographicBounds(10, 10, 20, 20)
+
+    Bounds can validly cross critical meridians but may not span from higher
+    to lower values. Below, `bounds_2` and `bounds_3` are functionally
+    equivalent, but `bounds_4` and `bounds_5` are invalid.
+
+
+    >>> bounds_2 = GeographicBounds(-190, 10, -170, 20)
+    >>> bounds_3 = GeographicBounds(170, 10, 190, 20)
+    >>> bounds_4 = GeographicBounds(170, 10, -170, 20)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+      ...
+    TypeError:
+      ...
+    >>> bounds_5 = GeographicBounds(0, 89, 10, 87)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+      ...
+    TypeError:
+      ...
+
+    If the user intended to specify `bounds_5` as crossing the North Pole,
+    they could achieve an area centered the pole thusly.
+
+    >>> alt_bounds_5 = GeographicBounds(0, 87, 360, 90)
+    """  # noqa: E501
+
     min_longitude: float
     min_latitude: float
     max_longitude: float
     max_latitude: float
+
+    def __post_init__(self):
+        for field in _dataclasses.fields(self):
+            val = getattr(self, field.name)
+            match field.name:
+                case "min_longitude" | "max_longitude":
+                    max_abs = 360
+                case "min_latitude" | "max_latitude":
+                    max_abs = 90
+                case _:
+                    continue
+            if abs(val) > max_abs:
+                raise TypeError(
+                    f"Absolute value of `{field.name}` must be <={max_abs}, "
+                    f"not: {val!r}>"
+                )
+        if self.min_longitude >= self.max_longitude:
+            raise TypeError(
+                f"`max_longitude` ({self.max_longitude}) must be greater than "
+                f"`min_longitude` ({self.min_longitude})."
+            )
+        if self.max_longitude - self.min_longitude > 360:
+            raise TypeError(
+                "The difference between `max_longitude` and `min_longitude` "
+                "cannot exceed 360."
+            )
+        if self.min_latitude >= self.max_latitude:
+            raise TypeError(
+                f"`max_latitude` ({self.max_latitude}) must be greater than "
+                f"`min_latitude` ({self.min_latitude})."
+            )
 
     def __contains__(self, point: _coords.LatLonPoint) -> bool:
         if self.min_longitude <= point.longitude <= self.max_longitude:
             if self.min_latitude <= point.latitude <= self.max_latitude:
                 return True
         return False
+
+    def __iter__(self) -> _typing.Iterator[float]:
+        for field in _dataclasses.fields(self):
+            yield getattr(self, field.name)
+
+    @classmethod
+    def from_north_pole_to(cls, min_latitude: float) -> _typing.Self:
+        """
+        Create `GeographicBounds` from North Pole south to some latitude.
+
+        Parameters
+        ----------
+        min_latitude : float
+            The latitude to which the bounds should extend.
+
+        Returns
+        -------
+        GeographicBounds
+            The new instance.
+        """
+        return GeographicBounds(0, min_latitude, 360, 90)
+
+    @classmethod
+    def from_other(
+        cls, other: _collections.abc.Iterable | _pyproj_aoi.AreaOfInterest
+    ) -> _typing.Self:
+        match other:
+            case GeographicBounds():
+                return other
+            case _collections.abc.Iterable():
+                return cls(*other)
+            case _pyproj_aoi.AreaOfInterest():
+                return cls(
+                    other.west_lon_degree,
+                    other.south_lat_degree,
+                    other.east_lon_degree,
+                    other.north_lat_degree,
+                )
+
+    @classmethod
+    def from_south_pole_to(cls, max_latitude: float) -> _typing.Self:
+        """
+        Create `GeographicBounds` from Sorth Pole north to some latitude.
+
+        Parameters
+        ----------
+        max_latitude : float
+            The latitude to which the bounds should extend.
+
+        Returns
+        -------
+        GeographicBounds
+            The new instance.
+        """
+        return GeographicBounds(0, -90, 360, max_latitude)
 
 
 def _calculate_safe_count(span: float, delta: float) -> int:
@@ -111,7 +250,11 @@ def _construct_latlon_grid(
 
 
 def make_box_grid(
-    bounds: tuple[float, float, float, float],
+    bounds: (
+        GeographicBounds
+        | tuple[float, float, float, float]
+        | _pyproj_aoi.AreaOfInterest
+    ),
     min_precision: float,
     acc: bool = False,
 ) -> list[_coords.BoxCoordinate]:
@@ -120,14 +263,14 @@ def make_box_grid(
 
     Parameters
     ----------
-    bounds : GeographicBounds or other 4-float tuple
-        The bounds for which to generate the grid.
-
+    bounds : GeographicBounds, iterable, or pyproj.aoi.AreaOfInterest
+        The geogrpahic bounds, in degrees, for which to generate the grid.
+        When specified by sequence (or other iterable), should contain
+        exactly 4 numbers in order: min_lon, min_lat, max_lon, max_lat.
     min_precision : float
-        The minimum precision that the grid should have. If not a
-    supported precision, the actual precision is rounded down. All
-    boxes have the same precision.
-
+        The minimum precision that the grid should have. If not a supported
+        precision, the actual precision is rounded down to a better
+        precision. All boxes have the same precision.
     acc : bool, default=False
         Whether to use ACC. If `False`, LGRS is used.
 
@@ -159,7 +302,7 @@ def make_box_grid(
     # Generate geographic sample point grid.
     # Note: Grid has sufficient density to ensure that all boxes at
     # desired precision are sampled.
-    geo_bounds = GeographicBounds(*bounds)
+    geo_bounds = GeographicBounds.from_other(bounds)
     latlon_sample_points = _construct_latlon_grid(geo_bounds, precision)
 
     # Create boxes.
@@ -276,8 +419,8 @@ if __name__ == "__main__":
     gdfs = make_gdfs(boxes)
     import pathlib
 
-    out_dir_path = pathlib.Path("out")
-    out_dir_path.mkdir(parents=True, exist_ok=False)
-    for gdf in gdfs:
-        out_path = out_dir_path / f"{gdf.name_hint}.gpkg"
-        gdf.to_file(out_path, index=True)
+    # out_dir_path = pathlib.Path("out")
+    # out_dir_path.mkdir(parents=True, exist_ok=False)
+    # for gdf in gdfs:
+    #     out_path = out_dir_path / f"{gdf.name_hint}.gpkg"
+    #     gdf.to_file(out_path, index=True)
