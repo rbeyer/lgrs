@@ -347,6 +347,15 @@ class Constraints(metaclass=_caching._MetaMultiton):
                 "If `global_crs` is specified, no other constraint can be set."
             )
 
+    def __repr__(self) -> str:
+        enabled_arg_strs = []
+        for field in _dataclasses.fields(self):
+            val = getattr(self, field.name)
+            if val in (False, None):
+                continue
+            enabled_arg_strs.append(f"{field.name}={val!r}")
+        return f"{self.__class__.__name__}({', '.join(enabled_arg_strs)})"
+
     _max_geod_length_of_25km_box_diag_in_deg_lat = (
         _values.calculate_diagonal_length(25_000, safe_up=True)
         / _values.M_PER_DEGREE_LATITUDE
@@ -529,13 +538,14 @@ class _AbstractBaseCoordinate(_abc.ABC):
 # accidentally implying dataclass fields).
 @_dataclasses.dataclass(frozen=True, kw_only=True)
 class _BaseCoordinate(_AbstractBaseCoordinate):
-    constraints: Constraints = _dataclasses.field(
-        default=_default_constraints, compare=False, repr=False
-    )
-    validate: _dataclasses.InitVar[bool] = True
+    _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
 
     # * FIELDS AND VALIDATION. ────────────────────────────────────────
-    _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
+    constraints: Constraints = _dataclasses.field(
+        default=_default_constraints,
+        compare=False,
+    )
+    validate: _dataclasses.InitVar[bool] = True
 
     def _raise_fallback_exception(self) -> _typing.NoReturn:
         raise _exceptions.MalformedCoordinate(
@@ -649,6 +659,16 @@ class BaseCoordinate(_BaseCoordinate):
     # * BASIC BEHAVIOR. ───────────────────────────────────────────────
     def __copy__(self) -> _typing.Self:
         return self.copy()
+
+    def __repr__(self) -> str:
+        arg_strs = []
+        for name, val in self._init_kwargs.items():
+            if isinstance(val, (int, float)):
+                val_str = f"{val:_}"
+            else:
+                val_str = repr(val)
+            arg_strs.append(f"{name}={val_str}")
+        return f"{self.__class__.__name__}({', '.join(arg_strs)})"
 
     def __str__(self) -> str:
         return self.string
@@ -1946,7 +1966,7 @@ class PointCoordinate(BaseCoordinate):
 
 
 # TODO: Un-skip Example 3 once complete validation is implemented.
-@_dataclasses.dataclass(frozen=True)
+@_dataclasses.dataclass(frozen=True, repr=False)
 class LatLonPoint(PointCoordinate):
     """
     Create an instance representing a latitude-longitude point.
@@ -2101,7 +2121,7 @@ class LatLonPoint(PointCoordinate):
             return ltm
 
 
-@_dataclasses.dataclass(frozen=True)
+@_dataclasses.dataclass(frozen=True, repr=False)
 class LpsPoint(PointCoordinate):
     """
     Create an instance representing a Lunar Polar Stereographic (LPS) point.
@@ -2219,7 +2239,7 @@ class LpsPoint(PointCoordinate):
         return lps_lrgs
 
 
-@_dataclasses.dataclass(frozen=True)
+@_dataclasses.dataclass(frozen=True, repr=False)
 class LtmPoint(PointCoordinate):
     """
     Create an instance representing a Lunar Transverse Mercator (LTM) point.
@@ -2878,7 +2898,7 @@ class _BaseLgrsBox(BoxCoordinate):
 # TODO: Think about what best field names are, e.g., `easting_area`,
 #  `easting_25k`, `easting_25km`, `easting_25k_area`, or
 #  `easting_25km_area`.
-@_dataclasses.dataclass(frozen=True)
+@_dataclasses.dataclass(frozen=True, repr=False)
 class LpsAccBox(_BaseAccBox):
     """
     Create an instance representing an LPS Artemis Condensed Coordinate box.
@@ -3025,7 +3045,7 @@ class LpsAccBox(_BaseAccBox):
         return lgrs
 
 
-@_dataclasses.dataclass(frozen=True)
+@_dataclasses.dataclass(frozen=True, repr=False)
 class LpsLgrsBox(_BaseLgrsBox):
     """
     Create an instance representing an LPS Lunar Grid Reference System box.
@@ -3183,7 +3203,7 @@ class LpsLgrsBox(_BaseLgrsBox):
         return lps
 
 
-@_dataclasses.dataclass(frozen=True)
+@_dataclasses.dataclass(frozen=True, repr=False)
 class LtmAccBox(_BaseAccBox):
     """
     Create an instance representing an LTM Artemis Condensed Coordinate box.
@@ -3301,7 +3321,7 @@ class LtmAccBox(_BaseAccBox):
     _to_lgrs = LpsAccBox._to_lgrs
 
 
-@_dataclasses.dataclass(frozen=True)
+@_dataclasses.dataclass(frozen=True, repr=False)
 class LtmLgrsBox(_BaseLgrsBox):
     """
     Create an instance representing an LTM Lunar Grid Reference System box.
@@ -3529,4 +3549,4 @@ if __name__ == "__main__":
 
     # LtmPoint(23, "N", 400_000, 1_000_000)
 
-    LpsLgrsBox(0, 1, 2, constraints=Constraints(global_lps=True))
+    LpsLgrsBox(0, 1, 2)
