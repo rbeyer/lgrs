@@ -4,7 +4,6 @@ channels:
   - defaults
 dependencies:
   - black
-  - build
   - bump-my-version
   - flake8
   - flake8-pyproject
@@ -15,6 +14,7 @@ dependencies:
   - pylint
   - pytest
   - pytest-cov
+  - python-build
   - sphinx
   - sphinxcontrib
   - sphinxcontrib-apidoc
