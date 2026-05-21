@@ -1534,7 +1534,7 @@ class BaseCoordinate(_BaseCoordinate):
                 # geographic, to ensure that new constraints are
                 # properly applied (or trigger an error).
                 if isinstance(self, LatLonPoint):
-                    src = self.replace(constraints=constraints)
+                    src = self.replace(constraints=constraints, validate=False)
                 else:
                     src = self.to_latlon()
                 # *REASSIGNMENT*
