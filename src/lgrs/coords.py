@@ -501,7 +501,7 @@ class Constraints(metaclass=_caching._MetaMultiton):
             # rather than a box containing `point`.
             if not box.contains(point, same_crs_only=False):
                 return (None, ())
-            test_box: BoxCoordinate = box.truncate(25_000)
+            test_box: BoxCoordinate = box.with_precision(25_000)
         except _exceptions.MalformedCoordinate:
             return (None, ())
 
@@ -2788,22 +2788,22 @@ class BoxCoordinate(BaseCoordinate):
             case _:
                 self._raise_unexpected()
 
-    def truncate(
-        self, min_precision: float, *, copy: bool = False
+    def with_precision(
+        self, required_precision: float, *, copy: bool = False
     ) -> _typing.Self:
         """
-        Truncate (or extend) the coordinate to represent a minimum precision.
+        Get a version with the specified precision or better.
 
-        More precisely, the respective lengths of the relevant easting and
-        northing strings will be truncated, or extended with zeros, as
-        necessary so that `out.precision` is greater than or equal to
-        `min_precision`. The final lengths of these strings will be no longer
-        than what is strictly necessary to satisfy `min_precision`.
+        The respective lengths of the relevant easting and northing strings
+        will be truncated or appended with zeros, as necessary, so that
+        `out.precision` is no greater than `required_precision`. The final
+        lengths of those strings will be no longer than what is strictly
+        necessary to satisfy `required_precision`.
 
         Parameters
         ----------
-        min_precision : float
-            The minimum allowed value of `out.precision`.
+        required_precision : float
+            The maximum allowed value of `out.precision`.
         copy : bool, default=False
             Whether to ensure that `out` is not `self`. If `False` and `self`
             is suitable, it is returned as `out`.
@@ -2811,20 +2811,20 @@ class BoxCoordinate(BaseCoordinate):
         Returns
         -------
         out : typing.Self
-            A truncated or extended version, as appropriate.
+            A version of `self` that satisfies `required_precision`.
         """
         # Determine `*LgrsBox` easting and northing character count.
-        if min_precision < 1:
+        if required_precision < 1:
             raise TypeError(
-                f"`min_precision` must be >= 1, not: {min_precision!r}"
+                f"`required_precision` must be >= 1, not: {required_precision!r}"
             )
-        elif 1 <= min_precision < 10:
+        elif 1 <= required_precision < 10:
             lgrs_char_count = 5
-        elif 10 <= min_precision < 100:
+        elif 10 <= required_precision < 100:
             lgrs_char_count = 4
-        elif 100 <= min_precision < 1000:
+        elif 100 <= required_precision < 1000:
             lgrs_char_count = 3
-        elif 1000 <= min_precision < 25_000:
+        elif 1000 <= required_precision < 25_000:
             lgrs_char_count = 2
         else:
             lgrs_char_count = 0
@@ -2834,7 +2834,7 @@ class BoxCoordinate(BaseCoordinate):
         if not copy and len(_as_str(self_lgrs_box.easting)) == lgrs_char_count:
             return self
 
-        # Create and return truncated instance.
+        # Create and return instance with new precision.
         init_kwargs = self_lgrs_box._init_kwargs.copy()
         if lgrs_char_count:
             easting = _as_str(self_lgrs_box.easting)
@@ -3531,7 +3531,7 @@ if __name__ == "__main__":
     lps_acc = lgrs1.to_acc()
     ltm_acc = lgrs2.to_acc()
 
-    lps_acc.truncate(100_000).to_latlon()
+    lps_acc.with_precision(100_000).to_latlon()
 
     lgrs_.distance_to(lgrs1)
 
