@@ -108,6 +108,7 @@ def _get_all_lunar_crs_long_names(
     global_lps: bool = False,
     global_ltm: bool = False,
     prefer_ltm: bool = False,
+    prefer_south_ltm: bool = False,
     prefer_west_ltm: bool = False,
     south: bool | None = None,
 ) -> tuple[str, ...]:
