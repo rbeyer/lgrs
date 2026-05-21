@@ -899,8 +899,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Use this method to validate the instance or confirm that it has already
         been validated. Note that validating at initialization instead is
-        generally recommended, as doing so is faster and avoids creating
-        invalid instances.
+        generally recommended.
 
         Parameters
         ----------
