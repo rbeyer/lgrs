@@ -936,29 +936,13 @@ class BaseCoordinate(_BaseCoordinate):
         """
         if not revalidate and self._was_validated:
             return
-        new = self.copy(validate=False)
-        try:
-            new._validate()
-        except _exceptions.MalformedCoordinate:
-            self._unregister_cousins(*self._cousins)
-            raise
-        if new._init_kwargs == self._init_kwargs:
+        copy = self.copy(validate=False)
+        copy._validate()
+        if copy._init_kwargs == self._init_kwargs:
             self._register_validation()
             return
-        # TODO: Think carefully about whether to unregister cousins.
-        #  There is currently no guard against these cousins being re-
-        #  created by `.to_*()`, so unregistering them has no benefit.
-        #  Options are:
-        #    (1) Leave cousins intact.
-        #    (2) Introduce (perhaps optionally) a way to label an
-        #        instance as invalid, to prohibit use, and apply that
-        #        to all cousins.
-        #    (3) Same as #2 but also conform self, if possible.
-        #  Since `.validate()` is only for special use cases, probably
-        #  #1.
-        self._unregister_cousins(*self._cousins)
         change_lines = []
-        for k, new_v in new._init_kwargs.items():
+        for k, new_v in copy._init_kwargs.items():
             old_v = self._init_kwargs[k]
             if new_v != old_v:
                 change_lines.append(f"    {k}: {old_v!r} --> {new_v!r}")
