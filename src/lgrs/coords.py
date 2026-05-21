@@ -1887,37 +1887,46 @@ class BaseCoordinate(_BaseCoordinate):
 
     # Note: The following four methods permit `._to_*()` methods to be
     # defined in subclasses for just one step in each direction.
+    def _raise_type_not_supported(self) -> _typing.NoReturn:
+        raise TypeError(f"Type not supported: {self!r}")
+
     def _to_acc(self, **kwargs) -> LpsAccBox | LtmAccBox:
-        if isinstance(self, (LpsPoint, LtmPoint)):
-            lps_or_ltm = self
-        else:
-            assert isinstance(self, LatLonPoint)
-            lps_or_ltm = self._to_lps_or_ltm(**kwargs)
-        lgrs = lps_or_ltm._to_lgrs(**kwargs)
-        acc = lgrs._to_acc(**kwargs)
-        return acc
+        match self:
+            case LpsPoint() | LtmPoint():
+                lps_or_ltm_point = self
+            case LatLonPoint():
+                lps_or_ltm_point = self._to_lps_or_ltm(**kwargs)
+            case _:
+                self._raise_type_not_supported()
+        lgrs_box = lps_or_ltm_point._to_lgrs(**kwargs)
+        acc_box = lgrs_box._to_acc(**kwargs)
+        return acc_box
 
     def _to_latlon(self, **kwargs) -> LatLonPoint:
-        if isinstance(self, (LpsLgrsBox, LtmLgrsBox)):
-            lgrs = self
-        else:
-            assert isinstance(self, (LpsAccBox, LtmAccBox))
-            lgrs = self._to_lgrs(**kwargs)
-        lps_or_ltm = lgrs._to_lps_or_ltm(**kwargs)
-        latlon = lps_or_ltm._to_latlon(**kwargs)
-        return latlon
+        match self:
+            case LpsLgrsBox() | LtmLgrsBox():
+                lgrs_box = self
+            case LpsAccBox() | LtmAccBox():
+                lgrs_box = self._to_lgrs(**kwargs)
+            case _:
+                self._raise_type_not_supported()
+        lps_or_ltm_point = lgrs_box._to_lps_or_ltm(**kwargs)
+        latlon_point = lps_or_ltm_point._to_latlon(**kwargs)
+        return latlon_point
 
     def _to_lgrs(self, **kwargs) -> LpsLgrsBox | LtmLgrsBox:
-        assert isinstance(self, LatLonPoint)
-        lps_or_ltm = self._to_lps_or_ltm(**kwargs)
-        lgrs = lps_or_ltm._to_lgrs(**kwargs)
-        return lgrs
+        if not isinstance(self, LatLonPoint):
+            self._raise_type_not_supported()
+        lps_or_ltm_point = self._to_lps_or_ltm(**kwargs)
+        lgrs_box = lps_or_ltm_point._to_lgrs(**kwargs)
+        return lgrs_box
 
     def _to_lps_or_ltm(self, **kwargs) -> LpsPoint | LtmPoint:
-        assert isinstance(self, (LpsAccBox, LtmAccBox))
-        lgrs = self._to_lgrs(**kwargs)
-        lps_or_ltm = lgrs._to_lps_or_ltm(**kwargs)
-        return lps_or_ltm
+        if not isinstance(self, (LpsAccBox, LtmAccBox)):
+            self._raise_type_not_supported()
+        lgrs_box = self._to_lgrs(**kwargs)
+        lps_or_ltm_point = lgrs_box._to_lps_or_ltm(**kwargs)
+        return lps_or_ltm_point
 
     # * UTILITIES. ────────────────────────────────────────────────────
     def _iter_value_strings(self) -> _typing.Iterator[str]:
