@@ -285,7 +285,7 @@ def make_box_grid(
     ...     min_longitude=20, min_latitude=20,
     ...     max_longitude=40, max_latitude=40
     ... )
-    >>> boxes = make_box_grid(aoi, min_precision=25_000, acc=True)
+    >>> boxes = make_box_grid(aoi, required_precision=25_000, acc=True)
     >>> len(boxes)
     602
     >>> import lgrs.coords
@@ -295,7 +295,7 @@ def make_box_grid(
     idx_plus_1 = int(_precision_array.searchsorted(min_precision, "right"))
     if idx_plus_1 == 0:
         raise TypeError(
-            f"`min_precision` must be >= 1, not: {min_precision!r}"
+            f"`required_precision` must be >= 1, not: {required_precision!r}"
         )
     precision = int(_precision_array[idx_plus_1 - 1])
 
@@ -311,7 +311,8 @@ def make_box_grid(
     else:
         func = _coords.LatLonPoint.to_lgrs
     box_set: set[_coords.BoxCoordinate] = {
-        func(samp_pt).truncate(precision) for samp_pt in latlon_sample_points
+        func(samp_pt).with_precision(precision)
+        for samp_pt in latlon_sample_points
     }
 
     # Filter any boxes that have no corner within bounds.
