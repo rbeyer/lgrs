@@ -1026,7 +1026,7 @@ class BaseCoordinate(_BaseCoordinate):
     @staticmethod
     def _conform_to_latlon_points(
         *coords: BaseCoordinate, center: bool
-    ) -> _typing.Iterator[LatLonPoint]:
+    ) -> _collections.abc.Iterator[LatLonPoint]:
         for coord in coords:
             if center and isinstance(coord, BoxCoordinate):
                 yield coord.center_latlon
