@@ -855,6 +855,9 @@ class BaseCoordinate(_BaseCoordinate):
     def _validate_by_reconstruction(self) -> None:
         # Create forward-converted equivalent and compare.
         (latlon_point,) = self._conform_to_latlon_points(self, center=True)
+        # Note: Validate geographic point because that validation is
+        # cheap and tests fundamental assumptions.
+        latlon_point.validate()
         twin = latlon_point.copy().to(type(self), any_system=True)
         if self.is_lps_based() != twin.is_lps_based():
             raise _exceptions.MalformedCoordinate(
