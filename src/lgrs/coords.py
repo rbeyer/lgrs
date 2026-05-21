@@ -252,15 +252,20 @@ def _get_geod() -> _pyproj.Geod:
 
 
 def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
-    # TODO: Determine whether `tolerance` is a good choice. Code
-    #  mimics `check_decimal_round()` of reference code and presumably
-    #  mitigates undesirable results that arise due to floating-point
-    #  precision.
-    nearest_int = round(f)
-    if abs(nearest_int - f) < tolerance:
-        return nearest_int
-    else:
-        return _floor(f)
+    # TODO: Code originally rounded to nearest int when that int was
+    #  within `tolerance`, mimicking `check_decimal_round()` of
+    #  reference code and presumably designed to mitigates undesirable
+    #  results that arise due to floating-point precision. However, in
+    #  testing, rounding thusly could push a point barely on one side
+    #  of a zone to another zone, resulting in an invalid coordinate.
+    #  Currently testing whether this rounding can be dropped.
+    return _floor(f)
+    # Original code:
+    # nearest_int = round(f)
+    # if abs(nearest_int - f) < tolerance:
+    #     return nearest_int
+    # else:
+    #     return _floor(f)
 
 
 # endregion
