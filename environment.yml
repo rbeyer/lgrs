@@ -2,13 +2,14 @@
 # > conda env create -n lgrs -f environment.yml
 #
 # If you want to develop lgrs, you should do this:
-# > conda create -n lgrs
+# > conda create -n lgrs "python>=3.13"
 # > conda activate lgrs
 # > conda env update --file environment_dev.yml
 # > conda env update --file environment.yml
 # If either of the "update" steps takes forever, consider using "mamba" instead of "conda".
 #
 dependencies:
+  - python>=3.13
   - beartype
   - numpy
   - pyproj
