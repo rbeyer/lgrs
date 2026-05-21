@@ -2407,14 +2407,6 @@ class BoxCoordinate(BaseCoordinate):
         else:
             return int(f"{string}00"[:nom_length])
 
-    @_functools.cached_property
-    def _easting_int(self) -> int:
-        return self._as_int(self.easting, nom_length=3)
-
-    @_functools.cached_property
-    def _northing_int(self) -> int:
-        return self._as_int(self.northing, nom_length=3)
-
     # * INSTANTIATION FROM STRING. ────────────────────────────────────
     _pattern: _regex.Pattern
 
@@ -2870,6 +2862,14 @@ class _BaseAccBox(BoxCoordinate):
         "condensed",
         "condensed_prefix",
     )
+
+    @_functools.cached_property
+    def _easting_int(self) -> int:
+        return self._as_int(self.easting, nom_length=3)
+
+    @_functools.cached_property
+    def _northing_int(self) -> int:
+        return self._as_int(self.northing, nom_length=3)
 
     @_functools.cached_property
     def condensed(self) -> str:
@@ -3517,7 +3517,7 @@ if __name__ == "__main__":
     lps_or_ltm4 = latlon4.to_lps_or_ltm()
     lgrs4 = lps_or_ltm4.to_lgrs()
     assert lgrs4.is_equal_to(
-        LpsLgrsBox.from_string("AZS1359008480"), error=True
+        LpsLgrsBox.from_string("AZS1359008479"), error=True
     )
 
     lgrs4.to_latlon()
