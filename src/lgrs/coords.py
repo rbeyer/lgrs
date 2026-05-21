@@ -1387,7 +1387,7 @@ class BaseCoordinate(_BaseCoordinate):
         **overrides,
     ) -> _typing.Self:
         """
-        Create new instance with modified values and/or constraints.
+        Get instance with modified values and/or constraints.
 
         The new instance will have the same values and constraints as `self`,
         except where explicitly overridden by `overrides` and `constraints`,
@@ -1396,14 +1396,14 @@ class BaseCoordinate(_BaseCoordinate):
         Parameters
         ----------
         constraints : Constraints, optional
-            The constraints for `new`. If not specified, `new` has the same
-            constraints as `self`.
+            The constraints for `replaced`. If not specified, `replaced` has
+            the same constraints as `self`.
         validate : bool, default=True
-            Whether to validate the new instance.
+            Whether to validate `replaced`. Honored even if `self` is returned.
         copy : bool, default=False
-            Whether to ensure that the new instance is not `self` and is not
-            cached in association with `self`. If `False` and all `overrides`
-            have the same values as `self`, `self` is returned.
+            Whether to ensure that `replaced` is not `self` and is not cached
+            in association with `self`. If `False` and all `overrides` have the
+            same values as `self`, `self` is returned.
         **overrides
             Keyword arguments specifying initialization parameters (values) for
             the new instance.
@@ -1416,7 +1416,7 @@ class BaseCoordinate(_BaseCoordinate):
         Raises
         ------
         lgrs.Exceptions.MalformedCoordinate
-            If `new` would be invalid and `validate` is `True`.
+            If `replaced` would be invalid and `validate` is `True`.
 
         Examples
         --------
@@ -1439,6 +1439,8 @@ class BaseCoordinate(_BaseCoordinate):
         """  # noqa: E501
         # Treat trivial case.
         if not copy and constraints is None and not overrides:
+            if validate:
+                self.validate()
             return self
 
         # Construct initialization kwargs for `replaced`.
@@ -1447,6 +1449,8 @@ class BaseCoordinate(_BaseCoordinate):
         if constraints is not None:
             init_kwargs["constraints"] = constraints
         if not copy and init_kwargs == self._init_kwargs:
+            if validate:
+                self.validate()
             return self
 
         # Construct new instance and possibly register as a cousin.
