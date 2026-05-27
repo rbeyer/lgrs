@@ -519,6 +519,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         ...     extended_ltm=True, global_ltm=True
         ... )
         >>> info_list.sort(key=LunarCrsInfo.sorter)
+
         But note that the above sort is already applied by
         `query_lunar_crs_info()`.
         >>> first_info = info_list[0]
