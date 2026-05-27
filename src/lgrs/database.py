@@ -45,7 +45,7 @@ import lgrs.srs.wkt as _wkt
 ###############################################################################
 type _FloatIterable = _collections.abc.Iterable[float]
 
-_lunar_crs_long_name_pattern = _re.compile(
+_lunar_crs_internal_name_pattern = _re.compile(
     "^(?P<num>[0-9]{2})?(?P<hemi>[NS])(?P<suffix>[*]*)$"
 )
 
@@ -55,7 +55,7 @@ _lunar_crs_long_name_pattern = _re.compile(
 @_beartype.beartype(
     conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0)
 )
-class _LongNameParsed(_typing.NamedTuple):
+class _InternalNameParsed(_typing.NamedTuple):
     zone_number: int | None
     hemisphere: str
     suffix: str
@@ -107,7 +107,7 @@ def _ensure_float_iterable(
 
 
 @_functools.cache
-def _get_all_lunar_crs_long_names(
+def _get_all_lunar_crs_internal_names(
     *,
     lps: bool = True,
     ltm: bool = True,
@@ -120,7 +120,7 @@ def _get_all_lunar_crs_long_names(
     south: bool | None = None,
 ) -> tuple[str, ...]:
     # Note: `prefer_*` included for call signature compatibility with
-    # `_get_lunar_crs_long_names()` but are intentionally unused.
+    # `_get_lunar_crs_internal_names()` but are intentionally unused.
     _wkt._validate_constraints(**locals())
     if global_lps or global_ltm:
         suffix = "**"
@@ -129,14 +129,14 @@ def _get_all_lunar_crs_long_names(
     else:
         suffix = ""
     if ltm and lps:
-        lps_tuple = _get_all_lunar_crs_long_names(
+        lps_tuple = _get_all_lunar_crs_internal_names(
             ltm=False,
             extended_ltm=extended_ltm,
             global_lps=global_lps,
             global_ltm=global_ltm,
             south=south,
         )
-        ltm_tuple = _get_all_lunar_crs_long_names(
+        ltm_tuple = _get_all_lunar_crs_internal_names(
             lps=False,
             extended_ltm=extended_ltm,
             global_lps=global_lps,
@@ -171,7 +171,7 @@ def _get_all_lunar_crs_long_names(
         return ltm_tuple
 
 
-def _get_lunar_crs_long_names(
+def _get_lunar_crs_internal_names(
     *,
     conformed_latitudes: _FloatIterable,
     conformed_longitudes: _FloatIterable,
@@ -210,7 +210,7 @@ def _get_lunar_crs_long_names(
                 return abs(test_lat) < ltm_max_abs_lat
 
     # Evaluate each lat-lon pair. ─────────────────────────────────────
-    lunar_crs_long_names = []
+    lunar_crs_internal_names = []
     for lat, lon in zip(conformed_latitudes, conformed_longitudes):
         if prefer_south_ltm:
             hemi = "N" if lat > 0 else "S"
@@ -224,15 +224,15 @@ def _get_lunar_crs_long_names(
                     zone_int = 45  # *REASSIGNMENT*
                 else:
                     zone_int -= 1  # *REASSIGNMENT*
-            long_name = f"{zone_int:02}{hemi}"
+            internal_name = f"{zone_int:02}{hemi}"
         else:
-            long_name = hemi
+            internal_name = hemi
         if global_lps or global_ltm:
-            long_name += "**"  # *REASSIGNMENT*
+            internal_name += "**"  # *REASSIGNMENT*
         elif extended_ltm:
-            long_name += "*"  # *REASSIGNMENT*
-        lunar_crs_long_names.append(long_name)
-    return lunar_crs_long_names
+            internal_name += "*"  # *REASSIGNMENT*
+        lunar_crs_internal_names.append(internal_name)
+    return lunar_crs_internal_names
 
 
 def _grid_sample(
@@ -287,11 +287,11 @@ def _grid_sample(
     return result
 
 
-def _parse_lunar_crs_long_name(long_name: str) -> _LongNameParsed:
-    match = _lunar_crs_long_name_pattern.search(long_name)
+def _parse_lunar_crs_internal_name(internal_name: str) -> _InternalNameParsed:
+    match = _lunar_crs_internal_name_pattern.search(internal_name)
     if match is None:
         raise TypeError(
-            f"`long_name` is not in supported format: {long_name!r}"
+            f"`internal_name` is not in supported format: {internal_name!r}"
         )
     num_str = match.group("num")
     if num_str is None:
@@ -300,7 +300,7 @@ def _parse_lunar_crs_long_name(long_name: str) -> _LongNameParsed:
         zone_num = int(num_str)
     hemi = match.group("hemi")
     suffix = match.group("suffix")
-    return _LongNameParsed(zone_num, hemi, suffix)
+    return _InternalNameParsed(zone_num, hemi, suffix)
 
 
 # endregion
@@ -339,10 +339,10 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     """
 
     # * BASIC BEHAVIOR. ───────────────────────────────────────────────
-    # Below: Assigned by `._from_long_name()`. All instances should be
-    # created by that factory function.
-    _long_name: str
-    _long_name_parsed: _LongNameParsed
+    # Below: Assigned by `._from_internal_name()`. All instances should
+    # be created by that factory function.
+    _internal_name: str
+    _internal_name_parsed: _InternalNameParsed
 
     @_functools.cached_property
     def _sort_tuple(self) -> tuple[int, int, int | None, str]:
@@ -360,10 +360,10 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     # perhaps because base type is `tuple`.
     @classmethod
     @_caching._optionally_cache
-    def _from_long_name(cls, long_name: str) -> LunarCrsInfo:
-        # Parse `long_name`.
-        long_name_parsed = _parse_lunar_crs_long_name(long_name)
-        zone_num, hemi, suffix = long_name_parsed
+    def _from_internal_name(cls, internal_name: str) -> LunarCrsInfo:
+        # Parse `internal_name`.
+        internal_name_parsed = _parse_lunar_crs_internal_name(internal_name)
+        zone_num, hemi, suffix = internal_name_parsed
 
         # Precompute latitudinal bounds.
         if hemi == "N":
@@ -424,18 +424,18 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         )
 
         # Attach useful attributes and return.
-        info._long_name = long_name
-        info._long_name_parsed = long_name_parsed
+        info._internal_name = internal_name
+        info._internal_name_parsed = internal_name_parsed
         return info
 
     # * PUBLIC DATA ATTRIBUTES. ───────────────────────────────────────
     @_functools.cached_property
     def hemisphere(self) -> str:
-        return self._long_name_parsed.hemisphere
+        return self._internal_name_parsed.hemisphere
 
     @_functools.cached_property
     def is_lps(self) -> bool:
-        return self._long_name_parsed.zone_number is None
+        return self._internal_name_parsed.zone_number is None
 
     @_functools.cached_property
     def is_ltm(self) -> bool:
@@ -450,7 +450,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
 
     @_functools.cached_property
     def absolute_ltm_limit(self) -> float:
-        suffix = self._long_name_parsed.suffix
+        suffix = self._internal_name_parsed.suffix
         match suffix:
             case "":
                 limit = _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
@@ -467,20 +467,15 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
 
     @_functools.cached_property
     def ltm_zone(self) -> int | None:
-        return self._long_name_parsed.zone_number
+        return self._internal_name_parsed.zone_number
 
     # * PUBLIC METHODS. ───────────────────────────────────────────────
-    # TODO: Seriously consider exposing "long name" (by another name,
-    #  perhaps "nickname" or "shorthand") as an attribute of `CRS` and
-    #  also support some way for user to use in instantiation, such as
-    #  `make_lunar_crs(shorthand=...)`,
-    #  `make_lunar_crs_from_shorthand()`, or `CRS.from_shorthand()`.
     # Note: Added because instantiating a `pyproj.CRS` from a
     # `pyproj.CRSInfo` relies on `pyproj.CRS.from_authority()`, which we
     # cannot independently support.
     def get_crs(self) -> _pyproj.CRS:
-        suffix = self._long_name_parsed.suffix
-        name = self._long_name.removesuffix(suffix)
+        suffix = self._internal_name_parsed.suffix
+        name = self._internal_name.removesuffix(suffix)
         kwargs = {}
         match suffix:
             case "":
@@ -679,7 +674,7 @@ def query_lunar_crs_info(
 
     # Prepare for function calls.
     if has_spatial_filter:
-        get_lunar_crs_long_names = _get_lunar_crs_long_names
+        get_lunar_crs_internal_names = _get_lunar_crs_internal_names
         conformed_lats = list(map(_conform_latitude, raw_lats))
         conformed_lons = list(map(_conform_longitude, raw_lons))
         latlon_kwargs = {
@@ -687,7 +682,7 @@ def query_lunar_crs_info(
             "conformed_longitudes": conformed_lons,
         }
     else:
-        get_lunar_crs_long_names = _get_all_lunar_crs_long_names
+        get_lunar_crs_internal_names = _get_all_lunar_crs_internal_names
         latlon_kwargs = {}
     lps_and_ltm_kwargs_list = []
     if primary:
@@ -707,10 +702,10 @@ def query_lunar_crs_info(
         prefer_south_ltms = (False,)
         prefer_west_ltms = (False,)
 
-    # Determine CRS long names.
-    cum_crs_long_names = []
+    # Determine CRS internal names.
+    cum_crs_internal_names = []
     for lps_and_ltm_kwargs in lps_and_ltm_kwargs_list:
-        inner_crs_long_names = []
+        inner_crs_internal_names = []
         # Note: `prefer_ltm` and `prefer_south_ltm` can be iterated in
         # parallel, because they apply at disjoint latitudes: the LTM/
         # LPS boundary and the equator, respectively.
@@ -718,41 +713,43 @@ def query_lunar_crs_info(
             prefer_ltms, prefer_south_ltms
         ):
             for this_prefer_west_ltm in prefer_west_ltms:
-                crs_long_names = get_lunar_crs_long_names(
+                crs_internal_names = get_lunar_crs_internal_names(
                     prefer_ltm=this_prefer_ltm,
                     prefer_south_ltm=this_prefer_south_ltm,
                     prefer_west_ltm=this_prefer_west_ltm,
                     **latlon_kwargs,
                     **lps_and_ltm_kwargs,
                 )
-                inner_crs_long_names.append(crs_long_names)
+                inner_crs_internal_names.append(crs_internal_names)
         if contains:
             # Note: If and only if all sample points fall in the same
             # CRS should that CRS be included. However, inclusive
             # boundaries must be treated carefully.
             if inclusive_bounds:
-                per_coord_crs_long_name_sets = [
-                    set(crs_long_names)
-                    for crs_long_names in zip(*inner_crs_long_names)
+                per_coord_crs_internal_name_sets = [
+                    set(crs_internal_names)
+                    for crs_internal_names in zip(*inner_crs_internal_names)
                 ]
-                common_crs_long_names = _functools.reduce(
-                    set.intersection, per_coord_crs_long_name_sets
+                common_crs_internal_names = _functools.reduce(
+                    set.intersection, per_coord_crs_internal_name_sets
                 )
                 # *REASSIGNMENT*
-                inner_crs_long_names = (common_crs_long_names,)
+                inner_crs_internal_names = (common_crs_internal_names,)
             else:
-                assert len(inner_crs_long_names) == 1
-                these_unique_crs_long_names = set(crs_long_names)
+                assert len(inner_crs_internal_names) == 1
+                these_unique_crs_internal_names = set(crs_internal_names)
                 try:
-                    (common_crs_long_name,) = these_unique_crs_long_names
+                    (common_crs_internal_name,) = (
+                        these_unique_crs_internal_names
+                    )
                 except ValueError:
                     # *REASSIGNMENT*
-                    inner_crs_long_names = ((),)
+                    inner_crs_internal_names = ((),)
                 else:
                     # *REASSIGNMENT*
-                    inner_crs_long_names = ((common_crs_long_name,),)
-        cum_crs_long_names.extend(
-            _itertools.chain.from_iterable(inner_crs_long_names)
+                    inner_crs_internal_names = ((common_crs_internal_name,),)
+        cum_crs_internal_names.extend(
+            _itertools.chain.from_iterable(inner_crs_internal_names)
         )
 
     # Treat special case of all polar LTM zones meeting at the pole.
@@ -774,14 +771,16 @@ def query_lunar_crs_info(
         else:
             kwargs2 = None  # Special case does not apply.
         if kwargs2 is not None:
-            addl_lunar_crs_long_names = _get_all_lunar_crs_long_names(
+            addl_lunar_crs_internal_names = _get_all_lunar_crs_internal_names(
                 **kwargs2
             )
-            cum_crs_long_names.extend(addl_lunar_crs_long_names)
+            cum_crs_internal_names.extend(addl_lunar_crs_internal_names)
 
     # Gather unique `CRSInfo` instances and return.
-    unique_crs_long_name_set = set(cum_crs_long_names)
-    infos = list(map(LunarCrsInfo._from_long_name, unique_crs_long_name_set))
+    unique_crs_internal_name_set = set(cum_crs_internal_names)
+    infos = list(
+        map(LunarCrsInfo._from_internal_name, unique_crs_internal_name_set)
+    )
     if pj_types is not None:
         pj_type_set = set(pj_types)
         # *REASSIGNMENT*
