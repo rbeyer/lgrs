@@ -76,9 +76,9 @@ def _execute_coordinate_conversion(
     try:
         _sys.argv = ["", *args]
         if isinstance(value, _coords.BoxCoordinate):
-            # Note: Command-line execution implied `condensed=True`,
+            # Note: Command-line execution would apply `condensed=True`,
             # unlike `main()` call further below.
-            nom_args = "".join(args)
+            nom_args = (args[0], "".join(args[1:]))
         else:
             nom_args = args
         _LAST_CMD = f"python {_cconv.__file__} {' '.join(nom_args)}"
