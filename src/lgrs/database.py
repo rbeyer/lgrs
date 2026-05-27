@@ -61,6 +61,13 @@ class _LongNameParsed(_typing.NamedTuple):
     suffix: str
 
 
+def _calculate_ltm_zone(longitude: float) -> tuple[float, int]:
+    # Below: Eq. 13 of M2025. Zones are 1-indexed.
+    zone_float = ((longitude + 180) / (2 * _wkt.LTM_ZONE_HALF_WIDTH)) + 1
+    zone_int = int(zone_float)
+    return (zone_float, zone_int)
+
+
 def _conform_latitude(latitude: float) -> float:
     if abs(latitude) > 90:
         raise _exceptions.MalformedCoordinate(
@@ -211,9 +218,7 @@ def _get_lunar_crs_long_names(
             # Note: This inequality is from M2025 code.
             hemi = "N" if lat >= 0 else "S"
         if is_in_ltm(lat):
-            # Below: Eq. 13 of M2025. Zones are 1-indexed.
-            zone_float = ((lon + 180) / (2 * _wkt.LTM_ZONE_HALF_WIDTH)) + 1
-            zone_int = int(zone_float)
+            zone_float, zone_int = _calculate_ltm_zone(lon)
             if prefer_west_ltm and zone_float.is_integer():
                 if zone_int == 1:
                     zone_int = 45  # *REASSIGNMENT*
