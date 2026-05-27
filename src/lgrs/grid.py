@@ -21,22 +21,30 @@
 import collections as _collections
 import dataclasses as _dataclasses
 import math as _math
+import pathlib as _pathlib
 import typing as _typing
 
 # External.
 import geopandas as _geopandas
 import numpy as _np
+import pyproj as _pyproj
 from pyproj import aoi as _pyproj_aoi
+import rasterio as _rasterio
 
 # Internal.
 import lgrs.coords as _coords
+import lgrs.srs.srs as _srs
 import lgrs.values as _values
+
 
 # endregion
 ###############################################################################
-# region> GRID GENERATION
+# region> SUPPORT CLASSES
 ###############################################################################
-_precision_array = _np.array((1, 10, 100, 1_000, 25_000))
+class GeoDataFrame(_geopandas.GeoDataFrame):
+    """Subclass of `geopandas.GeoDataFrame`."""
+
+    name_hint: str
 
 
 @_dataclasses.dataclass(frozen=True)
@@ -89,6 +97,10 @@ class GeographicBounds:
     they could achieve an area centered the pole thusly.
 
     >>> alt_bounds_5 = GeographicBounds(0, 87, 360, 90)
+
+    Or, equivalently:
+
+    >>> all_bounds_5b = GeographicBounds.from_north_pole_to(87)
     """  # noqa: E501
 
     min_longitude: float
@@ -152,15 +164,38 @@ class GeographicBounds:
         GeographicBounds
             The new instance.
         """
-        return GeographicBounds(0, min_latitude, 360, 90)
+        return GeographicBounds(-180, min_latitude, 180, 90)
 
     @classmethod
     def from_other(
-        cls, other: _collections.abc.Iterable | _pyproj_aoi.AreaOfInterest
+        cls,
+        other: (
+            _collections.abc.Iterable
+            | _pyproj_aoi.AreaOfInterest
+            | _pyproj_aoi.AreaOfUse
+        ),
     ) -> _typing.Self:
+        """
+        Create `GeographicBounds` from iterable or `pyproj.aoi.AreaOfInterest`.
+
+        Parameters
+        ----------
+        other : iterable or AreaOfInterest or AreaOfUse from pypoj
+            An iterable of 4 numbers, in the same order as expected by
+            `GeographicBounds()`, or a `pyproj.aoi.AreaOfInterest` or
+            `pyproj.aoi.AreaOfUse`.
+
+        Returns
+        -------
+        bounds : GeographicBounds
+            The `GeographicBounds` instance. In the special case that `other`
+            a `GeographicBounds` instance, `bounds` itself is returned.
+        """
         match other:
             case GeographicBounds():
                 return other
+            case _pyproj_aoi.AreaOfUse():
+                return cls(*tuple(other)[:4])
             case _collections.abc.Iterable():
                 return cls(*other)
             case _pyproj_aoi.AreaOfInterest():
@@ -170,11 +205,68 @@ class GeographicBounds:
                     other.east_lon_degree,
                     other.north_lat_degree,
                 )
+            case _:
+                raise TypeError(f"Unsupported type for `other`: {other!r}.")
+
+    @classmethod
+    def from_path(
+        cls, path: _pathlib.Path | str, densify_pts: int = 21
+    ) -> _typing.Self:
+        """
+        Create `GeographicBounds` based on a vector or raster file.
+
+        Parameters
+        ----------
+        path :
+            Path to a vector or raster file whose approximate geographic bounds
+            will be used. You may treat a layer as a virtual path:
+            `"path/to/my.gpkg/layer_name"`.
+        densify_pts : int, default=21
+            Number of points to add to each edge of the box. Having more
+            vertices helps ensure that the transformation of the bounding box
+            (from the CRS native to `path` to a geographic version) is
+            more precise, but higher values will decrease performance.
+
+        Returns
+        -------
+        bounds : GeographicBounds
+            The `GeographicBounds` instance.
+        """
+        # Resolve CRS and bounds in that CRS.
+        if isinstance(path, str):
+            path = _pathlib.Path(path)  # *REASSIGNMENT*
+        try:
+            with _rasterio.open(path) as src:
+                native_crs = src.crs
+                native_bounds = src.bounds
+        except _rasterio.errors.RasterioIOError:
+            kwargs = {}
+            if (
+                not path.exists()
+                and path.parent.exists()
+                and path.parent.suffix.lower() == ".gpkg"
+            ):
+                kwargs["layer"] = path.name
+                path = path.parent  # *REASSIGNMENT*
+            gdf = _geopandas.read_file(path, **kwargs)
+            native_bounds = gdf.total_bounds
+            native_crs = gdf.crs
+            del gdf
+
+        # Convert to geographic bounds.
+        transformer = _pyproj.Transformer.from_crs(
+            native_crs, _srs.make_lunar_crs(), always_xy=True
+        )
+        # TODO: Decide on best `densify_pts` option. Defaults to 21.
+        geo_bounds = transformer.transform_bounds(
+            *native_bounds, densify_pts=densify_pts
+        )
+        return GeographicBounds(*geo_bounds)
 
     @classmethod
     def from_south_pole_to(cls, max_latitude: float) -> _typing.Self:
         """
-        Create `GeographicBounds` from Sorth Pole north to some latitude.
+        Create `GeographicBounds` from South Pole north to some latitude.
 
         Parameters
         ----------
@@ -186,14 +278,16 @@ class GeographicBounds:
         GeographicBounds
             The new instance.
         """
-        return GeographicBounds(0, -90, 360, max_latitude)
+        return GeographicBounds(-180, -90, 180, max_latitude)
 
 
+# endregion
+###############################################################################
+# region> UTILITIES
+###############################################################################
 def _calculate_safe_count(span: float, delta: float) -> int:
     if span == 0:
         return 1
-    if span < 0:  # TODO: Remove after testing.
-        pass  # TODO: Remove after testing.
     # Note: "+ 2" accounts for first and last point.
     count = _math.floor(_values.SAFETY_FACTOR * (span / delta)) + 2
     return count
@@ -235,9 +329,13 @@ def _construct_latlon_grid(
         # Find longitude range for (buffered) grid.
         m_per_deg_lon = _values.calculate_m_per_degree_longitude(lat)
         buff_lon = buff_length / m_per_deg_lon
-        min_lon = _clip(bounds.min_longitude - buff_lon, -180, +180)
-        max_lon = _clip(bounds.max_longitude + buff_lon, -180, +180)
+        min_lon = bounds.min_longitude - buff_lon
+        max_lon = bounds.max_longitude + buff_lon
         lon_range = max_lon - min_lon
+        if lon_range > 360:
+            min_lon = -180  # *REASSIGNMENT*
+            max_lon = 180  # *REASSIGNMENT*
+            lon_range = 360  # *REASSIGNMENT*
 
         # Determine longitude coordinates.
         row_width = lon_range * m_per_deg_lon
@@ -249,35 +347,53 @@ def _construct_latlon_grid(
     return points
 
 
+# endregion
+###############################################################################
+# region> GRID GENERATION
+###############################################################################
 def make_box_grid(
     bounds: (
         GeographicBounds
         | tuple[float, float, float, float]
+        | str
         | _pyproj_aoi.AreaOfInterest
+        | _pyproj_aoi.AreaOfUse
     ),
-    min_precision: float,
+    precision: float,
     acc: bool = False,
+    *,
+    extended_ltm: bool = False,
 ) -> list[_coords.BoxCoordinate]:
     """
     Generate a grid of LGRS or ACC boxes within geographic bounds.
 
     Parameters
     ----------
-    bounds : GeographicBounds, iterable, or pyproj.aoi.AreaOfInterest
-        The geogrpahic bounds, in degrees, for which to generate the grid.
-        When specified by sequence (or other iterable), should contain
-        exactly 4 numbers in order: min_lon, min_lat, max_lon, max_lat.
-    min_precision : float
-        The minimum precision that the grid should have. If not a supported
-        precision, the actual precision is rounded down to a better
-        precision. All boxes have the same precision.
+    bounds : GeographicBounds, iterable, string, or another hint
+        The geogrpahic bounds, in degrees, for which to generate the grid. Any
+        value compatible with ``GeographicBounds.from_other()`` is valid.
+        Additionally, the name of a CRS (as supported by
+        `lgrs.make_lunar_crs()`) may be used to generate all boxes for that
+        CRS. Examples include "S" for the LPS south polar region and "23N"
+        for LTM zone 23 in the the northern hemisphere.
+    precision : float
+        The required precision of the grid. If not a supported precision,
+        the actual precision is rounded down to a better precision. All
+        boxes have the same precision.
     acc : bool, default=False
         Whether to use ACC. If `False`, LGRS is used.
+    extended_ltm : bool, default=False
+        Whether to use the extended LTM region, which extends to 82° N/S
+        instead of 80° N/S.
 
     Returns
     -------
     boxes : list of lgrs.coords.BoxCoordinate instances
         A flat list of boxes. LPS and LTM boxes may be commingled.
+
+    See Also
+    --------
+    GeographicBounds.from_path : Get geographic bounds from a file path
 
     Examples
     --------
@@ -285,24 +401,26 @@ def make_box_grid(
     ...     min_longitude=20, min_latitude=20,
     ...     max_longitude=40, max_latitude=40
     ... )
-    >>> boxes = make_box_grid(aoi, required_precision=25_000, acc=True)
+    >>> boxes = make_box_grid(aoi, precision=25_000, acc=True)
     >>> len(boxes)
-    602
+    668
     >>> import lgrs.coords
     >>> isinstance(boxes[0], lgrs.coords.LtmAccBox)
+    True
     """
-    # Determine target precision.
-    idx_plus_1 = int(_precision_array.searchsorted(min_precision, "right"))
-    if idx_plus_1 == 0:
-        raise TypeError(
-            f"`required_precision` must be >= 1, not: {required_precision!r}"
-        )
-    precision = int(_precision_array[idx_plus_1 - 1])
-
     # Generate geographic sample point grid.
     # Note: Grid has sufficient density to ensure that all boxes at
     # desired precision are sampled.
-    geo_bounds = GeographicBounds.from_other(bounds)
+    # *REASSIGNMENT*
+    precision = _coords.BaseCoordinate._resolve_precision_static(precision)
+    if isinstance(bounds, str):
+        exclusive_crs: _srs.CRS | None = _srs.make_lunar_crs(
+            bounds, extended_ltm=True
+        )
+        geo_bounds = GeographicBounds.from_other(exclusive_crs.area_of_use)
+    else:
+        exclusive_crs = None
+        geo_bounds = GeographicBounds.from_other(bounds)
     latlon_sample_points = _construct_latlon_grid(geo_bounds, precision)
 
     # Create boxes.
@@ -310,26 +428,66 @@ def make_box_grid(
         func = _coords.LatLonPoint.to_acc
     else:
         func = _coords.LatLonPoint.to_lgrs
-    box_set: set[_coords.BoxCoordinate] = {
-        func(samp_pt).with_precision(precision)
-        for samp_pt in latlon_sample_points
-    }
+    if exclusive_crs is None:
+        constraints = _coords.Constraints(extended_ltm=extended_ltm)
+        nom_crs_set = set()
+    elif exclusive_crs.ltm_zone is None:
+        constraints = _coords.Constraints(
+            prefer_lps=True, extended_ltm=extended_ltm
+        )
+    else:
+        ltm_zone_num = int(exclusive_crs.ltm_zone[:-1])
+        constraints = _coords.Constraints(
+            prefer_ltm=True,
+            preferred_ltm_zone=ltm_zone_num,
+            extended_ltm=extended_ltm,
+        )
+    box_set = set()
+    for samp_pt in latlon_sample_points:
+        box = func(samp_pt, precision=precision, constraints=constraints)
+        if exclusive_crs is None:
+            nom_crs_set.add(box.crs_nominal)
+            if len(nom_crs_set) > 1:
+                # Note: Spanning multiple regions, so much allow for
+                # overlapping boxes:
+                if acc:
+                    all_func = _coords.LatLonPoint.to_all_acc
+                else:
+                    all_func = _coords.LatLonPoint.to_all_lgrs
+                # *REASSIGNMENT*
+                box_set: set[_coords.BoxCoordinate] = {
+                    box
+                    for samp_pt in latlon_sample_points
+                    for box in all_func(
+                        samp_pt, precision=precision, extended_ltm=extended_ltm
+                    )
+                }
+                break
+        box_set.add(box)
 
     # Filter any boxes that have no corner within bounds.
-    box_list = []
-    for box in box_set:
-        for corner in box.corners_latlon:
-            if corner in geo_bounds:
-                box_list.append(box)
-                break
+    if exclusive_crs is None:
+        # TODO: Test whether this block generates gaps.
+        box_list = []
+        for box in box_set:
+            for corner in box.corners_latlon:
+                if corner in geo_bounds:
+                    box_list.append(box)
+                    break
+        box_list.sort(key=lambda b: b.string)
+
+    # Filter any boxes from outside the targeted CRS.
+    else:
+        box_list = [box for box in box_set if box.crs == exclusive_crs]
+
+    # Sort and return.
     box_list.sort(key=lambda b: b.string)
     return box_list
 
 
-# TODO: Implement `LgrsGeoDataFrame` to better document `.name_hint`.
 def make_gdfs(
     boxes: _collections.abc.Sequence[_coords.BoxCoordinate],
-) -> dict[str, _geopandas.GeoDataFrame]:
+) -> list[GeoDataFrame]:
     """
     Create one or more `GeoDataFrame` instances from a sequence of boxes.
 
@@ -339,7 +497,8 @@ def make_gdfs(
     Parameters
     ----------
     boxes : sequence of lgrs.coords.BoxCoordinates instances
-        The boxes to collect into `gdfs`.
+        The boxes to collect into `gdfs`. Their `.field_data` attributes
+        are used to populate each `gdf`.
 
     Returns
     -------
@@ -355,11 +514,11 @@ def make_gdfs(
     ...     min_longitude=20, min_latitude=20,
     ...     max_longitude=40, max_latitude=40
     ... )
-    >>> boxes = make_box_grid(aoi, min_precision=25_000, acc=True)
+    >>> boxes = make_box_grid(aoi, precision=25_000, acc=True)
     >>> gdfs = make_gdfs(boxes)
     >>> len(gdfs)
     4
-    >>> [gdf.crs_name for gdf in gdfs]  # doctest: +NORMALIZE_WHITESPACE
+    >>> [gdf.name_hint for gdf in gdfs]  # doctest: +NORMALIZE_WHITESPACE
     ['LTM_25N_polygon_grid', 'LTM_26N_polygon_grid',
      'LTM_27N_polygon_grid', 'LTM_28N_polygon_grid']
     >>> import geopandas
@@ -390,7 +549,7 @@ def make_gdfs(
             for field_name in field_names_view:
                 data[field_name].append(box.field_data.get(field_name))
         data["geometry"] = [box.geometry for box in boxes]
-        gdf = _geopandas.GeoDataFrame(data, crs=crs)
+        gdf = GeoDataFrame(data, crs=crs)
         if crs.lps_hemisphere is not None:
             name_hint = f"LPS_{crs.lps_hemisphere}_polygon_grid"
         else:
@@ -402,6 +561,8 @@ def make_gdfs(
 
 # TODO: Remove after proper tests are implemented.
 if __name__ == "__main__":
+    import pathlib
+
     # Note: Three demos given below, in order of increasing output size.
     # You must delete the "out" directory between demo executions.
     bounds = GeographicBounds(
@@ -416,12 +577,28 @@ if __name__ == "__main__":
         max_longitude=+175,
         max_latitude=+89,
     )
-    boxes = make_box_grid(bounds, min_precision=25_000, acc=True)
+    bounds = GeographicBounds(
+        min_longitude=-180,
+        min_latitude=-90,
+        max_longitude=+180,
+        max_latitude=+90,
+    )
+    boxes = make_box_grid(
+        bounds, precision=25_000, acc=True, extended_ltm=True
+    )
     gdfs = make_gdfs(boxes)
-    import pathlib
 
-    # out_dir_path = pathlib.Path("out")
-    # out_dir_path.mkdir(parents=True, exist_ok=False)
-    # for gdf in gdfs:
-    #     out_path = out_dir_path / f"{gdf.name_hint}.gpkg"
-    #     gdf.to_file(out_path, index=True)
+    out_dir_path = pathlib.Path("out")
+    out_dir_path.mkdir(parents=True, exist_ok=False)
+    for gdf in gdfs:
+        out_path = out_dir_path / f"{gdf.name_hint}.gpkg"
+        gdf.to_file(out_path, index=True)
+
+    out_dir_path2 = pathlib.Path("out2")
+    out_dir_path2.mkdir(parents=True, exist_ok=False)
+    boxes2 = make_box_grid(
+        "23N", precision=25_000, acc=True, extended_ltm=True
+    )
+    (gdf2,) = make_gdfs(boxes2)
+    out_path2 = out_dir_path2 / f"{gdf2.name_hint}.gpkg"
+    gdf2.to_file(out_path2, index=True)
