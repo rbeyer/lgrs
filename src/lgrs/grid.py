@@ -566,10 +566,29 @@ def make_gdfs(
                 data[field_name].append(box.field_data.get(field_name))
         data["geometry"] = [box.geometry for box in boxes]
         gdf = GeoDataFrame(data, crs=crs)
-        if crs.lps_hemisphere is not None:
-            name_hint = f"LPS_{crs.lps_hemisphere}_polygon_grid"
-        else:
-            name_hint = f"LTM_{crs.ltm_zone}_polygon_grid"
-        gdf.name_hint = name_hint
         gdfs.append(gdf)
+
+        # Construct and attach name hint.
+        name_hint_parts = []
+        match box:
+            case _coords.LpsLgrsBox() | _coords.LtmLgrsBox():
+                name_hint_parts.append("LGRS")
+            case _coords.LpsAccBox() | _coords.LtmAccBox():
+                name_hint_parts.append("ACC")
+            case _:
+                # Note: This line should not be encountered.
+                pass
+        if box.precision < 1000:
+            prec_str = f"{box.precision}m"
+        else:
+            prec_str = f"{box.precision // 1000}km"
+        name_hint_parts.append(prec_str)
+        if crs.lps_hemisphere is not None:
+            name_hint_parts.extend(("LPS", crs.lps_hemisphere))
+        else:
+            name_hint_parts.extend(("LTM", crs.ltm_zone))
+        name_hint_parts.extend(("polygon", "grid"))
+        name_hint = "_".join(name_hint_parts)
+        gdf.name_hint = name_hint
+
     return gdfs
