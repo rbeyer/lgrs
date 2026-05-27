@@ -388,13 +388,13 @@ class Constraints(metaclass=_caching._MetaMultiton):
         # Get nominal CRS.
         # Note: These lines are equivalent to, but faster than, calling
         # `lgrs.query_lunar_crs_info(...)`.
-        (long_name,) = _database._get_lunar_crs_long_names(
+        (internal_name,) = _database._get_lunar_crs_internal_names(
             conformed_latitudes=(point.latitude,),
             conformed_longitudes=(point.longitude,),
             **self._crs_kwargs,
         )
         default_crs_info: _database.LunarCrsInfo = (
-            _database.LunarCrsInfo._from_long_name(long_name)
+            _database.LunarCrsInfo._from_internal_name(internal_name)
         )
         default_crs = default_crs_info.get_crs()
         default_result = (default_crs, ())

@@ -43,19 +43,21 @@ class TestQueryDatabase(unittest.TestCase):
         "inclusive_bounds": False,
     }
 
-    def check_query(self, *, expected_long_names: list[str], **kwargs) -> None:
+    def check_query(
+        self, *, expected_internal_names: list[str], **kwargs
+    ) -> None:
         full_kwargs = self.default_kwargs.copy()
         full_kwargs.update(kwargs)
         infos = database.query_lunar_crs_info(**full_kwargs)
-        actual_long_names = [info._long_name for info in infos]
-        self.assertEqual(expected_long_names, actual_long_names)
+        actual_internal_names = [info._internal_name for info in infos]
+        self.assertEqual(expected_internal_names, actual_internal_names)
 
     def test_ltm_zone_center(self) -> None:
         self.check_query(
             latitude=40,
             longitude=0,
             inclusive_bounds=True,
-            expected_long_names=["23N"],
+            expected_internal_names=["23N"],
         )
 
     def test_ltm_zone_equator_side(self) -> None:
@@ -63,13 +65,13 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=0,
             longitude=-176,
             inclusive_bounds=False,
-            expected_long_names=["01N"],
+            expected_internal_names=["01N"],
         )
         self.check_query(
             latitude=0,
             longitude=-176,
             inclusive_bounds=True,
-            expected_long_names=["01N", "01S"],
+            expected_internal_names=["01N", "01S"],
         )
 
     def test_ltm_zone_equator_corner(self) -> None:
@@ -77,34 +79,34 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=0,
             longitude=-180,
             inclusive_bounds=True,
-            expected_long_names=["01N", "45N", "01S", "45S"],
+            expected_internal_names=["01N", "45N", "01S", "45S"],
         )
         self.check_query(
             latitude=0,
             longitude=-180,
             inclusive_bounds=True,
             contains=True,
-            expected_long_names=["01N", "45N", "01S", "45S"],
+            expected_internal_names=["01N", "45N", "01S", "45S"],
         )
         self.check_query(
             latitude=[0, 0],
             longitude=[-180, -172],
             inclusive_bounds=True,
             contains=True,
-            expected_long_names=["01N", "01S"],
+            expected_internal_names=["01N", "01S"],
         )
         self.check_query(
             latitude=0,
             longitude=180,
             inclusive_bounds=True,
-            expected_long_names=["01N", "45N", "01S", "45S"],
+            expected_internal_names=["01N", "45N", "01S", "45S"],
         )
         self.check_query(
             latitude=0,
             longitude=-180,
             inclusive_bounds=True,
             contains=True,
-            expected_long_names=["01N", "45N", "01S", "45S"],
+            expected_internal_names=["01N", "45N", "01S", "45S"],
         )
 
     def test_ltm_zone_lps_corner(self) -> None:
@@ -112,31 +114,33 @@ class TestQueryDatabase(unittest.TestCase):
             latitude=-80,
             longitude=-180,
             inclusive_bounds=True,
-            expected_long_names=["S", "01S", "45S"],
+            expected_internal_names=["S", "01S", "45S"],
         )
 
     def test_ltm_extensions(self) -> None:
         # 81 degrees.
-        self.check_query(latitude=81, longitude=0, expected_long_names=["N"])
+        self.check_query(
+            latitude=81, longitude=0, expected_internal_names=["N"]
+        )
         self.check_query(
             latitude=81,
             longitude=0,
             extended_ltm=True,
-            expected_long_names=["N", "23N*"],
+            expected_internal_names=["N", "23N*"],
         )
         self.check_query(
             latitude=81,
             longitude=0,
             extended_ltm=True,
             global_ltm=True,
-            expected_long_names=["N", "23N*", "23N**"],
+            expected_internal_names=["N", "23N*", "23N**"],
         )
         self.check_query(
             latitude=81,
             longitude=0,
             extended_ltm=False,
             global_ltm=True,
-            expected_long_names=["N", "23N**"],
+            expected_internal_names=["N", "23N**"],
         )
         self.check_query(
             latitude=81,
@@ -144,30 +148,32 @@ class TestQueryDatabase(unittest.TestCase):
             primary_ltm=False,
             extended_ltm=False,
             global_ltm=True,
-            expected_long_names=["23N**"],
+            expected_internal_names=["23N**"],
         )
 
         # 83 degrees.
-        self.check_query(latitude=83, longitude=0, expected_long_names=["N"])
+        self.check_query(
+            latitude=83, longitude=0, expected_internal_names=["N"]
+        )
         self.check_query(
             latitude=83,
             longitude=0,
             extended_ltm=True,
-            expected_long_names=["N", "N*"],
+            expected_internal_names=["N", "N*"],
         )
         self.check_query(
             latitude=83,
             longitude=0,
             extended_ltm=True,
             global_ltm=True,
-            expected_long_names=["N", "N*", "23N**"],
+            expected_internal_names=["N", "N*", "23N**"],
         )
         self.check_query(
             latitude=83,
             longitude=0,
             extended_ltm=False,
             global_ltm=True,
-            expected_long_names=["N", "23N**"],
+            expected_internal_names=["N", "23N**"],
         )
         self.check_query(
             latitude=83,
@@ -175,7 +181,7 @@ class TestQueryDatabase(unittest.TestCase):
             primary_ltm=False,
             extended_ltm=False,
             global_ltm=True,
-            expected_long_names=["23N**"],
+            expected_internal_names=["23N**"],
         )
 
         # 90 degrees.
@@ -184,19 +190,21 @@ class TestQueryDatabase(unittest.TestCase):
             longitude=0,
             extended_ltm=True,
             global_ltm=True,
-            expected_long_names=["N", "N*", "23N**"],
+            expected_internal_names=["N", "N*", "23N**"],
         )
         self.check_query(
             latitude=-90,
             longitude=0,
             extended_ltm=True,
             global_ltm=True,
-            expected_long_names=["S", "S*", "23S**"],
+            expected_internal_names=["S", "S*", "23S**"],
         )
-        long_name_formatters = [f"{i:02}{{}}**".format for i in range(1, 46)]
-        long_name_formatters[:0] = ["{}".format, "{}*".format]
-        north_pole_long_names = [
-            formatter("N") for formatter in long_name_formatters
+        internal_name_formatters = [
+            f"{i:02}{{}}**".format for i in range(1, 46)
+        ]
+        internal_name_formatters[:0] = ["{}".format, "{}*".format]
+        north_pole_internal_names = [
+            formatter("N") for formatter in internal_name_formatters
         ]
         self.check_query(
             latitude=90,
@@ -204,10 +212,10 @@ class TestQueryDatabase(unittest.TestCase):
             extended_ltm=True,
             global_ltm=True,
             inclusive_bounds=True,
-            expected_long_names=north_pole_long_names,
+            expected_internal_names=north_pole_internal_names,
         )
-        south_pole_long_names = [
-            formatter("S") for formatter in long_name_formatters
+        south_pole_internal_names = [
+            formatter("S") for formatter in internal_name_formatters
         ]
         self.check_query(
             latitude=-90,
@@ -215,13 +223,13 @@ class TestQueryDatabase(unittest.TestCase):
             extended_ltm=True,
             global_ltm=True,
             inclusive_bounds=True,
-            expected_long_names=south_pole_long_names,
+            expected_internal_names=south_pole_internal_names,
         )
-        both_pole_long_names = (
-            north_pole_long_names[:2]
-            + south_pole_long_names[:2]
-            + north_pole_long_names[2:]
-            + south_pole_long_names[2:]
+        both_pole_internal_names = (
+            north_pole_internal_names[:2]
+            + south_pole_internal_names[:2]
+            + north_pole_internal_names[2:]
+            + south_pole_internal_names[2:]
         )
         self.check_query(
             latitude=[-90, 90],
@@ -229,7 +237,7 @@ class TestQueryDatabase(unittest.TestCase):
             extended_ltm=True,
             global_ltm=True,
             inclusive_bounds=True,
-            expected_long_names=both_pole_long_names,
+            expected_internal_names=both_pole_internal_names,
         )
 
     def test_global_lps(self) -> None:
@@ -238,7 +246,7 @@ class TestQueryDatabase(unittest.TestCase):
             longitude=[0, 0],
             global_lps=True,
             inclusive_bounds=True,
-            expected_long_names=["N**", "S**", "23N", "23S"],
+            expected_internal_names=["N**", "S**", "23N", "23S"],
         )
 
     def test_contains(self) -> None:
@@ -248,20 +256,20 @@ class TestQueryDatabase(unittest.TestCase):
             extended_ltm=True,
             inclusive_bounds=True,
             contains=True,
-            expected_long_names=["23N*"],
+            expected_internal_names=["23N*"],
         )
         self.check_query(
             latitude=[0, 0],
             longitude=[-180, -171],
             contains=True,
-            expected_long_names=[],
+            expected_internal_names=[],
         )
         self.check_query(
             latitude=[0, 0],
             longitude=[-180, -171],
             inclusive_bounds=True,
             contains=True,
-            expected_long_names=[],
+            expected_internal_names=[],
         )
         self.check_query(
             latitude=[-90, 90],
@@ -270,7 +278,7 @@ class TestQueryDatabase(unittest.TestCase):
             global_ltm=True,
             inclusive_bounds=True,
             contains=True,
-            expected_long_names=[],
+            expected_internal_names=[],
         )
         self.check_query(
             latitude=[-90, 90],
@@ -279,7 +287,7 @@ class TestQueryDatabase(unittest.TestCase):
             global_ltm=True,
             inclusive_bounds=True,
             contains=True,
-            expected_long_names=[],
+            expected_internal_names=[],
         )
 
     def test_aoi(self) -> None:
@@ -292,7 +300,7 @@ class TestQueryDatabase(unittest.TestCase):
                 north_lat_degree=80,
             ),
             inclusive_bounds=True,
-            expected_long_names=[
+            expected_internal_names=[
                 "N",
                 "22N",
                 "23N",
@@ -311,7 +319,7 @@ class TestQueryDatabase(unittest.TestCase):
             ),
             inclusive_bounds=True,
             contains=True,
-            expected_long_names=["23N"],
+            expected_internal_names=["23N"],
         )
 
     # TODO: Decide how we plan to deal with this test.
@@ -346,13 +354,13 @@ class TestQueryDatabase(unittest.TestCase):
                 extended_ltm=True,
                 global_ltm=True,
             )
-            aoi_long_names = [crs._long_name for crs in aoi_crs_list]
+            aoi_internal_names = [crs._internal_name for crs in aoi_crs_list]
             self.check_query(
                 latitude=dense_lats,
                 longitude=dense_lons,
                 extended_ltm=True,
                 global_ltm=True,
-                expected_long_names=aoi_long_names,
+                expected_internal_names=aoi_internal_names,
             )
 
 
