@@ -20,6 +20,7 @@
 # Standard.
 import enum as _enum
 import pathlib as _pathlib
+import typing as _typing
 
 # Internal.
 import lgrs.grid as _grid
@@ -49,6 +50,31 @@ class Type(_enum.StrEnum):
     LABELED = _enum.auto()
     STRING = _enum.auto()
     PRETTY = _enum.auto()
+
+
+# endregion
+###############################################################################
+# region> UTILITIES
+###############################################################################
+def _test_mode(path: _pathlib.Path, mode: str) -> str:
+    match mode:
+        case "x":
+            if path.exists():
+                raise TypeError(
+                    f"Specified `mode='x'` but file path exists: {path}"
+                )
+            mode = "w"  # *REASSIGNMENT*
+        case "a":
+            if not path.exists():
+                raise TypeError(
+                    "Specified `mode='a'` but file path does not exist: "
+                    f"{path}"
+                )
+        case "w":
+            pass
+        case _:
+            raise TypeError(f"`mode` not supported: {mode!r}")
+    return mode
 
 
 # endregion
@@ -148,10 +174,10 @@ def write_grid(
     bounds: tuple[float, float, float, float] | str | _pathlib.Path,
     precision: float,
     out_path: _pathlib.Path | str,
-    out_layer: str | None = None,
     *,
     acc: bool = False,
     extended_ltm: bool = False,
+    mode: _typing.Literal["x", "w", "a"] = "x",
 ) -> None:
     """
     Write out an LGRS or ACC box grid to one or more files.
@@ -168,22 +194,20 @@ def write_grid(
               the Northern Hemisphere. This option generates all boxes
               within the specified region.
           (3) a path to a vector or raster file whose approximate
-              geographic bounds will be used. You may treat a layer as
-              a virtual path: `"path/to/my.gpkg/layer_name"`.
+              geographic bounds will be used. You may specify a layer by the
+              convention: ``"path/to/my.gpkg|layername=layer_name"``.
     precision : float
         The required precision of the grid. If not a supported precision,
         the actual precision is rounded down to a better precision. All
         boxes will have the same precision.
     out_path : string or pathlib.Path
-        The output file path. May contain `"{}"` as a placeholder, which
-        will be replaced with an automatically generated descriptive name
-        that ensures uniqueness among the outputs of this call. If the
-        parent directory of `out_path` does not exist, it will be created.
-    out_layer : string or pathlib.Path, optional
-        The output layer name, if any. May contain `"{}"` as a placeholder,
+        The output file path. You may specify a layer name by the
+        convention: ``"path/to/my.gpkg|layername=layer_name"``. May contain
+        `"{}"` as a placeholder (in file path and/or layer name portions),
         which will be replaced with an automatically generated descriptive
-        name that ensures uniqueness among the outputs of this call. If
-        `out_path` is a GeoPackage, each output layer will be appended to
+        name that ensures uniqueness among the outputs of this call. If the
+        parent directory of `out_path` does not exist, it will be created.
+        If `out_path` is a GeoPackage, each output layer will be appended to
         it; the GeoPackage will also be created, if necessary.
     acc : bool, default=False
         Whether to use Artemis Condensed Coordinates (ACC) rather than the
@@ -192,6 +216,12 @@ def write_grid(
     extended_ltm : bool, default=False
         Whether to use the extended LTM region, which extends to 82° N/S
         instead of 80° N/S.
+    mode : "x", "w", or "a"
+        The file write mode. ``"x"`` requires that the file to which
+        `out_path` points (after resolution of any ``"{}"``) not preexist
+        the call. ``"w"`` will create that file, overwriting if it preexists.
+        ``"a"`` requires that the file preexist and appends to that file;
+        if the layer also preexists, it is likewise appended to.
 
     Returns
     -------
@@ -200,16 +230,38 @@ def write_grid(
     Raises
     ------
     TypeError
-        If neither `out_path` nor `out_layer` contain the `"{}"`
-        placeholder and `bounds` is not an LGRS CRS short name. In that
-        case, a name collision is risked.
+        If file state implied by `mode` is violated or the grandparent of
+        `out_path` does not preexist. Also if `out_path` does not contain
+        the ``"{}"`` placeholder and `bounds` is not an LGRS CRS short name.
+        In that case, a name collision is risked if multiple CRSs generate
+        multiple outputs.
     """
+    # Process `out_*` arguments.
+    nom_out_path_template = _pathlib.Path(out_path)
+    del out_path  # Avoid accidental use.
+    out_file_path_template, out_layer_name_template, _ = (
+        _grid._resolve_file_path_and_layer_name_and_existence(
+            nom_out_path_template, test_exists=False
+        )
+    )
+    # Note: Satisfaction of `mode` expectations can only be evaluated
+    # once the output file path is resolved.
+    file_path_is_dynamic = "{}" in out_file_path_template.name
+    if not file_path_is_dynamic:
+        mode = _test_mode(out_file_path_template, mode)  # *REASSIGNMENT*
+    if not out_file_path_template.parent.parent.exists():
+        raise TypeError(
+            "The grandparent of `out_path` does not exist: "
+            f"'{out_file_path_template.parent.parent}'"
+        )
+
     # Resolves bounds.
     if isinstance(bounds, str):
         try:
             _srs.make_lunar_crs(bounds)
         except TypeError:
             bounds = _pathlib.Path(bounds)
+    # noinspection PyUnreachableCode
     match bounds:
         case _pathlib.Path():
             geo_bounds = _grid.GeographicBounds.from_path(bounds)
@@ -218,12 +270,8 @@ def write_grid(
         case _:
             geo_bounds = _grid.GeographicBounds.from_other(bounds)
 
-    # Process `out_*` arguments.
-    if isinstance(out_path, str):
-        out_path = _pathlib.Path(out_path)  # *REASSIGNMENT*
-    expect_exactly_one_crs = "{}" not in out_path.name and (
-        out_layer is None or "{}" not in out_layer
-    )
+    # Verify required uniqueness.
+    expect_exactly_one_crs = "{}" not in nom_out_path_template.name
     # TODO: Could eventually support output to a single file generally
     #  by using a geographic CRS and densification.
     if expect_exactly_one_crs and not isinstance(geo_bounds, str):
@@ -236,18 +284,24 @@ def write_grid(
     gdfs = _grid.make_gdfs(boxes)
 
     # Output each `GeoDataFrame`.
-    out_dir_path = out_path.parent
-    out_name = out_path.name
+    out_dir_path = out_file_path_template.parent
+    out_file_name_template = out_file_path_template.name
     out_dir_path_exists = out_dir_path.exists()
     for gdf in gdfs:
-        out_path = out_dir_path / out_name.format(gdf.name_hint)
+        gdf_out_path = out_dir_path / out_file_name_template.format(
+            gdf.name_hint
+        )
+        if file_path_is_dynamic:
+            mode = _test_mode(gdf_out_path, mode)  # *REASSIGNMENT*
         to_file_kwargs = {
-            "filename": out_path,
+            "filename": gdf_out_path,
             "index": True,
-            "mode": "a" if out_path.exists() else "w",
+            "mode": mode,
         }
-        if out_layer is not None:
-            to_file_kwargs["layer"] = out_layer.format(gdf.name_hint)
+        if out_layer_name_template is not None:
+            to_file_kwargs["layer"] = out_layer_name_template.format(
+                gdf.name_hint
+            )
         # Note: Wait to create out directory until necessary.
         if not out_dir_path_exists:
             out_dir_path.mkdir()
