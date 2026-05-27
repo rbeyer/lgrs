@@ -61,7 +61,7 @@ class _InternalNameParsed(_typing.NamedTuple):
     suffix: str
 
 
-def _calculate_ltm_zone(longitude: float) -> tuple[float, int]:
+def _calculate_ltm_zone_number(longitude: float) -> tuple[float, int]:
     # Below: Eq. 13 of M2025. Zones are 1-indexed.
     zone_float = ((longitude + 180) / (2 * _wkt.LTM_ZONE_HALF_WIDTH)) + 1
     zone_int = int(zone_float)
@@ -218,7 +218,7 @@ def _get_lunar_crs_internal_names(
             # Note: This inequality is from M2025 code.
             hemi = "N" if lat >= 0 else "S"
         if is_in_ltm(lat):
-            zone_float, zone_int = _calculate_ltm_zone(lon)
+            zone_float, zone_int = _calculate_ltm_zone_number(lon)
             if prefer_west_ltm and zone_float.is_integer():
                 if zone_int == 1:
                     zone_int = 45  # *REASSIGNMENT*
@@ -317,27 +317,30 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         Whether CRS is LPS.
     is_ltm : bool
         Whether CRS is LTM.
-    hemisphere: str
-        "N" or "S".
-    ltm_zone : str | None
-        The LTM zone (e.g., "23N"), or `None` if `.is_lps`.
-    lps_hemisphere : str | None
-        The LPS hemisphere ("N" or "S"), or `None` if `.is_ltm`.
+    hemisphere: string
+        ``"N"`` or ``"S"``.
+    ltm_zone : string or None
+        The LTM zone (such as ``"23N"``), or ``None`` if `.is_lps`.
+    ltm_zone_number : int or None
+        The LTM zone number (such as ``23``), or ``None``, if `.is_lps`.
+    lps_hemisphere : string or None
+        The LPS hemisphere (``"N"`` or ``"S"``), or ``None`` if `.is_ltm`.
     absolute_ltm_limit : float
-        The magnitude of the LTM/LPS boundary: 80, 82, or 90 degrees.
+        The magnitude of the LTM/LPS boundary: ``80``, ``82``, or ``90``
+        degrees.
 
     Methods
     -------
     from_crs()
-        Get the `LunarCrsInfo` instance for a `CRS`.
+        Get the `LunarCrsInfo` instance for a ``CRS``.
     get_crs()
-        Get the corresponding `CRS` instance.
+        Get the corresponding ``CRS`` instance.
     sorter()
         Convenient sorter for `LunarCrsInfo` instances.
 
     See Also
     --------
-    pyproj_database.CRSInfo : Parent class, with additional documentation.
+    pyproj.database.CRSInfo : Parent class, with additional documentation.
     """
 
     # * BASIC BEHAVIOR. ───────────────────────────────────────────────
@@ -352,7 +355,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         tup = (
             0 if self.is_lps else 1,
             0 if self.hemisphere == "N" else 1,
-            self.ltm_zone,
+            self.ltm_zone_number,
             self.absolute_ltm_limit,
         )
         return tup
@@ -514,7 +517,14 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         return limit
 
     @_functools.cached_property
-    def ltm_zone(self) -> int | None:
+    def ltm_zone(self) -> str | None:
+        if self.ltm_zone_number is None:
+            return None
+        else:
+            return f"{self.ltm_zone_number}{self.hemisphere}"
+
+    @_functools.cached_property
+    def ltm_zone_number(self) -> int | None:
         return self._internal_name_parsed.zone_number
 
     # * PUBLIC METHODS. ───────────────────────────────────────────────
@@ -551,12 +561,12 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     @staticmethod
     def sorter(info: LunarCrsInfo) -> tuple:
         """
-        Function suitable for use as the `key` argument to `sorted()`.
+        Function suitable for use as the ``key`` argument to ``sorted()``.
 
         Instances sort by:
             1) `.is_lps` before `.is_ltm`
-            2) by `.hemisphere` ("N" before "S")
-            3) by `.ltm_zone` (numerically)
+            2) by `.hemisphere` (``"N"`` before ``"S"``)
+            3) by `.ltm_zone_number`
             4) by `.absolute_ltm_limit`
 
         Parameters
@@ -567,7 +577,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         Returns
         -------
         sort_tuple : tuple
-            A `tuple` to support the described sort order.
+            A ``tuple`` to support the described sort order.
 
         Examples
         --------
@@ -583,7 +593,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         ...      first_info.absolute_ltm_limit == 80.))
         True
         >>> last_info = info_list[-1]
-        >>> all((last_info.ltm_zone == 45, last_info.hemisphere == "S",
+        >>> all((last_info.ltm_zone_number == 45, last_info.hemisphere == "S",
         ...      last_info.absolute_ltm_limit == 90.))
         True
         """
