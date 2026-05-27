@@ -208,7 +208,7 @@ operations specific to grid boxes::
     1
 
     # Get the box's parent grid box, in which `acc_box` is nested.
-    >>> parent_acc_box = acc_box.truncate(min_precision=10)
+    >>> parent_acc_box = acc_box.with_precision(10)
     >>> str(parent_acc_box)
     'BCSK30D45'
 
