@@ -520,7 +520,7 @@ class Constraints(metaclass=_caching._MetaMultiton):
         else:
             if ltm_zone_number is None:
                 # *REASSIGNMENT*
-                _, ltm_zone_number = _database._calculate_ltm_zone(
+                _, ltm_zone_number = _database._calculate_ltm_zone_number(
                     point.longitude
                 )
             proj_crs = _srs.make_lunar_crs(
@@ -2261,7 +2261,7 @@ class PointCoordinate(BaseCoordinate):
         if not self._may_have_25k_ltm_box:
             return ()
         latlon_point = self.to_latlon()
-        _, nom_ltm_zone_num = _database._calculate_ltm_zone(
+        _, nom_ltm_zone_num = _database._calculate_ltm_zone_number(
             latlon_point.longitude
         )
         zone_nums = [nom_ltm_zone_num]
