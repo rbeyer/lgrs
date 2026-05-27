@@ -2917,7 +2917,7 @@ class BoxCoordinate(BaseCoordinate):
         if string is None:
             return 0
         else:
-            return int(f"{string}00"[:nom_length])
+            return int(f"{string}000"[:nom_length])
 
     # * INSTANTIATION FROM STRING. ────────────────────────────────────
     _pattern: _regex.Pattern
