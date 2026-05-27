@@ -24,7 +24,8 @@ import beartype.claw
 # Note: Unlike in `pyproj`:
 from lgrs.caching import enable_caching
 from lgrs.database import query_lunar_crs_info
-from lgrs.easy import from_geographic, from_gridded, from_lps_or_ltm
+
+# from lgrs.easy import from_geographic, from_gridded, from_lps_or_ltm
 
 # Note: Analogous to `pyproj`:
 from lgrs.srs.srs import CRS, GRS, make_lunar_crs

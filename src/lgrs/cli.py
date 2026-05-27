@@ -119,16 +119,16 @@ def _prep_for_cli(
 ###############################################################################
 # region> COMMANDS
 ###############################################################################
-from_lps_or_ltm = _prep_for_cli(
-    _easy.from_lps_or_ltm,
-    """
-    Examples
-    --------
-    {cmd} 488590 608480
-    (zone="A", area="ZS", easting=13590, northing=8480,
-     string="AZS1359008480")
-    """,
-)
+# from_lps_or_ltm = _prep_for_cli(
+#     _easy.from_lps_or_ltm,
+#     """
+#     Examples
+#     --------
+#     {cmd} 488590 608480
+#     (zone="A", area="ZS", easting=13590, northing=8480,
+#      string="AZS1359008480")
+#     """,
+# )
 
 
 # endregion
