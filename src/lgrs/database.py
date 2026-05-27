@@ -328,8 +328,10 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
 
     Methods
     -------
+    from_crs()
+        Get the `LunarCrsInfo` instance for a `CRS`.
     get_crs()
-        Get the corresponding `pyproj.CRS` instance.
+        Get the corresponding `CRS` instance.
     sorter()
         Convenient sorter for `LunarCrsInfo` instances.
 
@@ -440,7 +442,8 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         Create a `LunarCrsInfo` describing a `CRS`.
 
         `LunarCrsInfo` instances provide useful information about a `CRS`
-        via attributes and also support meaningful sort.
+        via attributes and also support meaningful sorting. See class
+        documentation.
 
         Parameters
         ----------
@@ -518,7 +521,15 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     # Note: Added because instantiating a `pyproj.CRS` from a
     # `pyproj.CRSInfo` relies on `pyproj.CRS.from_authority()`, which we
     # cannot independently support.
-    def get_crs(self) -> _pyproj.CRS:
+    def get_crs(self) -> _srs.CRS:
+        """
+        Get a `CRS` instance corresponding to this info instance.
+
+        Returns
+        -------
+        crs : lgrs.CRS
+            The `CRS` instance corresponding to this info instance.
+        """
         suffix = self._internal_name_parsed.suffix
         name = self._internal_name.removesuffix(suffix)
         kwargs = {}
