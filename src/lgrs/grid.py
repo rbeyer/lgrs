@@ -233,7 +233,11 @@ class GeographicBounds:
             The `GeographicBounds` instance.
         """
         # Resolve CRS and bounds in that CRS.
-        file_path, layer_name = _resolve_file_path_and_layer_name(path)
+        file_path, layer_name, exists = (
+            _resolve_file_path_and_layer_name_and_existence(path)
+        )
+        if not exists:
+            raise TypeError(f"Path could not be found: {path}")
         if layer_name is None:
             kwargs = {}
         else:
@@ -348,9 +352,9 @@ def _construct_latlon_grid(
     return points
 
 
-def _resolve_file_path_and_layer_name(
-    path: _pathlib.Path | str,
-) -> tuple[_pathlib.Path, str | None]:
+def _resolve_file_path_and_layer_name_and_existence(
+    path: _pathlib.Path | str, *, test_exists: bool = True
+) -> tuple[_pathlib.Path, str | None, bool | None]:
     if isinstance(path, str):
         path = _pathlib.Path(path)  # *REASSIGNMENT*
     try:
@@ -360,7 +364,15 @@ def _resolve_file_path_and_layer_name(
         layer_name = None
     else:
         file_path = path.with_name(path_name)
-    return (file_path, layer_name)
+    if not test_exists:
+        exists = None
+    elif not file_path.exists():
+        exists = False
+    elif layer_name is None:
+        exists = True
+    else:
+        exists = layer_name in _geopandas.list_layers(path)["name"].values
+    return (file_path, layer_name, exists)
 
 
 # endregion
