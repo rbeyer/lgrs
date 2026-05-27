@@ -219,8 +219,8 @@ class GeographicBounds:
         ----------
         path :
             Path to a vector or raster file whose approximate geographic bounds
-            will be used. You may treat a layer as a virtual path:
-            `"path/to/my.gpkg/layer_name"`.
+            will be used. You may specify a layer by the convention:
+            ``"path/to/my.gpkg|layername=layer_name"``.
         densify_pts : int, default=21
             Number of points to add to each edge of the box. Having more
             vertices helps ensure that the transformation of the bounding box
@@ -233,25 +233,26 @@ class GeographicBounds:
             The `GeographicBounds` instance.
         """
         # Resolve CRS and bounds in that CRS.
-        if isinstance(path, str):
-            path = _pathlib.Path(path)  # *REASSIGNMENT*
-        try:
-            with _rasterio.open(path) as src:
-                native_crs = src.crs
-                native_bounds = src.bounds
-        except _rasterio.errors.RasterioIOError:
+        file_path, layer_name = _resolve_file_path_and_layer_name(path)
+        if layer_name is None:
             kwargs = {}
-            if (
-                not path.exists()
-                and path.parent.exists()
-                and path.parent.suffix.lower() == ".gpkg"
-            ):
-                kwargs["layer"] = path.name
-                path = path.parent  # *REASSIGNMENT*
-            gdf = _geopandas.read_file(path, **kwargs)
+        else:
+            kwargs = {"layer": layer_name}
+        try:
+            gdf = _geopandas.read_file(file_path, **kwargs)
+        except Exception:
+            try:
+                with _rasterio.open(path) as src:
+                    native_bounds = src.bounds
+                    native_crs = src.crs
+            except Exception:
+                raise TypeError(
+                    f"Path could not be read either as vector or raster data: "
+                    f"{path}."
+                )
+        else:
             native_bounds = gdf.total_bounds
             native_crs = gdf.crs
-            del gdf
 
         # Convert to geographic bounds.
         transformer = _pyproj.Transformer.from_crs(
@@ -345,6 +346,21 @@ def _construct_latlon_grid(
 
     # Return points.
     return points
+
+
+def _resolve_file_path_and_layer_name(
+    path: _pathlib.Path | str,
+) -> tuple[_pathlib.Path, str | None]:
+    if isinstance(path, str):
+        path = _pathlib.Path(path)  # *REASSIGNMENT*
+    try:
+        path_name, layer_name = path.name.split("|layername=")
+    except ValueError:
+        file_path = path
+        layer_name = None
+    else:
+        file_path = path.with_name(path_name)
+    return (file_path, layer_name)
 
 
 # endregion
