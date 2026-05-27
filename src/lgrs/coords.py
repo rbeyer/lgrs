@@ -40,11 +40,12 @@ import builtins as _builtins
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
-import math as _math
+import itertools as _itertools
 from math import floor as _floor
 import numpy as _np
 import types as _types
 import typing as _typing
+import weakref as _weakref
 
 # External.
 from beartype._check.forward.reference.fwdrefmeta import (
@@ -361,10 +362,21 @@ class Constraints(metaclass=_caching._MetaMultiton):
             enabled_arg_strs.append(f"{field.name}={val!r}")
         return f"{self.__class__.__name__}({', '.join(enabled_arg_strs)})"
 
-    _max_geod_length_of_25km_box_diag_in_deg_lat = (
-        _values.calculate_diagonal_length(25_000, safe_up=True)
-        / _values.M_PER_DEGREE_LATITUDE
+    _max_geod_length_of_25km_box_diag = _values.calculate_diagonal_length(
+        25_000, safe_up=True
     )
+
+    _max_geod_length_of_25km_box_diag_in_deg_lat = (
+        _max_geod_length_of_25km_box_diag / _values.M_PER_DEGREE_LATITUDE
+    )
+
+    @_functools.cached_property
+    def _crs_kwargs(self) -> dict[str, bool]:
+        return {
+            "extended_ltm": self.extended_ltm,
+            "global_lps": self.global_lps,
+            "global_ltm": self.global_ltm,
+        }
 
     def _get_proj_crs_and_new_cousins(
         self, point: LatLonPoint
@@ -401,7 +413,7 @@ class Constraints(metaclass=_caching._MetaMultiton):
         )
         if other_sys_is_preferred:
             is_close_to_lps_ltm_boundary = (
-                self._min_abs_lps_lat - abs(point.latitude)
+                abs(self._min_abs_lps_lat - abs(point.latitude))
             ) < self._max_geod_length_of_25km_box_diag_in_deg_lat
             if is_close_to_lps_ltm_boundary:
                 crs, new_cousins = self._test_forced_lgrs_box(
@@ -412,15 +424,15 @@ class Constraints(metaclass=_caching._MetaMultiton):
                     default_crs = crs  # *REASSIGNMENT*
                     default_result = (crs, new_cousins)  # *REASSIGNMENT*
 
-        # If `point` is in an LPS region or there is no LTM zone
-        # preference, that preference is already satisfied, or preferred
-        # LTM zone is too far away, return (current) default.
+        # If `point` is (1) in an LPS region or (2) there is no LTM zone
+        # preference, (2) that preference is already satisfied, or (3)
+        # preferred LTM zone is too far away, return (current) default.
         if default_crs.ltm_zone is None or self.preferred_ltm_zone is None:
             return default_result
-        ltm_zone_number = int(default_crs.ltm_zone[1:])
+        ltm_zone_number = int(default_crs.ltm_zone[:-1])
         if (
             ltm_zone_number == self.preferred_ltm_zone
-            or abs(self.preferred_ltm_zone - ltm_zone_number) > 1
+            or self.preferred_ltm_zone not in point._potential_ltm_zone_nums
         ):
             return default_result
 
@@ -434,6 +446,14 @@ class Constraints(metaclass=_caching._MetaMultiton):
         return default_result
 
     @_functools.cached_property
+    def _known_invalid_boxes(self) -> _weakref.WeakSet[BoxCoordinate]:
+        return _weakref.WeakSet()
+
+    @_functools.cached_property
+    def _known_valid_boxes(self) -> _weakref.WeakSet[BoxCoordinate]:
+        return _weakref.WeakSet()
+
+    @_functools.cached_property
     def _max_abs_ltm_lat(self) -> float:
         if self.extended_ltm:
             return _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
@@ -443,6 +463,16 @@ class Constraints(metaclass=_caching._MetaMultiton):
             return -float("inf")
         else:
             return _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+
+    @_functools.cached_property
+    def _max_abs_ltm_lat_with_preference(self) -> float:
+        if not self.prefer_ltm:
+            return self._max_abs_ltm_lat
+        extreme_max = (
+            self._max_abs_ltm_lat
+            + self._max_geod_length_of_25km_box_diag_in_deg_lat
+        )
+        return extreme_max
 
     @_functools.cached_property
     def _min_abs_lps_lat(self) -> float:
@@ -456,12 +486,14 @@ class Constraints(metaclass=_caching._MetaMultiton):
             return _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
 
     @_functools.cached_property
-    def _crs_kwargs(self) -> dict[str, bool]:
-        return {
-            "extended_ltm": self.extended_ltm,
-            "global_lps": self.global_lps,
-            "global_ltm": self.global_ltm,
-        }
+    def _min_abs_lps_lat_with_preference(self) -> float:
+        if not self.prefer_lps:
+            return self._min_abs_lps_lat
+        extreme_min = (
+            self._min_abs_lps_lat
+            - self._max_geod_length_of_25km_box_diag_in_deg_lat
+        )
+        return extreme_min
 
     def _test_forced_lgrs_box(
         self,
@@ -477,21 +509,27 @@ class Constraints(metaclass=_caching._MetaMultiton):
             )
 
         # Get targeted CRS.
-        if ltm_zone_number is not None:
-            if point.latitude >= 0:
-                n_or_s = "N"
-            else:
-                n_or_s = "S"
-            proj_crs = _srs.make_lunar_crs(f"{ltm_zone_number}{n_or_s}")
+        if point.latitude >= 0:
+            n_or_s = "N"
         else:
-            (proj_crs_info,) = _database.query_lunar_crs_info(
-                latitude=85 if target_lps else 0,
-                longitude=point.longitude,
+            n_or_s = "S"
+        if target_lps:
+            proj_crs: _srs.CRS = _srs.make_lunar_crs(
+                n_or_s, extended_ltm=self.extended_ltm
             )
-            proj_crs = proj_crs_info.get_crs()
+        else:
+            if ltm_zone_number is None:
+                # *REASSIGNMENT*
+                _, ltm_zone_number = _database._calculate_ltm_zone(
+                    point.longitude
+                )
+            proj_crs = _srs.make_lunar_crs(
+                f"{ltm_zone_number}{n_or_s}", extended_ltm=self.extended_ltm
+            )
 
         # Insofar as possible, force creation of a reference 25-km box.
         point_copy: LatLonPoint = point.copy()
+        result_on_failure = (None, ())
         try:
             proj_point = point_copy._to_lps_or_ltm(
                 proj_crs=proj_crs, validate=False
@@ -500,13 +538,25 @@ class Constraints(metaclass=_caching._MetaMultiton):
             # Note: Transform may yield most extreme supported box
             # rather than a box containing `point`.
             if not box.contains(point, same_crs_only=False):
-                return (None, ())
+                return result_on_failure
             test_box: BoxCoordinate = box.with_precision(25_000)
-        except _exceptions.MalformedCoordinate:
-            return (None, ())
+        except Exception:
+            # Note: Assume any exceptions (such as an IndexError)
+            # indicates failure.
+            return result_on_failure
 
         # Test whether any sample along edges of the reference box meets
         # constraint criteria (i.e., whether the box is valid).
+        # Note: Code elsewhere expects exactly this list order.
+        result_on_success = (proj_crs, [box, test_box, proj_point])
+        # Note: When building a grid, for example, an equivalent
+        # `test_box` may be generated many times by different box
+        # instances. To improve performance, cache the result of this
+        # block futher below, and immediately below, check that cache.
+        if test_box in self._known_valid_boxes:
+            return result_on_success
+        elif test_box in self._known_invalid_boxes:
+            return result_on_failure
         if target_lps:
             # TODO: Determine how many samples are required per edge.
             count_per_side = 2
@@ -519,11 +569,22 @@ class Constraints(metaclass=_caching._MetaMultiton):
             if target_lps:
                 if abs(lat) >= self._min_abs_lps_lat:
                     break
-            elif proj_crs.area_of_use.west <= lon <= proj_crs.area_of_use.east:
+            elif all(
+                (
+                    proj_crs.area_of_use.south
+                    <= lat
+                    <= proj_crs.area_of_use.north,
+                    proj_crs.area_of_use.west
+                    <= lon
+                    <= proj_crs.area_of_use.east,
+                )
+            ):
                 break
         else:
-            return (None, ())
-        return (proj_crs, [box, proj_point])
+            self._known_invalid_boxes.add(test_box)
+            return result_on_failure
+        self._known_valid_boxes.add(test_box)
+        return result_on_success
 
 
 _default_constraints = Constraints()
@@ -635,17 +696,16 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
     @classmethod
     @_functools.cache
     def _get_field_name_to_type(cls) -> dict[str, type]:
-        name_to_type = {}
-        field_name_set = {field.name for field in cls._get_fields()}
-        for name, typ in _typing.get_type_hints(cls).items():
-            if name not in field_name_set:
-                continue
+        field_name_to_type = {}
+        all_name_to_type = _typing.get_type_hints(cls)
+        for field in cls._get_fields():
+            typ = all_name_to_type[field.name]
             if isinstance(typ, _types.UnionType):
                 types = list(_typing.get_args(typ))
                 types.remove(type(None))
                 (typ,) = types  # *REASSIGNMENT*
-            name_to_type[name] = typ
-        return name_to_type
+            field_name_to_type[field.name] = typ
+        return field_name_to_type
 
 
 class BaseCoordinate(_BaseCoordinate):
@@ -702,14 +762,24 @@ class BaseCoordinate(_BaseCoordinate):
         return cls(**init_kwargs)
 
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
-    # Note: See `._get_cached_or_create()` for a description of what a
-    # "cousin" is.
-    _has_box_origin: bool
+    _precision: int
+    # Note: `_precision_origin` records the the underlying precision,
+    # which is the greater of the actual precision and coarsest
+    # precision encountered during derivation. For example, a directly
+    # instantiated point has (for our purposes) infinitesimal
+    # underlying precision and therefor a precision origin of 0
+    # whereas point derived from the reference corner of a box has the
+    # precision origin of that box.
+    _precision_origin: int
 
     @_functools.cached_property
     def _cache_key(self) -> _collections.abc.Hashable:
-        return self._make_cache_key(type(self), constraints=self.constraints)
+        return self._make_cache_key(
+            constraints=self.constraints, intended_precision=self._precision
+        )
 
+    # Note: See `._get_cached_or_create()` for a description of what a
+    # "cousin" is.
     @_functools.cached_property
     def _cache_key_to_cousins(
         self,
@@ -721,41 +791,53 @@ class BaseCoordinate(_BaseCoordinate):
         return cache_key_to_cousins
 
     def _get_cached_cousin(
-        self, func: _ToMethod, constraints: Constraints
+        self,
+        *targ_types: type,
+        constraints: Constraints,
+        precision: int,
+        truncation_ok: bool = True,
     ) -> BaseCoordinate | None:
         # Ensure that `self` is invariably returned, if suitable.
         # Note: If caching is disabled or cache was cleared, `self` may
         # not be otherwise available.
-        targ_types = _resolve_out_types(func)
         targ_cache_key = self._make_cache_key(
-            *targ_types, constraints=constraints
+            constraints=constraints, intended_precision=precision
         )
-        if isinstance(self, targ_types) and targ_cache_key == self._cache_key:
-            return self
-
-        # If caching is disabled, do nothing more.
-        if not _caching._CACHING_IS_ENABLED:
-            return None
+        if self._cache_key == targ_cache_key:
+            cousins = [self]
+        else:
+            cousins = []
+        if _caching._CACHING_IS_ENABLED:
+            cousins.extend(self._cache_key_to_cousins[targ_cache_key])
 
         # Return suitable cached cousin, if any.
-        for cousin in self._cache_key_to_cousins[targ_cache_key]:
-            if isinstance(cousin, targ_types):
+        fallback = None
+        for cousin in cousins:
+            if not isinstance(cousin, targ_types):
+                continue
+            elif cousin._precision == precision:
                 return cousin
-        return None
+            elif cousin._precision < precision:
+                fallback = cousin
+        if fallback is None or not truncation_ok:
+            return None
+        return fallback.with_precision(precision)
 
     def _make_cache_key(
-        self, *types: type[BaseCoordinate], constraints: Constraints
+        self,
+        *,
+        constraints: Constraints,
+        intended_precision: int,
     ) -> _typing.Hashable:
-        if issubclass(types[0], BoxCoordinate):
-            has_box_origin = True
-        else:
-            has_box_origin = self._has_box_origin
-        return (constraints, has_box_origin)
+        return (constraints, max(self._precision_origin, intended_precision))
 
     def _register_cousin(self, cousin: BaseCoordinate) -> None:
-        # Record cousin's disposition, if necessary.
-        if isinstance(cousin, PointCoordinate):
-            object.__setattr__(cousin, "_has_box_origin", self._has_box_origin)
+        # Record cousin's precision origin.
+        object.__setattr__(
+            cousin,
+            "_precision_origin",
+            max(cousin._precision, self._precision_origin),
+        )
 
         # Invariably register for possible later clearing of the cache.
         _caching._coord_weak_set.add(cousin)
@@ -859,6 +941,8 @@ class BaseCoordinate(_BaseCoordinate):
         # cheap and tests fundamental assumptions.
         latlon_point.validate()
         twin = latlon_point.copy().to(type(self), any_system=True)
+        if isinstance(twin, BoxCoordinate):
+            twin = twin.with_precision(self.precision)  # *REASSIGNMENT*
         if self.is_lps_based() != twin.is_lps_based():
             raise _exceptions.MalformedCoordinate(
                 f"For the given constraints, {self.constraints!r}, location "
@@ -874,25 +958,33 @@ class BaseCoordinate(_BaseCoordinate):
                 f"Cannot compare `self` to `twin`: {self!r}"
             )
         for field_name in self._init_kwargs:
-            # Note: Easting and northing may have small precision
-            # discrepancies.
-            if field_name in ("easting", "northing"):
-                continue
             self_val = getattr(self, field_name)
             twin_val = getattr(twin, field_name)
-            if self_val != twin_val:
-                raise _exceptions.MalformedCoordinate(
-                    f"For the given constraints, {self.constraints!r}, "
-                    f"location should have `{field_name}` set to "
-                    f"`{twin_val}`, not: {self!r}"
-                )
+            if self_val == twin_val:
+                continue
+            # Note: Easting and northing may have small precision
+            # discrepancies. Since all transformations are via `pyproj`,
+            # do not examine further.
+            if field_name in ("easting", "northing") and isinstance(
+                self, PointCoordinate
+            ):
+                continue
+            break
+        else:
+            return
+        raise _exceptions.MalformedCoordinate(
+            f"For the given constraints, {self.constraints!r}, location "
+            f"should have the form\n"
+            f"    {twin!r}\n"
+            "not\n"
+            f"    {self!r}"
+        )
 
     def _validate_hemisphere(self) -> None:
         self._validate_against_sequence(
             attr_name="hemisphere", sequence=("N", "S")
         )
 
-    # TODO: Consider if this can be simplified.
     def validate(self, *, revalidate: bool = False) -> None:
         """
         Validate this coordinate.
@@ -1134,113 +1226,113 @@ class BaseCoordinate(_BaseCoordinate):
 
     # TODO: Probably delete, especially since both LPS and LTM systems
     #  have regions/zones not accommodated here.
-    def grid_distance_to(
-        self,
-        other: BaseCoordinate,
-        *,
-        center: bool = False,
-        system: str | None = None,
-    ) -> float:
-        """
-        Calculate the grid distance between two coordinates, in meters.
-
-        For any box coordinate (`self` and/or `other`), distance is measured
-        to a representative point, as determined by `center`.
-
-        Parameters
-        ----------
-        other : BaseCoordinate
-            The other coordinate.
-        center : bool, default=False
-            Whether to use the center of any box coordinate instead of the
-            lower-left (grid-southwest) corner.
-        system : str, optional
-            The system (LPS or LTM) in which to calculate the grid distance. By
-            default, if `self` and `other` use the same system, distance is
-            calculated in that system. Alternatively, the system may be
-            specified by "LPS" or "LTM" (case is ignored).
-
-        Returns
-        -------
-        distance : float
-            The grid distance between `self` and `other`, in meters.
-
-        Raises
-        ------
-        TypeError
-            If `system` is not recognized, or if `system` is not specified
-            (`None`) and `self` and `other` use different systems.
-
-        Warnings
-        --------
-        Note that grid distances can be very different from geodesic distances,
-        especially when using `global_*` constraints or specifying `system`,
-        as such choices may extend a system beyond its region of preferred use.
-        (See Examples.)
-
-        See Also
-        --------
-        contains : Whether a box coordinate contains another coordinate.
-        distance_to : Point-to-point geodesic distance.
-
-        Examples
-        --------
-        >>> latlon_point = LatLonPoint(0, 0)
-        >>> acc_box = LtmAccBox.from_string("23NFF-001-001")
-        >>> latlon_point.grid_distance_to(acc_box)
-        1.4142135623730951
-        >>> latlon_point.distance_to(acc_box, center=True)
-        2.1234979460292074
-
-        Although supported, calculating grid distances outside the region of
-        preferred use can yield results of limited value.
-
-        >>> on_equator = LatLonPoint(0, 0)
-        >>> near_equator = LatLonPoint(1, 1)
-        >>> north_pole = LatLonPoint(90, 0)
-        >>> on_equator.grid_distance_to(near_equator, system="LTM")
-        42841.896671738505
-        >>> on_equator.distance_to(near_equator)
-        42882.604775055
-        >>> on_equator.grid_distance_to(north_pole, system="LPS")
-        3453951.1999999997
-        >>> on_equator.distance_to(north_pole)
-        2729101.5381734534
-        """
-        # Resolve system.
-        if system is None:
-            if isinstance(self, LatLonPoint) or isinstance(other, LatLonPoint):
-                raise TypeError(
-                    "Must specify `system` when a `LatLonPoint` is involved."
-                )
-            if self.is_lps_based() and other.is_lps_based():
-                system = "LPS"
-            elif self.is_ltm_based() and other.is_ltm_based():
-                system = "LTM"
-            else:
-                raise TypeError(
-                    "Must specify `system` when a `self` and `other` are not "
-                    "from the same system."
-                )
-        else:
-            system = system.upper()
-
-        # Convert to points in targeted system.
-        match system:
-            case "LPS":
-                convert = BaseCoordinate.to_lps
-            case "LTM":
-                convert = BaseCoordinate.to_ltm
-            case _:
-                raise TypeError(f"`system` not recognized: {system!r}")
-        self_point, other_point = map(
-            convert, self._conform_to_latlon_points(self, other, center=center)
-        )
-        dist = _math.dist(
-            (self_point.easting, self_point.northing),
-            (other_point.easting, other_point.northing),
-        )
-        return dist
+    # def grid_distance_to(
+    #     self,
+    #     other: BaseCoordinate,
+    #     *,
+    #     center: bool = False,
+    #     system: str | None = None,
+    # ) -> float:
+    #     """
+    #     Calculate the grid distance between two coordinates, in meters.
+    #
+    #     For any box coordinate (`self` and/or `other`), distance is measured
+    #     to a representative point, as determined by `center`.
+    #
+    #     Parameters
+    #     ----------
+    #     other : BaseCoordinate
+    #         The other coordinate.
+    #     center : bool, default=False
+    #         Whether to use the center of any box coordinate instead of the
+    #         lower-left (grid-southwest) corner.
+    #     system : str, optional
+    #         The system (LPS or LTM) in which to calculate the grid distance. By
+    #         default, if `self` and `other` use the same system, distance is
+    #         calculated in that system. Alternatively, the system may be
+    #         specified by "LPS" or "LTM" (case is ignored).
+    #
+    #     Returns
+    #     -------
+    #     distance : float
+    #         The grid distance between `self` and `other`, in meters.
+    #
+    #     Raises
+    #     ------
+    #     TypeError
+    #         If `system` is not recognized, or if `system` is not specified
+    #         (`None`) and `self` and `other` use different systems.
+    #
+    #     Warnings
+    #     --------
+    #     Note that grid distances can be very different from geodesic distances,
+    #     especially when using `global_*` constraints or specifying `system`,
+    #     as such choices may extend a system beyond its region of preferred use.
+    #     (See Examples.)
+    #
+    #     See Also
+    #     --------
+    #     contains : Whether a box coordinate contains another coordinate.
+    #     distance_to : Point-to-point geodesic distance.
+    #
+    #     Examples
+    #     --------
+    #     >>> latlon_point = LatLonPoint(0, 0)
+    #     >>> acc_box = LtmAccBox.from_string("23NFF-001-001")
+    #     >>> latlon_point.grid_distance_to(acc_box)
+    #     1.4142135623730951
+    #     >>> latlon_point.distance_to(acc_box, center=True)
+    #     2.1234979460292074
+    #
+    #     Although supported, calculating grid distances outside the region of
+    #     preferred use can yield results of limited value.
+    #
+    #     >>> on_equator = LatLonPoint(0, 0)
+    #     >>> near_equator = LatLonPoint(1, 1)
+    #     >>> north_pole = LatLonPoint(90, 0)
+    #     >>> on_equator.grid_distance_to(near_equator, system="LTM")
+    #     42841.896671738505
+    #     >>> on_equator.distance_to(near_equator)
+    #     42882.604775055
+    #     >>> on_equator.grid_distance_to(north_pole, system="LPS")
+    #     3453951.1999999997
+    #     >>> on_equator.distance_to(north_pole)
+    #     2729101.5381734534
+    #     """
+    #     # Resolve system.
+    #     if system is None:
+    #         if isinstance(self, LatLonPoint) or isinstance(other, LatLonPoint):
+    #             raise TypeError(
+    #                 "Must specify `system` when a `LatLonPoint` is involved."
+    #             )
+    #         if self.is_lps_based() and other.is_lps_based():
+    #             system = "LPS"
+    #         elif self.is_ltm_based() and other.is_ltm_based():
+    #             system = "LTM"
+    #         else:
+    #             raise TypeError(
+    #                 "Must specify `system` when a `self` and `other` are not "
+    #                 "from the same system."
+    #             )
+    #     else:
+    #         system = system.upper()
+    #
+    #     # Convert to points in targeted system.
+    #     match system:
+    #         case "LPS":
+    #             convert = BaseCoordinate.to_lps
+    #         case "LTM":
+    #             convert = BaseCoordinate.to_ltm
+    #         case _:
+    #             raise TypeError(f"`system` not recognized: {system!r}")
+    #     self_point, other_point = map(
+    #         convert, self._conform_to_latlon_points(self, other, center=center)
+    #     )
+    #     dist = _math.dist(
+    #         (self_point.easting, self_point.northing),
+    #         (other_point.easting, other_point.northing),
+    #     )
+    #     return dist
 
     # TODO: Decide whether to support mixed types.
     def is_equal_to(
@@ -1424,8 +1516,7 @@ class BaseCoordinate(_BaseCoordinate):
         >>> latlon_point_2 = latlon_point_1.replace(longitude=1)
         >>> latlon_point_2 == LatLonPoint(0, 1)
         True
-        Examples
-        --------
+
         >>> extended_ltm = Constraints(extended_ltm=True)
         >>> geo_point = LatLonPoint(81, 0, constraints=extended_ltm)
         >>> ltm_point = geo_point.to_lps_or_ltm()
@@ -1437,25 +1528,34 @@ class BaseCoordinate(_BaseCoordinate):
         lgrs.exceptions.MalformedCoordinate:
           ...
         """  # noqa: E501
-        # Treat trivial case.
-        if not copy and constraints is None and not overrides:
-            if validate:
-                self.validate()
-            return self
+        # Resolve constraints and initialization kwargs for `replaced`.
+        if constraints is None:
+            constraints = self.constraints  # *REASSIGNMENT*
+        cur_init_kwargs_no_constraints = self._init_kwargs.copy()
+        del cur_init_kwargs_no_constraints["constraints"]
+        new_init_kwargs_no_constraints = cur_init_kwargs_no_constraints.copy()
+        new_init_kwargs_no_constraints.update(overrides)
 
-        # Construct initialization kwargs for `replaced`.
-        init_kwargs = self._init_kwargs.copy()
-        init_kwargs.update(overrides)
-        if constraints is not None:
-            init_kwargs["constraints"] = constraints
-        if not copy and init_kwargs == self._init_kwargs:
-            if validate:
-                self.validate()
-            return self
+        # Fetch from cache, if possible and allowed.
+        has_no_true_overrides = (
+            new_init_kwargs_no_constraints == cur_init_kwargs_no_constraints
+        )
+        if not copy and has_no_true_overrides:
+            cached = self._get_cached_cousin(
+                type(self), constraints=constraints, precision=self._precision
+            )
+            if cached is not None:
+                if validate:
+                    cached.validate()
+                return cached
 
         # Construct new instance and possibly register as a cousin.
-        replaced = type(self)(**init_kwargs, validate=validate)
-        if not copy and not overrides:
+        replaced = type(self)(
+            **new_init_kwargs_no_constraints,
+            constraints=constraints,
+            validate=validate,
+        )
+        if not copy and has_no_true_overrides:
             self._register_cousin(replaced)
         return replaced
 
@@ -1517,7 +1617,8 @@ class BaseCoordinate(_BaseCoordinate):
             `coord` was created earlier (i.e., is from the cache) and was
             already validated, it is not re-validated.
         **kwargs
-            Any additional keyword arguments are passed to `func`.
+            Any additional keyword arguments (such as `precision`) are passed
+            to `func`.
 
         Returns
         -------
@@ -1525,9 +1626,20 @@ class BaseCoordinate(_BaseCoordinate):
             A cousin of `self`, which may be `self`.
         """
 
+        # Resolve some essential parameters.
+        targ_types = _resolve_out_types(func.__func__)
         if constraints is None:
             constraints = self.constraints  # *REASSIGNMENT*
-        cached = self._get_cached_cousin(func.__func__, constraints)
+        precision = self._resolve_precision(
+            kwargs.get("precision"), targ_type=targ_types[0]
+        )
+        if "precision" in kwargs:
+            kwargs["precision"] = precision
+
+        # Attempt to retrieve from cache. Upon failure, create.
+        cached = self._get_cached_cousin(
+            *targ_types, constraints=constraints, precision=precision
+        )
         if cached is None:
             if constraints != self.constraints:
                 # Note: Must restart transformation chain from
@@ -1542,9 +1654,11 @@ class BaseCoordinate(_BaseCoordinate):
             final = func(constraints=constraints, validate=validate, **kwargs)
         else:
             final = cached
+
+        # Perform any requested validation and return.
         # Note: Special `validate=None` case must be treated by `func`.
-        if validate and not final._was_validated:
-            final._validate()
+        if validate:
+            final.validate()
         return final
 
     @staticmethod
@@ -1569,6 +1683,50 @@ class BaseCoordinate(_BaseCoordinate):
         else:
             BaseCoordinate._raise_unexpected()
         return (force_system, convert)
+
+    def _resolve_precision(
+        self,
+        required_precision: float | None,
+        *,
+        targ_type: type[BaseCoordinate],
+        error: bool = True,
+    ) -> int | None:
+        # Note: Errors raised by this function use `precision` rather
+        # than `required_precision` because only the former is used
+        # in public functions.
+        if required_precision is None:
+            if issubclass(targ_type, PointCoordinate):
+                precision = 0
+            elif isinstance(self, BoxCoordinate):
+                precision = self.precision
+            else:
+                precision = 1
+        elif error and required_precision < self._precision:
+            raise TypeError(
+                "The requested `precision` is finer than `self.precision`: "
+                f"{required_precision!r} < {self.precision!r}"
+            )
+        else:
+            precision = self._resolve_precision_static(required_precision)
+        return precision
+
+    @staticmethod
+    def _resolve_precision_static(required_precision: float) -> int:
+        if required_precision < 1:
+            raise TypeError(
+                "`precision` must be >=1, not: " f"{required_precision!r}"
+            )
+        elif 1 <= required_precision < 10:
+            precision = 1
+        elif 10 <= required_precision < 100:
+            precision = 10
+        elif 100 <= required_precision < 1000:
+            precision = 100
+        elif 1000 <= required_precision < 25_000:
+            precision = 1000
+        else:
+            precision = 25_000
+        return precision
 
     def to(
         self,
@@ -1653,10 +1811,16 @@ class BaseCoordinate(_BaseCoordinate):
             basis = self
         return convert(basis, constraints=constraints, validate=validate)
 
+    # TODO: Decide whether default for `precision` should always be 1.
+    #  If so, how do we handle when a box tries to reduce precision?
+    #  Also, should we error when the (hidden) bookkeeping indicates
+    #  that precision < precision origin? (If so, should we expand
+    #  bookkeeping to cover all cases, even copying?)
     def to_acc(
         self,
-        constraints: Constraints | None = None,
         *,
+        constraints: Constraints | None = None,
+        precision: float | None = None,
         validate: bool | None = None,
     ) -> LpsAccBox | LtmAccBox:
         """
@@ -1673,6 +1837,9 @@ class BaseCoordinate(_BaseCoordinate):
         constraints : Constraints, optional
             The constraints to apply to this transformation. If not specified
             (or `None`), `self.constraints` is used.
+        precision : float, optional
+            The maximum allowed value of `out.precision`. If not specified,
+            defaults to 1 if `self` is a point else `self.precision`.
         validate : bool, optional
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
@@ -1687,13 +1854,16 @@ class BaseCoordinate(_BaseCoordinate):
             returned. If caching is enabled, a cached instance may be returned.
         """
         return self._get_cached_or_create(
-            self._to_acc, constraints=constraints, validate=validate
+            self._to_acc,
+            constraints=constraints,
+            precision=precision,
+            validate=validate,
         )
 
     def to_latlon(
         self,
-        constraints: Constraints | None = None,
         *,
+        constraints: Constraints | None = None,
         validate: bool | None = None,
     ) -> LatLonPoint:
         """
@@ -1728,8 +1898,9 @@ class BaseCoordinate(_BaseCoordinate):
 
     def to_lgrs(
         self,
-        constraints: Constraints | None = None,
         *,
+        constraints: Constraints | None = None,
+        precision: float | None = None,
         validate: bool | None = None,
     ) -> LpsLgrsBox | LtmLgrsBox:
         """
@@ -1746,6 +1917,9 @@ class BaseCoordinate(_BaseCoordinate):
         constraints : Constraints, optional
             The constraints to apply to this transformation. If not specified
             (or `None`), `self.constraints` is used.
+        precision : float, optional
+            The maximum allowed value of `out.precision`. If not specified,
+            defaults to 1 if `self` is a point else `self.precision`.
         validate : bool, optional
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
@@ -1760,7 +1934,10 @@ class BaseCoordinate(_BaseCoordinate):
             returned. If caching is enabled, a cached instance may be returned.
         """
         return self._get_cached_or_create(
-            self._to_lgrs, constraints=constraints, validate=validate
+            self._to_lgrs,
+            constraints=constraints,
+            precision=precision,
+            validate=validate,
         )
 
     # TODO: Reimplement `.to_lps()` and `.to_ltm()` to use the minimum
@@ -1768,8 +1945,8 @@ class BaseCoordinate(_BaseCoordinate):
     #  allowance for the user to override the constraints, maybe?
     def to_lps(
         self,
-        constraints: Constraints | None = None,
         *,
+        constraints: Constraints | None = None,
         validate: bool | None = None,
     ) -> LpsPoint:
         """
@@ -1811,8 +1988,8 @@ class BaseCoordinate(_BaseCoordinate):
 
     def to_lps_or_ltm(
         self,
-        constraints: Constraints | None = None,
         *,
+        constraints: Constraints | None = None,
         validate: bool | None = None,
     ) -> LpsPoint | LtmPoint:
         """
@@ -1850,8 +2027,8 @@ class BaseCoordinate(_BaseCoordinate):
 
     def to_ltm(
         self,
-        constraints: Constraints | None = None,
         *,
+        constraints: Constraints | None = None,
         validate: bool | None = None,
     ) -> LtmPoint:
         """
@@ -1890,7 +2067,7 @@ class BaseCoordinate(_BaseCoordinate):
     def _raise_type_not_supported(self) -> _typing.NoReturn:
         raise TypeError(f"Type not supported: {self!r}")
 
-    def _to_acc(self, **kwargs) -> LpsAccBox | LtmAccBox:
+    def _to_acc(self, *, precision: int, **kwargs) -> LpsAccBox | LtmAccBox:
         match self:
             case LpsPoint() | LtmPoint():
                 lps_or_ltm_point = self
@@ -1898,8 +2075,8 @@ class BaseCoordinate(_BaseCoordinate):
                 lps_or_ltm_point = self._to_lps_or_ltm(**kwargs)
             case _:
                 self._raise_type_not_supported()
-        lgrs_box = lps_or_ltm_point._to_lgrs(**kwargs)
-        acc_box = lgrs_box._to_acc(**kwargs)
+        lgrs_box = lps_or_ltm_point._to_lgrs(precision=1, **kwargs)
+        acc_box = lgrs_box._to_acc(precision=precision, **kwargs)
         return acc_box
 
     def _to_latlon(self, **kwargs) -> LatLonPoint:
@@ -1907,24 +2084,24 @@ class BaseCoordinate(_BaseCoordinate):
             case LpsLgrsBox() | LtmLgrsBox():
                 lgrs_box = self
             case LpsAccBox() | LtmAccBox():
-                lgrs_box = self._to_lgrs(**kwargs)
+                lgrs_box = self._to_lgrs(precision=self.precision, **kwargs)
             case _:
                 self._raise_type_not_supported()
         lps_or_ltm_point = lgrs_box._to_lps_or_ltm(**kwargs)
         latlon_point = lps_or_ltm_point._to_latlon(**kwargs)
         return latlon_point
 
-    def _to_lgrs(self, **kwargs) -> LpsLgrsBox | LtmLgrsBox:
+    def _to_lgrs(self, *, precision: int, **kwargs) -> LpsLgrsBox | LtmLgrsBox:
         if not isinstance(self, LatLonPoint):
             self._raise_type_not_supported()
         lps_or_ltm_point = self._to_lps_or_ltm(**kwargs)
-        lgrs_box = lps_or_ltm_point._to_lgrs(**kwargs)
+        lgrs_box = lps_or_ltm_point._to_lgrs(precision=precision, **kwargs)
         return lgrs_box
 
     def _to_lps_or_ltm(self, **kwargs) -> LpsPoint | LtmPoint:
         if not isinstance(self, (LpsAccBox, LtmAccBox)):
             self._raise_type_not_supported()
-        lgrs_box = self._to_lgrs(**kwargs)
+        lgrs_box = self._to_lgrs(precision=self.precision, **kwargs)
         lps_or_ltm_point = lgrs_box._to_lps_or_ltm(**kwargs)
         return lps_or_ltm_point
 
@@ -1950,7 +2127,8 @@ class PointCoordinate(BaseCoordinate):
     """The base class for all point coordinates."""
 
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
-    _has_box_origin: bool = False  # Default.
+    _precision: int = 0  # True by definition.
+    _precision_origin: int = 0  # Default.
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     @staticmethod
@@ -1968,6 +2146,330 @@ class PointCoordinate(BaseCoordinate):
         transformer = _pyproj.Transformer.from_crs(crs_from, crs_to)
         return transformer
 
+    # * OVERLAPPING BOXES. ────────────────────────────────────────────
+    def _calc_min_dist_to_meridian(
+        self, latlon_point: LatLonPoint, meridian: float
+    ) -> float:
+        # Note: The naive calculation below is a modest overestimate,
+        # but after scaling, is a lower limit even for measurements at
+        # 84° latitude across 24° of longitude. Trailing commented block
+        # gives unused exact calculation.
+        ref_latlon_point = LatLonPoint(latlon_point.latitude, meridian)
+        naive_dist = latlon_point.distance_to(ref_latlon_point)
+        return 0.978 * naive_dist
+
+        # Calculations below are for cross-track distance, which use
+        # a starting point at the same latitude as `latlon_point` but on
+        # the meridian and an implicit end point that is due north on
+        # that meridian.
+        # Source:https://www.movable-type.co.uk/scripts/latlong.html
+        # start_latlon_point = LatLonPoint(latlon_point.latitude, meridian)
+        # init_bearing_from_start_to_end_in_rads = 0  # Due north.
+        # ang_dist_from_start_to_targ_in_rads = (
+        #     latlon_point.distance_to(start_latlon_point) / _wkt.LUNAR_RADIUS
+        # )
+        # geod = _get_geod()
+        # init_bearing_from_start_to_targ_in_degs, _, _ = geod.inv(
+        #     start_latlon_point.longitude,
+        #     start_latlon_point.latitude,
+        #     latlon_point.longitude,
+        #     latlon_point.latitude,
+        # )
+        # signed_dist = _wkt.LUNAR_RADIUS * _math.asin(
+        #     _math.sin(ang_dist_from_start_to_targ_in_rads)
+        #     * _math.sin(
+        #         _math.radians(init_bearing_from_start_to_targ_in_degs)
+        #         - init_bearing_from_start_to_end_in_rads
+        #     )
+        # )
+        # dist = abs(signed_dist)
+
+    def _get_ltm_zone_num_to_cached_lgrs_box(
+        self, *, extended_ltm: bool, precision: int
+    ) -> dict[int | None, LpsLgrsBox | LtmLgrsBox]:
+        # If caching is disabled, return empty `dict`.
+        if not _caching._CACHING_IS_ENABLED:
+            return {}
+
+        # Mine cache for all relevant cousins and score each.
+        scored_cousins = []
+        count = _itertools.count()
+        for cousins in self._cache_key_to_cousins.values():
+            for cousin in cousins:
+                if not isinstance(cousin, BoxCoordinate):
+                    continue
+                if cousin._precision_origin > precision:
+                    continue
+                if cousin.constraints.extended_ltm != extended_ltm:
+                    continue
+                type_score = isinstance(cousin, (LpsLgrsBox, LtmLgrsBox))
+                precision_score = cousin.precision == precision
+                tiebreaker_score = next(count)
+                scored_cousins.append(
+                    ((type_score, precision_score, tiebreaker_score), cousin)
+                )
+
+        # Identify the best cousin for each CRS.
+        scored_cousins.sort()
+        ltm_zone_num_to_cousin = {
+            (
+                None
+                if cousin.crs.ltm_zone is None
+                else int(cousin.crs.ltm_zone[:-1])
+            ): cousin
+            for score, cousin in scored_cousins
+        }
+
+        # Convert each cousin, as necessary, to conform to type and
+        # precision expectations, and return mapping.
+        for ltm_zone_num, cousin in ltm_zone_num_to_cousin.items():
+            if not isinstance(cousin, (LpsLgrsBox, LtmLgrsBox)):
+                final_cousin = cousin.to_lgrs(precision=precision)
+            elif cousin.precision != precision:
+                final_cousin = cousin.with_precision(precision)
+            else:
+                continue
+            ltm_zone_num_to_cousin[ltm_zone_num] = final_cousin
+        return ltm_zone_num_to_cousin
+
+    @_functools.cached_property
+    def _may_have_25k_lps_box(self) -> bool:
+        latlon_point = self.to_latlon()
+        lps_favoring_constraints = Constraints(
+            extended_ltm=self.constraints.extended_ltm, prefer_lps=True
+        )
+        may_be_in_lps_region = (
+            abs(latlon_point.latitude)
+            > lps_favoring_constraints._min_abs_lps_lat_with_preference
+        )
+        return may_be_in_lps_region
+
+    @_functools.cached_property
+    def _may_have_25k_ltm_box(self) -> bool:
+        latlon_point = self.to_latlon()
+        ltm_favoring_constraints = Constraints(
+            extended_ltm=self.constraints.extended_ltm, prefer_ltm=True
+        )
+        may_be_in_ltm_region = (
+            abs(latlon_point.latitude)
+            < ltm_favoring_constraints._max_abs_ltm_lat_with_preference
+        )
+        return may_be_in_ltm_region
+
+    @_functools.cached_property
+    def _potential_ltm_zone_nums(self) -> tuple[int, ...]:
+        if not self._may_have_25k_ltm_box:
+            return ()
+        latlon_point = self.to_latlon()
+        _, nom_ltm_zone_num = _database._calculate_ltm_zone(
+            latlon_point.longitude
+        )
+        zone_nums = [nom_ltm_zone_num]
+        for sign, attr_name in (
+            (-1, "maximum_longitude"),
+            (+1, "minimum_longitude"),
+        ):
+            for i in range(1, 4):
+                test_ltm_zone_num = nom_ltm_zone_num + (sign * i)
+                if test_ltm_zone_num > 45:
+                    test_ltm_zone_num -= 45  # 46 -> 1, 47 -> 2, etc.
+                elif test_ltm_zone_num < 1:
+                    test_ltm_zone_num += 45  # 0 -> 45, -1 -> 44, etc.
+                # Note: Hemisphere is irrelevant but must be specified.
+                test_ltm_zone = _wkt.LtmZone(
+                    number=test_ltm_zone_num, hemisphere="N"
+                )
+                test_lon = getattr(test_ltm_zone, attr_name)
+                min_dist_to_zone = self._calc_min_dist_to_meridian(
+                    latlon_point, test_lon
+                )
+                if (
+                    min_dist_to_zone
+                    < self.constraints._max_geod_length_of_25km_box_diag
+                ):
+                    zone_nums.append(test_ltm_zone_num)
+                else:
+                    break
+            else:
+                # Note: This error should never be raised. Check is
+                # required to ensure that
+                # `._calc_min_dist_to_meridian()` is guaranteed to be
+                # lower limit.
+                raise TypeError(
+                    "Potential LTM zone count exceeds supported maximum."
+                )
+        zone_nums.sort()
+        return tuple(zone_nums)
+
+    def to_all_acc(
+        self,
+        *,
+        extended_ltm: bool | None = None,
+        precision: float = 1,
+        validate: bool | None = None,
+    ) -> tuple[LpsAccBox | LtmAccBox, ...]:
+        """
+        Get all ACC boxes that include the point `self`.
+
+        For documentation, see `.to_all_lgrs()`.
+
+        Returns
+        -------
+        boxes : tuple of ACC boxes
+            All valid ACC boxes that overlap `self`, subject to `extended_ltm`.
+        """
+        lgrs_box_tup = self.to_all_lgrs(
+            extended_ltm=extended_ltm, precision=precision
+        )
+        acc_box_tup = tuple(
+            lgrs_box.to_acc(validate=validate) for lgrs_box in lgrs_box_tup
+        )
+        return acc_box_tup
+
+    def to_all_lgrs(
+        self,
+        *,
+        extended_ltm: bool | None = None,
+        precision: float = 1,
+        validate: bool | None = None,
+    ) -> tuple[LpsLgrsBox | LtmLgrsBox, ...]:
+        """
+        Get all LGRS boxes that include the point `self`.
+
+        Multiple valid LGRS boxes (`LpsLgrsBox` and `LtmLgrsBox`) may overlap a
+        given point near the following boundaries:
+          (1) The latitudinal LPS/LTM boundary. (See `extended_ltm` argument.)
+          (2) The longitudinal boundary between neighboring LTM zones.
+        When using `.to_lgrs()`, the single box returned is determined by the
+        `constraints` argument. The current method returns all possible boxes
+        for any `constraints`, subject to `extended_ltm`.
+
+        Parameters
+        ----------
+        extended_ltm : bool | None, default=None
+            Whether to use the extended LTM region. If `True`, the nominal
+            poleward extent of the LTM region is 82° N/S instead of 80° N/S.
+            If `None`, `self.constraints.extended_ltm` is used.
+        precision : float, default=1
+            The maximum allowed value of `out.precision`.
+        validate : bool | None
+            Whether to fully validate each box in `boxes`. If `False`, no
+            validation is performed. If not specified (or `None`), whatever
+            validation is deemed necessary (if any) is performed. Note that if
+            any box was created earlier (i.e., is from the cache) and was
+            already validated, it is not re-validated.
+
+        Returns
+        -------
+        boxes : tuple of LGRS boxes
+            All valid LGRS boxes that overlap `self`, subject to
+            `extended_ltm`. The maximum length of `boxes` is 3, and it may
+            contain, at most, 1 `LpsLgrsBox` and 2 `LtmLgrsBox` instances. The
+            `LpsLgrsBox` instance, if present, is ``boxes[0]``.
+
+        Examples
+        --------
+        In the simplest and most common case, only one valid LGRS box overlaps
+        a point.
+
+        >>> point_1 = LatLonPoint(0, 0)
+        >>> nominal_lgrs_box_1 = point_1.to_lgrs()
+        >>> all_lgrs_boxes_1 = point_1.to_all_lgrs()
+        >>> len(all_lgrs_boxes_1)
+        1
+        >>> nominal_lgrs_box_1 == all_lgrs_boxes_1[0]
+        True
+
+        In other cases, as many as 3 valid LGRS boxes may overlap a point.
+
+        >>> point_2 = LatLonPoint(80, 4)
+        >>> nominal_lgrs_box_2 = point_2.to_lgrs()
+        >>> all_lgrs_boxes_2 = point_2.to_all_lgrs()
+        >>> len(all_lgrs_boxes_2)
+        3
+        >>> nominal_lgrs_box_2 in all_lgrs_boxes_2
+        True
+        """
+        # Create generic constraints and corresponding `LatLonPoint`.
+        # Note: This helps ensure reuse of some results in future calls.
+        if extended_ltm is None:
+            extended_ltm = self.constraints.extended_ltm  # *REASSIGNMENT*
+        generic_constraints = Constraints(extended_ltm=extended_ltm)
+        version: LatLonPoint = self.to_latlon(constraints=generic_constraints)
+        del self  # Avoid accidental use.
+
+        # Mine the cache for relevant LGRS cousins.
+        # *REASSIGNMENT*
+        precision = version._resolve_precision(precision, targ_type=LpsLgrsBox)
+        ltm_zone_num_to_lgrs_box = (
+            version._get_ltm_zone_num_to_cached_lgrs_box(
+                extended_ltm=extended_ltm, precision=precision
+            )
+        )
+
+        # Check for any missing cousin and attempt to create it.
+        if (
+            version._may_have_25k_lps_box
+            and None not in ltm_zone_num_to_lgrs_box
+        ):
+            lps_favoring_constraints = Constraints(
+                extended_ltm=extended_ltm, prefer_lps=True
+            )
+            this_version = version.replace(lps_favoring_constraints)
+            crs, new_cousins = lps_favoring_constraints._test_forced_lgrs_box(
+                this_version, target_lps=True
+            )
+            if crs is not None:
+                for new_cousin in new_cousins:
+                    this_version._register_cousin(new_cousin)
+                ltm_zone_num_to_lgrs_box[None] = new_cousins[0].with_precision(
+                    precision
+                )
+        for ltm_zone_num in version._potential_ltm_zone_nums:
+            if ltm_zone_num in ltm_zone_num_to_lgrs_box:
+                continue
+            ltm_zone_favoring_constraints = Constraints(
+                extended_ltm=extended_ltm,
+                preferred_ltm_zone=ltm_zone_num,
+            )
+            this_version = version.replace(ltm_zone_favoring_constraints)
+            crs, new_cousins = (
+                ltm_zone_favoring_constraints._test_forced_lgrs_box(
+                    this_version, ltm_zone_number=ltm_zone_num
+                )
+            )
+            if crs is not None:
+                for new_cousin in new_cousins:
+                    this_version._register_cousin(new_cousin)
+                ltm_zone_num_to_lgrs_box[ltm_zone_num] = new_cousins[
+                    0
+                ].with_precision(precision)
+
+        # Record LPS and LTM results for potential use by a different
+        # `precision`.
+        has_lps = None in ltm_zone_num_to_lgrs_box
+        object.__setattr__(version, "_may_have_25k_lps_box", has_lps)
+        ltm_zone_nums = tuple(
+            ltm_zone_num
+            for ltm_zone_num in ltm_zone_num_to_lgrs_box
+            if ltm_zone_num is not None
+        )
+        object.__setattr__(version, "_potential_ltm_zone_nums", ltm_zone_nums)
+
+        # Create sorted `tuple` of LGRS boxes.
+        scored_lgrs_boxes = [
+            (-1 if ltm_zone_num is None else ltm_zone_num, box)
+            for ltm_zone_num, box in ltm_zone_num_to_lgrs_box.items()
+        ]
+        scored_lgrs_boxes.sort()
+        lgrs_box_tup = tuple(box for score, box in scored_lgrs_boxes)
+
+        # Optionally validate, then return.
+        if validate:
+            for box in lgrs_box_tup:
+                box.validate()
+        return lgrs_box_tup
+
 
 # TODO: Un-skip Example 3 once complete validation is implemented.
 @_dataclasses.dataclass(frozen=True, repr=False)
@@ -1981,7 +2483,7 @@ class LatLonPoint(PointCoordinate):
         The latitude of `new`, in decimal degrees.
     longitude : float
         The longitude of `new`, in decimal degrees.
-    constraints : Constraints
+    constraints : Constraints, default=Constraints()
         The constraints together determine whether the location is assigned
         to the Lunar Polar Stereographic (LPS) or Lunar Transverse Mercator
         (LTM) systems and, in the latter case, to which LTM zone the
@@ -2084,6 +2586,7 @@ class LatLonPoint(PointCoordinate):
     ) -> LpsPoint | LtmPoint:
         # Find projected CRS, which depends on constraints.
         if proj_crs is None:
+            assert constraints is not None
             proj_crs, new_cousins = constraints._get_proj_crs_and_new_cousins(
                 self
             )
@@ -2138,7 +2641,7 @@ class LpsPoint(PointCoordinate):
         The point's easting (meters).
     northing : float
         The point's northing (meters).
-    constraints : Constraints
+    constraints : Constraints, default=Constraints()
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2194,6 +2697,7 @@ class LpsPoint(PointCoordinate):
         self,
         *,
         constraints: Constraints | None = None,
+        precision: int,
         validate: bool | None,
     ) -> LpsLgrsBox:
         if validate or validate is None:
@@ -2240,7 +2744,7 @@ class LpsPoint(PointCoordinate):
             constraints=self.constraints,
             validate=False,
         )
-        return lps_lrgs
+        return lps_lrgs.with_precision(precision)
 
 
 @_dataclasses.dataclass(frozen=True, repr=False)
@@ -2258,7 +2762,7 @@ class LtmPoint(PointCoordinate):
         The point's easting (meters).
     northing : float
         The point's northing (meters).
-    constraints : Constraints
+    constraints : Constraints, default=Constraints()
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -2301,6 +2805,7 @@ class LtmPoint(PointCoordinate):
         self,
         *,
         constraints: Constraints | None = None,
+        precision: int,
         validate: bool | None,
     ) -> LtmLgrsBox:
         if validate or validate is None:
@@ -2331,7 +2836,7 @@ class LtmPoint(PointCoordinate):
             constraints=self.constraints,
             validate=False,
         )
-        return ltm_lgrs
+        return ltm_lgrs.with_precision(precision)
 
 
 # endregion
@@ -2397,7 +2902,14 @@ class BoxCoordinate(BaseCoordinate):
             )
 
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
-    _has_box_origin: bool = True  # Default.
+    @_functools.cached_property
+    def _precision(self) -> int:
+        return self.precision
+
+    # Note: This is only the default value and may be overridden.
+    @_functools.cached_property
+    def _precision_origin(self) -> int:
+        return self._precision
 
     # * UTILITIES. ────────────────────────────────────────────────────
     @staticmethod
@@ -2422,7 +2934,11 @@ class BoxCoordinate(BaseCoordinate):
     # TODO: Test why `LpsLgrsBox.from_string("YZ+")` doesn't work.
     @classmethod
     def from_string(
-        cls, string: str, *, validate: bool = True
+        cls,
+        string: str,
+        *,
+        constraints: Constraints = _default_constraints,
+        validate: bool = True,
     ) -> _typing.Self:
         """
         Create a box coordinate instance from a string.
@@ -2431,6 +2947,8 @@ class BoxCoordinate(BaseCoordinate):
         ----------
         string : str
             The string form of the box coordinate, equivalent to `new.string`.
+        constraints : Constraints, default=Constraints()
+            See `LatLonPoint` documentation.
         validate : bool, default=True
             Whether to validate `new`.
 
@@ -2492,7 +3010,7 @@ class BoxCoordinate(BaseCoordinate):
             for name, value_string in match_dict.items()
             if value_string is not None
         }
-        return cls(**init_kwargs, validate=validate)
+        return cls(**init_kwargs, constraints=constraints, validate=validate)
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     def _get_crs_name(self) -> str:
@@ -2636,12 +3154,32 @@ class BoxCoordinate(BaseCoordinate):
     def set_field_data(
         self, field_data: _collections.abc.Mapping[str, _typing.Any]
     ) -> FieldData:
+        """
+        Set field data for this box.
+
+        Parameters
+        ----------
+        field_data : a mapping with string keys
+            The field data to assign to this box. If neither a `dict` nor
+            a `types.MappingProxyType`, coerced to a `dict`.
+
+        Returns
+        -------
+        processed_data : a mapping with string keys
+            The input `field_data`, coerced if necessary.
+
+        See Also
+        --------
+        .field_data : The stored (or default) field data for this box.
+        """
         if not isinstance(field_data, (dict, _types.MappingProxyType)):
             field_data = dict(field_data)  # *REASSIGNMENT*
         object.__setattr__(self, "_field_data", field_data)
         return field_data
 
     # * PUBLIC DATA AND METHODS. ──────────────────────────────────────
+    precision: int
+
     def contains(
         self,
         other: BaseCoordinate,
@@ -2764,77 +3302,91 @@ class BoxCoordinate(BaseCoordinate):
         """
         return _values.calculate_diagonal_length(self.precision, safe_up=False)
 
-    @_functools.cached_property
-    def precision(self) -> int:
-        """
-        The precision of the coordinate, in meters.
-
-        Strictly, this precision is expressed in grid meters and therefore
-        inherits the distortion of the underlying CRS.
-        """
-        lgrs_easting = self.to_lgrs().easting
-        # Table 11
-        if lgrs_easting is None:
-            return 25_000
-        match len(lgrs_easting):
-            case 5:
-                return 1
-            case 4:
-                return 10
-            case 3:
-                return 100
-            case 2:
-                return 1000
-            case _:
-                self._raise_unexpected()
-
     def with_precision(
-        self, required_precision: float, *, copy: bool = False
+        self,
+        precision: float,
+        *,
+        copy: bool = False,
+        error: bool = True,
+        validate: bool = False,
     ) -> _typing.Self:
         """
         Get a version with the specified precision or better.
 
         The respective lengths of the relevant easting and northing strings
-        will be truncated or appended with zeros, as necessary, so that
-        `out.precision` is no greater than `required_precision`. The final
-        lengths of those strings will be no longer than what is strictly
-        necessary to satisfy `required_precision`.
+        will be truncated so that `out.precision` is no greater than
+        `precision`. The final lengths of those strings will be no longer than
+        what is strictly necessary to satisfy `precision`.
 
         Parameters
         ----------
-        required_precision : float
-            The maximum allowed value of `out.precision`.
+        precision : float
+             The maximum allowed value of `out.precision`.
         copy : bool, default=False
             Whether to ensure that `out` is not `self`. If `False` and `self`
             is suitable, it is returned as `out`.
+        error : bool, default=True
+            Whether to raise an error if `precision` is better (smaller) than
+            `self.precision`. If `False` and such a precision is specified,
+            easting and northing strings will be appended with zeros to satisfy
+            `precision` and `out` will be nested within `self`, sharing its
+            reference (lower-left, grid-southwest) corner. This is rarely what
+            you want.
+        validate : bool, default=False
+            Whether to validate the `our`. The default is `False` because it's
+            assumed that either `self` was validated or intentionally not
+            validated, because its values are known to be valid.
 
         Returns
         -------
         out : typing.Self
-            A version of `self` that satisfies `required_precision`.
-        """
-        # Determine `*LgrsBox` easting and northing character count.
-        if required_precision < 1:
-            raise TypeError(
-                f"`required_precision` must be >= 1, not: {required_precision!r}"
-            )
-        elif 1 <= required_precision < 10:
-            lgrs_char_count = 5
-        elif 10 <= required_precision < 100:
-            lgrs_char_count = 4
-        elif 100 <= required_precision < 1000:
-            lgrs_char_count = 3
-        elif 1000 <= required_precision < 25_000:
-            lgrs_char_count = 2
-        else:
-            lgrs_char_count = 0
+            A version of `self` that satisfies `precision`.
 
-        # Return `self`, if allowed and suitable.
-        self_lgrs_box = self.to_lgrs()
-        if not copy and len(_as_str(self_lgrs_box.easting)) == lgrs_char_count:
-            return self
+        Examples
+        --------
+        >>> acc_box = LatLonPoint(0, 0).to_acc()
+        >>> truncated_acc_box = acc_box.with_precision(10)
+        >>> acc_box.string
+        '23NFF-000-000'
+        >>> truncated_acc_box.string
+        '23NFF-00-00'
+        """
+        # Resolve final precision, optionally raising error if not
+        # truncating.
+        final_precision = self._resolve_precision(
+            precision, targ_type=type(self), error=error
+        )
+
+        # Fetch from cache, if possible and allowed.
+        if not copy:
+            cached = self._get_cached_cousin(
+                type(self),
+                constraints=self.constraints,
+                precision=final_precision,
+                truncation_ok=False,  # Avoid infinite recursion.
+            )
+            if cached is not None:
+                if validate:
+                    cached.validate()
+                return cached
+
+        # Determine `*LgrsBox` easting and northing character count.
+        match final_precision:
+            case 1:
+                lgrs_char_count = 5
+            case 10:
+                lgrs_char_count = 4
+            case 100:
+                lgrs_char_count = 3
+            case 1_000:
+                lgrs_char_count = 2
+            case 25_000:
+                lgrs_char_count = 0
+            case _:
+                self._raise_unexpected()
 
         # Create and return instance with new precision.
+        self_lgrs_box = self.to_lgrs()
         init_kwargs = self_lgrs_box._init_kwargs.copy()
         if lgrs_char_count:
             easting = _as_str(self_lgrs_box.easting)
@@ -2849,9 +3401,14 @@ class BoxCoordinate(BaseCoordinate):
         #  zone. Simplest solution would be to assign `prefer_lps=True`
         #  for any LPS-based coordinate upon truncation, but that might
         #  not be what the user expects.
-        new_lgrs_box = type(self_lgrs_box)(**init_kwargs, validate=False)
-        final = new_lgrs_box.to(type(self))
-        return final
+        new_lgrs_box = type(self_lgrs_box)(**init_kwargs, validate=validate)
+        if not copy:
+            self._register_cousin(new_lgrs_box)
+        if isinstance(self, (LpsAccBox, LtmAccBox)):
+            new_acc_box = new_lgrs_box.to(type(self), validate=validate)
+            return new_acc_box
+        else:
+            return new_lgrs_box
 
 
 class _BaseAccBox(BoxCoordinate):
@@ -2862,6 +3419,8 @@ class _BaseAccBox(BoxCoordinate):
         "condensed",
         "condensed_prefix",
     )
+
+    easting_1k: str | None = None
 
     @_functools.cached_property
     def _easting_int(self) -> int:
@@ -2882,6 +3441,29 @@ class _BaseAccBox(BoxCoordinate):
         prefix = self._condensed_prefix_template.format(**self._init_kwargs)
         return prefix
 
+    @_functools.cached_property
+    def precision(self) -> int:
+        """
+        The precision of the coordinate, in meters.
+
+        Strictly, this precision is expressed in grid meters and therefore
+        inherits the distortion of the underlying CRS.
+        """
+        # Table 18
+        if self.easting_1k is None:
+            return 25_000
+        elif self.easting is None:
+            return 1000
+        match len(self.easting):
+            case 3:
+                return 1
+            case 2:
+                return 10
+            case 1:
+                return 100
+            case _:
+                self._raise_unexpected()
+
 
 class _BaseLgrsBox(BoxCoordinate):
     _extra_field_names = ("precision", "string")
@@ -2893,6 +3475,29 @@ class _BaseLgrsBox(BoxCoordinate):
     @_functools.cached_property
     def _northing_int(self) -> int:
         return self._as_int(self.northing, nom_length=5)
+
+    @_functools.cached_property
+    def precision(self) -> int:
+        """
+        The precision of the coordinate, in meters.
+
+        Strictly, this precision is expressed in grid meters and therefore
+        inherits the distortion of the underlying CRS.
+        """
+        # Table 11
+        if self.easting is None:
+            return 25_000
+        match len(self.easting):
+            case 5:
+                return 1
+            case 4:
+                return 10
+            case 3:
+                return 100
+            case 2:
+                return 1000
+            case _:
+                self._raise_unexpected()
 
 
 # endregion
@@ -2930,7 +3535,7 @@ class LpsAccBox(_BaseAccBox):
         The point's 1-kilometer-grid northing area designator.
     northing : str, optional
         The point's northing (meters).
-    constraints : Constraints
+    constraints : Constraints, default=Constraints()
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -3019,8 +3624,12 @@ class LpsAccBox(_BaseAccBox):
         self,
         *,
         constraints: Constraints | None = None,
+        precision: int,
         validate: bool | None,
     ) -> LpsLgrsBox | LtmLgrsBox:
+        if precision < self.precision:
+            # Note: Raise error.
+            self.with_precision(precision)
         if self.easting_1k is None:
             easting = None
             northing = None
@@ -3046,7 +3655,7 @@ class LpsAccBox(_BaseAccBox):
         lgrs = lgrs_type(
             **init_kwargs, constraints=self.constraints, validate=False
         )
-        return lgrs
+        return lgrs.with_precision(precision)
 
 
 @_dataclasses.dataclass(frozen=True, repr=False)
@@ -3073,7 +3682,7 @@ class LpsLgrsBox(_BaseLgrsBox):
         The point's easting (meters).
     northing : str, optional
         The point's northing (meters).
-    constraints : Constraints
+    constraints : Constraints, default=Constraints()
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -3124,8 +3733,12 @@ class LpsLgrsBox(_BaseLgrsBox):
         self,
         *,
         constraints: Constraints | None = None,
+        precision: int,
         validate: bool | None,
     ) -> LpsAccBox | LtmAccBox:
+        if precision < self.precision:
+            # Note: Raise error.
+            self.with_precision(precision)
         init_kwargs = {
             "longitudinal_band": self.longitudinal_band,
             "easting_area": self.easting_area,
@@ -3149,7 +3762,7 @@ class LpsLgrsBox(_BaseLgrsBox):
         acc = acc_type(
             **init_kwargs, constraints=self.constraints, validate=False
         )
-        return acc
+        return acc.with_precision(precision)
 
     @_cache_new_cousin
     def _to_lps_or_ltm(
@@ -3236,7 +3849,7 @@ class LtmAccBox(_BaseAccBox):
         The point's 1-kilometer-grid northing area designator.
     northing : str, optional
         The point's northing (meters).
-    constraints : Constraints
+    constraints : Constraints, default=Constraints()
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -3350,7 +3963,7 @@ class LtmLgrsBox(_BaseLgrsBox):
         The point's easting (meters).
     northing : str, optional
         The point's northing (meters).
-    constraints : Constraints
+    constraints : Constraints, default=Constraints()
         See `LatLonPoint` documentation.
     validate : bool, default=True
         See `LatLonPoint` documentation.
@@ -3486,17 +4099,83 @@ class LtmLgrsBox(_BaseLgrsBox):
 if __name__ == "__main__":
     _caching.enable_caching(True)
 
-    latlon = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)  # p. 45
-    lps_or_ltm = latlon.to_lps_or_ltm()
-    lgrs_ = lps_or_ltm.to_lgrs()
-    lps_or_ltm.to_lgrs()
-    lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
-
-    extended_ltm = Constraints(extended_ltm=True)
-    test_lps_or_ltm = latlon.to_lps_or_ltm(extended_ltm)
-    assert lps_or_ltm is not test_lps_or_ltm
-    assert lps_or_ltm.constraints == Constraints()
-    assert test_lps_or_ltm.constraints == extended_ltm
+    # latlon = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)  # p. 45
+    # lps_or_ltm = latlon.to_lps_or_ltm()
+    # lgrs_ = lps_or_ltm.to_lgrs()
+    # lps_or_ltm.to_lgrs()
+    # lgrs_.is_equal_to(LtmLgrsBox.from_string("35JFJ1271112229"), error=True)
+    #
+    # extended_ltm = Constraints(extended_ltm=True)
+    # test_lps_or_ltm = latlon.to_lps_or_ltm(constraints=extended_ltm)
+    # assert lps_or_ltm is not test_lps_or_ltm
+    # assert lps_or_ltm.constraints == Constraints()
+    # assert test_lps_or_ltm.constraints == extended_ltm
+    #
+    # # lgrs_.to_latlon().is_equal_to(latlon, error=True)
+    #
+    # latlon1 = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
+    # lps_or_ltm1 = latlon1.to_lps_or_ltm()
+    # lgrs1 = lps_or_ltm1.to_lgrs()
+    # assert isinstance(lgrs1, LpsLgrsBox)
+    #
+    # extended_ltm = Constraints(extended_ltm=True)
+    # latlon2 = latlon1.replace(constraints=extended_ltm)
+    # lps_or_ltm2 = latlon2.to_lps_or_ltm()
+    # lgrs2 = lps_or_ltm2.to_lgrs()
+    # assert isinstance(lgrs2, LtmLgrsBox)
+    #
+    # latlon4 = LatLonPoint(
+    #     latitude=-86.38231380366628, longitude=-6.004331982958013
+    # )  # p. 53, 64
+    # lps_or_ltm4 = latlon4.to_lps_or_ltm()
+    # lgrs4 = lps_or_ltm4.to_lgrs()
+    # assert lgrs4.is_equal_to(
+    #     LpsLgrsBox.from_string("AZS1359008479"), error=True
+    # )
+    #
+    # lgrs4.to_latlon()
+    #
+    # latlon5 = LatLonPoint(latitude=-30.13048481, longitude=96.48515138)
+    # latlon5.to_latlon()
+    #
+    # # lps = LpsPoint(hemisphere="S", easting=197000, northing=197000)
+    # # extreme_latlon = lps.to_latlon()
+    #
+    # lps_acc = lgrs1.to_acc()
+    # ltm_acc = lgrs2.to_acc()
+    #
+    # lps_acc.with_precision(100_000).to_latlon()
+    #
+    # lgrs_.distance_to(lgrs1)
+    #
+    # latlon_point = LatLonPoint(90, 0)
+    # latlon_point.to_acc().validate()
+    #
+    # x = LatLonPoint(79.99, 1, constraints=Constraints(prefer_lps=True))
+    # x.to_lgrs().corners_latlon
+    # x.to_lps_or_ltm()
+    #
+    # y = LatLonPoint(78.81, 1, constraints=Constraints(prefer_lps=True))
+    # y.to_lps_or_ltm()
+    #
+    # latlon_point = LatLonPoint(latitude=-81, longitude=0)
+    # lps_point = latlon_point.to_lps_or_ltm()
+    # twin_lps_point = LpsPoint(*lps_point, constraints=latlon_point.constraints)
+    #
+    # LpsLgrsBox._get_simple_pattern()
+    #
+    # # LtmPoint(23, "N", 400_000, 1_000_000)  # Should error.
+    #
+    # # LpsLgrsBox(0, 1, 2)  # Wrong types.
+    # z = LtmLgrsBox.from_string("12SAM1234512345", validate=False).to_latlon()
+    # z.to_lgrs(constraints=Constraints(preferred_ltm_zone=12))
+    # # LtmLgrsBox.from_string("12SAM1234512345")  # Should error.
+    # LpsLgrsBox.from_string("YZ+", constraints=Constraints(prefer_lps=True))
+    #
+    # p = LatLonPoint(-82, 4, constraints=Constraints(extended_ltm=True))
+    # xx = p.to_all_lgrs()
+    # yy = p.to_all_lgrs()
+    # assert xx == yy
 
     # lgrs_.to_latlon().is_equal_to(latlon, error=True)
 
