@@ -356,11 +356,16 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         return tup
 
     # * INSTANTIATION. ────────────────────────────────────────────────
-    # Note: `beartype` errors if using `typing.Self` as return hint,
-    # perhaps because base type is `tuple`.
     @classmethod
     @_caching._optionally_cache
-    def _from_internal_name(cls, internal_name: str) -> LunarCrsInfo:
+    def _from_internal_name(cls, internal_name: str) -> _typing.Self:
+        # Note: "Internal" names are augmented forms of the public
+        # "short" names that include 0-2 suffixed asterisks. A single
+        # asterisk indicates extended LTM (even for a polar CRS
+        # truncated by that extended region, such as "N*") whereas a
+        # double asterisk indicates a "global" (hemispheric) CRS. This
+        # shorthand is used internally only, for convenience.
+
         # Parse `internal_name`.
         internal_name_parsed = _parse_lunar_crs_internal_name(internal_name)
         zone_num, hemi, suffix = internal_name_parsed
@@ -427,6 +432,46 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         info._internal_name = internal_name
         info._internal_name_parsed = internal_name_parsed
         return info
+
+    @classmethod
+    @_caching._optionally_cache
+    def from_crs(cls, crs: _srs.CRS) -> _typing.Self:
+        """
+        Create a `LunarCrsInfo` describing a `CRS`.
+
+        `LunarCrsInfo` instances provide useful information about a `CRS`
+        via attributes and also support meaningful sort.
+
+        Parameters
+        ----------
+        crs : lgrs.srs.srs.CRS
+            The LGRS CRS instance to describe.
+
+        Returns
+        -------
+        info : LunarCrsInfo
+            The `LunarCrsInfo` instance that describes `crs`.
+        """
+        if crs.area_of_use is None:
+            raise TypeError(f"`crs` is not supported: {crs.name!r}")
+        lat_range = crs.area_of_use.north - crs.area_of_use.south
+        if crs.ltm_zone is None:
+            short_name = crs.lps_hemisphere
+            ltm_range = 90 - lat_range
+        else:
+            short_name = crs.ltm_zone
+            ltm_range = lat_range
+        match ltm_range:
+            case _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE:
+                internal_name = short_name
+            case _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE:
+                internal_name = f"{short_name}*"
+            case 90 | 0:
+                internal_name = f"{short_name}**"
+            case _:
+                raise TypeError(f"`crs` is not recognized: {crs!r}")
+        crs_info = cls._from_internal_name(internal_name)
+        return crs_info
 
     # * PUBLIC DATA ATTRIBUTES. ───────────────────────────────────────
     @_functools.cached_property
