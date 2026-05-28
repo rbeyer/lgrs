@@ -458,7 +458,7 @@ def make_box_grid(
     precision = _coords.BaseCoordinate._resolve_precision_static(precision)
     if isinstance(bounds, str):
         exclusive_crs: _srs.CRS | None = _srs.make_lunar_crs(
-            bounds, extended_ltm=True
+            bounds, extended_ltm=extended_ltm
         )
         geo_bounds = GeographicBounds.from_other(exclusive_crs.area_of_use)
     else:
