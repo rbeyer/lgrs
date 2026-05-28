@@ -216,7 +216,7 @@ def write_grid(
     extended_ltm : bool, default=False
         Whether to use the extended LTM region, which extends to 82° N/S
         instead of 80° N/S.
-    mode : "x", "w", or "a"
+    mode : "x", "w", or "a", default="x"
         The file write mode. ``"x"`` requires that the file to which
         `out_path` points (after resolution of any ``"{}"``) not preexist
         the call. ``"w"`` will create that file, overwriting if it preexists.
