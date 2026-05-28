@@ -319,6 +319,20 @@ def _construct_latlon_grid(
     max_lat = _clip(bounds.max_latitude + buff_lat, -90, +90)
     lat_range = max_lat - min_lat
 
+    # TODO: For large grid generation, most time is spent in converting
+    #  each `LatLonPoint` to a box. This could be expedited by compiling
+    #  lats and lons in arrays, bulk-transforming via `pyproj` (after
+    #  carefully partitioning by CRS), and then directly instantiating
+    #  LPS/LTM points with `validate=False`. Could use a public utility
+    #  in a `util` module that is `pyproj.Transformer`-like, accepting
+    #  either a float or array for each of a `lat` and `lon` argument,
+    #  optimized for those values already being presorted, with an
+    #  option like `latlon: bool | None = False` that determines whether
+    #  `LatLonPoint`s are returned. For `True` and `False` (if caching),
+    #  both `LatLonPoint` and `Lps/LtmPoint` would still be created and
+    #  registered as a cousin to the returned instance. For `None` (and
+    #  if not caching), would merely generate the returned instance.
+
     # Determine latitude coordinates.
     # Note: Adopting this `delta` max spacing between grid points
     # ensures that the greatest distance between the nearest points in
