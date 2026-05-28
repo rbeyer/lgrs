@@ -528,6 +528,8 @@ class Constraints(metaclass=_caching._MetaMultiton):
             )
 
         # Insofar as possible, force creation of a reference 25-km box.
+        # Note: Make copy, so that potentially invalid products are kept
+        # out of the cache of `point`.
         point_copy: LatLonPoint = point.copy()
         result_on_failure = (None, ())
         try:
