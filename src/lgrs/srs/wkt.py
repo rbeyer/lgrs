@@ -246,7 +246,10 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
 
     # * UTILITIES. ────────────────────────────────────────────────────
     def _get_bbox_string(self) -> str:
-        return f"BBOX[{self.minimum_latitude},{self.minimum_longitude},{self.maximum_latitude},{self.maximum_longitude}]"  # noqa: E501
+        return (
+            f"BBOX[{self.minimum_latitude},{self.minimum_longitude},"
+            f"{self.maximum_latitude},{self.maximum_longitude}]"
+        )
 
     def _validate_datum_name(self) -> None:
         if self.datum_name != DATUM_NAME:
