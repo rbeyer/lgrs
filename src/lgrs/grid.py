@@ -517,7 +517,6 @@ def make_box_grid(
                 if corner in geo_bounds:
                     box_list.append(box)
                     break
-        box_list.sort(key=lambda b: b.string)
 
     # Filter any boxes from outside the targeted CRS.
     else:
