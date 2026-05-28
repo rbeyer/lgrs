@@ -33,6 +33,7 @@ import rasterio as _rasterio
 
 # Internal.
 import lgrs.coords as _coords
+import lgrs.database as _database
 import lgrs.srs.srs as _srs
 import lgrs.values as _values
 
@@ -553,10 +554,12 @@ def make_gdfs(
     >>> isinstance(gdfs[0], geopandas.GeoDataFrame)
     True
     """
+
     # Organize boxes by CRS.
-    crs_to_boxes = _collections.defaultdict(list)
+    crs_info_to_boxes = _collections.defaultdict(list)
+    make_info = _database.LunarCrsInfo.from_crs
     for box in boxes:
-        crs_to_boxes[box.crs_nominal].append(box)
+        crs_info_to_boxes[make_info(box.crs_nominal)].append(box)
 
     # Identify all field names.
     field_names_view_parent = {}
@@ -571,13 +574,17 @@ def make_gdfs(
 
     # Create one GDF per CRS.
     gdfs = []
-    for crs, boxes in crs_to_boxes.items():
+    sorted_crs_infos = sorted(
+        crs_info_to_boxes, key=_database.LunarCrsInfo.sorter
+    )
+    for crs_info in sorted_crs_infos:
+        boxes = crs_info_to_boxes[crs_info]
         data = {field_name: [] for field_name in field_names_view}
         for box in boxes:
             for field_name in field_names_view:
                 data[field_name].append(box.field_data.get(field_name))
         data["geometry"] = [box.geometry for box in boxes]
-        gdf = GeoDataFrame(data, crs=crs)
+        gdf = GeoDataFrame(data, crs=crs_info.get_crs())
         gdfs.append(gdf)
 
         # Construct and attach name hint.
@@ -595,10 +602,10 @@ def make_gdfs(
         else:
             prec_str = f"{box.precision // 1000}km"
         name_hint_parts.append(prec_str)
-        if crs.lps_hemisphere is not None:
-            name_hint_parts.extend(("LPS", crs.lps_hemisphere))
+        if crs_info.is_lps:
+            name_hint_parts.extend(("LPS", crs_info.lps_hemisphere))
         else:
-            name_hint_parts.extend(("LTM", crs.ltm_zone))
+            name_hint_parts.extend(("LTM", crs_info.ltm_zone))
         name_hint_parts.extend(("polygon", "grid"))
         name_hint = "_".join(name_hint_parts)
         gdf.name_hint = name_hint
