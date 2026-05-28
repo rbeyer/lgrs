@@ -46,7 +46,7 @@ import lgrs.srs.wkt as _wkt
 type _FloatIterable = _collections.abc.Iterable[float]
 
 _lunar_crs_internal_name_pattern = _re.compile(
-    "^(?P<num>[0-9]{2})?(?P<hemi>[NS])(?P<suffix>[*]*)$"
+    "^(?P<num>[0-9]{1,2})?(?P<hemi>[NS])(?P<suffix>[*]*)$"
 )
 
 
@@ -159,8 +159,8 @@ def _get_all_lunar_crs_internal_names(
         if global_lps:
             ltm_tuple = ()
         else:
-            north_iter = (f"{i:02}N{suffix}" for i in range(1, 46))
-            south_iter = (f"{i:02}S{suffix}" for i in range(1, 46))
+            north_iter = (f"{i}N{suffix}" for i in range(1, 46))
+            south_iter = (f"{i}S{suffix}" for i in range(1, 46))
             if south is None:
                 final_iter = _itertools.chain(north_iter, south_iter)
             elif south:
@@ -224,7 +224,7 @@ def _get_lunar_crs_internal_names(
                     zone_int = 45  # *REASSIGNMENT*
                 else:
                     zone_int -= 1  # *REASSIGNMENT*
-            internal_name = f"{zone_int:02}{hemi}"
+            internal_name = f"{zone_int}{hemi}"
         else:
             internal_name = hemi
         if global_lps or global_ltm:
