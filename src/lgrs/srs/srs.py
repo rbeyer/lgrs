@@ -164,14 +164,7 @@ class _CrsParameters:
             global_ltm=self.global_ltm,
             datum_name=self.ellps,
         )
-        crs = CRS.from_wkt(zone_instance.wkt)
-        if self.proj == "LPS":
-            crs.lps_hemisphere = hemisphere
-            crs.ltm_zone = None
-        else:
-            crs.lps_hemisphere = None
-            # Note: Parallels `CRS.utm_zone`.
-            crs.ltm_zone = f"{self.zone}{hemisphere}"
+        crs = CRS(zone_instance.wkt)
         return crs
 
 
@@ -198,6 +191,18 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
 
     lps_hemisphere: _typing.Literal["N", "S", None]
     ltm_zone: str | None  # Parallels `pyproj.CRS.utm_zone`.
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        if self.is_geographic:
+            self.lps_hemisphere = None
+            self.ltm_zone = None
+        elif "LTM" in self.name:
+            self.lps_hemisphere = None
+            self.ltm_zone = self.name.rsplit(" ", 1)[-1]
+        else:
+            self.lps_hemisphere = "N" if "North" in self.name else "S"
+            self.ltm_zone = None
 
 
 # Note: Only identical calls are cached here. Compare:
