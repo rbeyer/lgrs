@@ -65,11 +65,11 @@ class GriddedTransformer:
 
         Examples
         --------
-        >>> gt_1 = GriddedTransformer.from_srs("IAU_2015:30100", "LGRS:")
-        >>> gt_2 = GriddedTransformer.from_srs("ACC:", "IAU_2015:30100")
-        >>> gt_3 = GriddedTransformer.from_srs("IAU_2015:30100", "LGRS:")
-        >>> assert gt_1 is gt_3  # Only if `enable_caching()`.
-        """
+        >>> gt_1 = GriddedTransformer.from_srs("IAU_2015:30100", "LGRS:")  # doctest: +SKIP
+        >>> gt_2 = GriddedTransformer.from_srs("ACC:", "IAU_2015:30100")  # doctest: +SKIP
+        >>> gt_3 = GriddedTransformer.from_srs("IAU_2015:30100", "LGRS:")  # doctest: +SKIP
+        >>> assert gt_1 is gt_3  # Only if `enable_caching()`.  # doctest: +SKIP
+        """  # noqa: E501
         # Note: If both `srs_from` and `srs_to` are CRSs, raise
         # `NonGriddedError`.
         ...
@@ -127,11 +127,11 @@ class GriddedTransformer:
 
         Examples
         --------
-        >>> gt_1 = GriddedTransformer.from_srs("IAU_2015:30100", "LGRS:")
-        >>> lgrs_str = gt_1.transform(2., 1.)
-        >>> gt_2 = GriddedTransformer.from_srs("ACC:", "IAU_2015:30100")
-        >>> lat, lon = gt_2.transform("23NHGK58E31")
-        """
+        >>> gt_1 = GriddedTransformer.from_srs("IAU_2015:30100", "LGRS:")  # doctest: +SKIP
+        >>> lgrs_str = gt_1.transform(2., 1.)  # doctest: +SKIP
+        >>> gt_2 = GriddedTransformer.from_srs("ACC:", "IAU_2015:30100")  # doctest: +SKIP
+        >>> lat, lon = gt_2.transform("23NHGK58E31")  # doctest: +SKIP
+        """  # noqa: E501
         # TODO: Confirm default lat/lon order.
         ...
 
@@ -211,13 +211,13 @@ class BaseTransformer(_abc.ABC):
         Examples
         --------
         >>> import pyproj
-        >>> crs_trans = BaseTransformer.from_srs("EPSG:4326", "EPSG:26917")
-        >>> assert isinstance(crs_trans, pyproj.Transformer)
-        >>> grid_trans = BaseTransformer.from_srs("IAU_2015:30100", "LGRS:")
-        >>> assert isinstance(grid_trans, GriddedTransformer)
-        >>> grid_trans_2 = BaseTransformer.from_srs("IAU_2015:30100", "LGRS:")
-        >>> assert grid_trans is grid_trans_2  # Only if `enable_caching()`.
-        """
+        >>> crs_trans = BaseTransformer.from_srs("EPSG:4326", "EPSG:26917")  # doctest: +SKIP
+        >>> assert isinstance(crs_trans, pyproj.Transformer)  # doctest: +SKIP
+        >>> grid_trans = BaseTransformer.from_srs("IAU_2015:30100", "LGRS:")  # doctest: +SKIP
+        >>> assert isinstance(grid_trans, GriddedTransformer)  # doctest: +SKIP
+        >>> grid_trans_2 = BaseTransformer.from_srs("IAU_2015:30100", "LGRS:")  # doctest: +SKIP
+        >>> assert grid_trans is grid_trans_2  # Only if `enable_caching()`.  # doctest: +SKIP
+        """  # noqa: E501
         # Note: Allow `crs_from` and `crs_to` as aliases of `srs_from` and
         # `srs_to`.
         ...

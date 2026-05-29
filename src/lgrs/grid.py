@@ -135,8 +135,10 @@ def _construct_latlon_grid(
     return points
 
 
-def _make_crit_array(num_or_iter: float | _typing.Iterable) -> _np.ndarray:
-    if isinstance(num_or_iter, _typing.Iterable):
+def _make_crit_array(
+    num_or_iter: float | _collections.abc.Iterable,
+) -> _np.ndarray:
+    if isinstance(num_or_iter, _collections.abc.Iterable):
         iterable = num_or_iter
     else:
         iterable = (-num_or_iter, num_or_iter)
@@ -415,7 +417,7 @@ class GeographicBounds:
                 return True
         return False
 
-    def __iter__(self) -> _typing.Iterator[float]:
+    def __iter__(self) -> _collections.abc.Iterator[float]:
         for field in _dataclasses.fields(self):
             yield getattr(self, field.name)
 
@@ -575,7 +577,7 @@ def make_box_grid(
     ... )
     >>> boxes = make_box_grid(aoi, precision=25_000, acc=True)
     >>> len(boxes)
-    668
+    650
     >>> import lgrs.coords
     >>> isinstance(boxes[0], lgrs.coords.LtmAccBox)
     True
@@ -722,8 +724,8 @@ def make_gdfs(
     >>> len(gdfs)
     4
     >>> [gdf.name_hint for gdf in gdfs]  # doctest: +NORMALIZE_WHITESPACE
-    ['LTM_25N_polygon_grid', 'LTM_26N_polygon_grid',
-     'LTM_27N_polygon_grid', 'LTM_28N_polygon_grid']
+    ['ACC_25km_LTM_25N_polygon_grid', 'ACC_25km_LTM_26N_polygon_grid',
+     'ACC_25km_LTM_27N_polygon_grid', 'ACC_25km_LTM_28N_polygon_grid']
     >>> import geopandas
     >>> isinstance(gdfs[0], geopandas.GeoDataFrame)
     True

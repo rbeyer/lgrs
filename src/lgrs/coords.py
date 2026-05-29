@@ -48,6 +48,7 @@ import typing as _typing
 import weakref as _weakref
 
 # External.
+import beartype as _beartype
 from beartype._check.forward.reference.fwdrefmeta import (
     BeartypeForwardRefMeta as _BeartypeForwardRefMeta,
 )
@@ -77,6 +78,11 @@ type FieldData = dict[str, _typing.Any] | _types.MappingProxyType[
 ###############################################################################
 # region> NAMED TUPLES
 ###############################################################################
+# Note: `beartype` seems to have issues with type hints on named tuples,
+# so disable it.
+@_beartype.beartype(
+    conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0)
+)
 class GeographicCorners(_typing.NamedTuple):
     lower_left: LatLonPoint
     lower_right: LatLonPoint
@@ -84,6 +90,11 @@ class GeographicCorners(_typing.NamedTuple):
     upper_left: LatLonPoint
 
 
+# Note: `beartype` seems to have issues with type hints on named tuples,
+# so disable it.
+@_beartype.beartype(
+    conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0)
+)
 class ProjectedCorners(_typing.NamedTuple):
     lower_left: LpsPoint | LtmPoint
     lower_right: LpsPoint | LtmPoint
@@ -91,11 +102,16 @@ class ProjectedCorners(_typing.NamedTuple):
     upper_left: LpsPoint | LtmPoint
 
 
+# Note: `beartype` seems to have issues with type hints on named tuples,
+# so disable it.
+@_beartype.beartype(
+    conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0)
+)
 class ProjectedBounds(_typing.NamedTuple):
-    min_easting: _builtins.float | _builtins.int
-    min_northing: _builtins.float | _builtins.int
-    max_easting: _builtins.float | _builtins.int
-    max_northing: _builtins.float | _builtins.int
+    min_easting: float
+    min_northing: float
+    max_easting: float
+    max_northing: float
 
 
 # endregion
@@ -830,7 +846,7 @@ class BaseCoordinate(_BaseCoordinate):
         *,
         constraints: Constraints,
         intended_precision: int,
-    ) -> _typing.Hashable:
+    ) -> _collections.abc.Hashable:
         return (constraints, max(self._precision_origin, intended_precision))
 
     def _register_cousin(self, cousin: BaseCoordinate) -> None:
@@ -1998,7 +2014,7 @@ class BaseCoordinate(_BaseCoordinate):
         return lps_or_ltm_point
 
     # * UTILITIES. ────────────────────────────────────────────────────
-    def _iter_value_strings(self) -> _typing.Iterator[str]:
+    def _iter_value_strings(self) -> _collections.abc.Iterator[str]:
         for value in self:
             match value:
                 case str():
@@ -2855,17 +2871,17 @@ class BoxCoordinate(BaseCoordinate):
         When called the `BoxCoordinate` base class, an instance of the
         appropriate type is returned.
 
-        >>> box_1 = BoxCoordinate.from_string("12SAM1234512345")
+        >>> box_1 = BoxCoordinate.from_string("42SAM2468910101")
         >>> isinstance(box_1, LtmLgrsBox)
         True
 
         When called from any other class (or instance), an instance of the same
         type is returned, if possible, or an error is raised.
 
-        >>> box_2 = LtmLgrsBox.from_string("12SAM1234512345")
+        >>> box_2 = LtmLgrsBox.from_string("42SAM2468910101")
         >>> box_1 == box_2
         True
-        >>> box_3 = LpsLgrsBox.from_string("12SAM1234512345")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> box_3 = LpsLgrsBox.from_string("42SAM2468910101")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
           ...
         lgrs.exceptions.MalformedCoordinate:
@@ -3869,14 +3885,14 @@ class LtmLgrsBox(_BaseLgrsBox):
     Examples
     --------
     >>> box_1 = LtmLgrsBox(
-    ...     longitudinal_band=12, latitudinal_band='S',
+    ...     longitudinal_band=42, latitudinal_band='S',
     ...     easting_area='A', northing_area='M',
-    ...     easting='12345', northing='12345'
+    ...     easting='24689', northing='10101'
     ... )
 
     You may find it simpler to instantiate from a string.
 
-    >>> box_2 = LtmLgrsBox.from_string("12SAM1234512345")
+    >>> box_2 = LtmLgrsBox.from_string("42SAM2468910101")
     >>> box_1 == box_2
     True
     """
