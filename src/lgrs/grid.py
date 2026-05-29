@@ -525,7 +525,7 @@ def make_box_grid(
         Additionally, the name of a CRS (as supported by
         `lgrs.make_lunar_crs()`) may be used to generate all boxes for that
         CRS. Examples include "S" for the LPS south polar region and "23N"
-        for LTM zone 23 in the the northern hemisphere.
+        for LTM zone 23 in the Northern Hemisphere.
     precision : float
         The required precision of the grid. If not a supported precision,
         the actual precision is rounded down to a better precision. All
