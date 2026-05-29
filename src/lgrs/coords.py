@@ -40,20 +40,20 @@ import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
 import itertools as _itertools
-from math import floor as _floor
-import numpy as _np
 import types as _types
 import typing as _typing
 import weakref as _weakref
+from math import floor as _floor
 
 # External.
 import beartype as _beartype
-from beartype._check.forward.reference.fwdrefmeta import (
-    BeartypeForwardRefMeta as _BeartypeForwardRefMeta,
-)
+import numpy as _np
 import pyproj as _pyproj
 import regex as _regex
 import shapely as _shapely
+from beartype._check.forward.reference.fwdrefmeta import (
+    BeartypeForwardRefMeta as _BeartypeForwardRefMeta,
+)
 
 # Internal.
 import lgrs.caching as _caching
