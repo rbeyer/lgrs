@@ -50,8 +50,8 @@ _lunar_crs_internal_name_pattern = _re.compile(
 )
 
 
-# Note: For unknown reason, `beartype` cannot resolve `int | None` and
-# raises an exception. Therefore, disable `beartype` for this class.
+# Note: `beartype` seems to have issues with type hints on named tuples,
+# so disable it.
 @_beartype.beartype(
     conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0)
 )
@@ -759,7 +759,7 @@ def query_lunar_crs_info(
         lps_and_ltm_kwargs_list.append({"global_lps": True})
     if global_ltm:
         lps_and_ltm_kwargs_list.append({"global_ltm": True})
-    if inclusive_bounds:
+    if inclusive_bounds and not (global_lps or global_ltm):
         prefer_ltms = (False, True)
         prefer_south_ltms = (False, True)
         prefer_west_ltms = (False, True)
