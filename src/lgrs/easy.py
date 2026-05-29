@@ -1,4 +1,4 @@
-"""High-level convenience functions for coordinate transformations."""
+"""High-level convenience functions."""
 
 # Copyright © 2026, Ethan I. Schaefer (eschaefer@seti.org)
 #
