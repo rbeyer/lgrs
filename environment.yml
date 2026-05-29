@@ -11,7 +11,10 @@
 dependencies:
   - python>=3.13
   - beartype
+  - geopandas
   - numpy
   - pyproj
+  - rasterio
   - regex
+  - shapely
   - typer
