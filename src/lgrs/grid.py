@@ -18,6 +18,7 @@
 # region> IMPORT
 ###############################################################################
 # Standard.
+from __future__ import annotations
 import collections as _collections
 import dataclasses as _dataclasses
 import math as _math
@@ -32,10 +33,140 @@ from pyproj import aoi as _pyproj_aoi
 import rasterio as _rasterio
 
 # Internal.
+import lgrs.caching as _caching
 import lgrs.coords as _coords
 import lgrs.database as _database
 import lgrs.srs.srs as _srs
+import lgrs.srs.wkt as _wkt
 import lgrs.values as _values
+
+
+# endregion
+###############################################################################
+# region> UTILITIES
+###############################################################################
+def _calculate_safe_count(span: float, delta: float) -> int:
+    if span == 0:
+        return 1
+    # Note: "+ 2" accounts for first and last point.
+    count = _math.floor(_values.SAFETY_FACTOR * (span / delta)) + 2
+    return count
+
+
+def _clip(value: float, minimum: float, maximum: float) -> float:
+    if value < minimum:
+        return minimum
+    if value > maximum:
+        return maximum
+    return value
+
+
+def _construct_latlon_grid(
+    bounds: GeographicBounds,
+    precision: int,
+    constraints: _coords.Constraints,
+    *,
+    min_buffer: float = 0.0,
+) -> list[_coords.LatLonPoint]:
+    # Find latitude range for (buffered) grid.
+    # Note: Must buffer around bounds to ensure that even a grid cell
+    # for which a small corner extends into bounds is included.
+    buff_length = max((_values.SAFETY_FACTOR * (0.5 * precision)), min_buffer)
+    buff_lat = buff_length / _values.M_PER_DEGREE_LATITUDE
+    min_lat = _clip(bounds.min_latitude - buff_lat, -90, +90)
+    max_lat = _clip(bounds.max_latitude + buff_lat, -90, +90)
+    lat_range = max_lat - min_lat
+
+    # TODO: For large grid generation, most time is spent in converting
+    #  each `LatLonPoint` to a box. This could be expedited by compiling
+    #  lats and lons in arrays, bulk-transforming via `pyproj` (after
+    #  carefully partitioning by CRS), and then directly instantiating
+    #  LPS/LTM points with `validate=False`. Could use a public utility
+    #  in a `util` module that is `pyproj.Transformer`-like, accepting
+    #  either a float or array for each of a `lat` and `lon` argument,
+    #  optimized for those values already being presorted, with an
+    #  option like `latlon: bool | None = False` that determines whether
+    #  `LatLonPoint`s are returned. For `True` and `False` (if caching),
+    #  both `LatLonPoint` and `Lps/LtmPoint` would still be created and
+    #  registered as a cousin to the returned instance. For `None` (and
+    #  if not caching), would merely generate the returned instance.
+
+    # Determine nominal latitude coordinates.
+    # Note: Adopting this `delta` max spacing between grid points
+    # ensures that the greatest distance between the nearest points in
+    # adjacent rows is `precision`.
+    delta = precision / _math.sqrt(2)
+    grid_height = lat_range * _values.M_PER_DEGREE_LATITUDE
+    row_count = _calculate_safe_count(grid_height, delta)
+    lats = _np.linspace(min_lat, max_lat, row_count).tolist()
+    crit_lats = bounds._get_critical_latitudes(constraints)
+
+    # Determine critical latitude and longitude coordinates.
+    if crit_lats is not None:
+        lats.extend(crit_lats)
+    crit_lons = bounds._get_critical_longitudes(constraints)
+
+    # For each sampled latitude...
+    points = []
+    for lat in lats:
+
+        # Find longitude range for (buffered) grid.
+        m_per_deg_lon = _values.calculate_m_per_degree_longitude(lat)
+        buff_lon = buff_length / m_per_deg_lon
+        min_lon = bounds.min_longitude - buff_lon
+        max_lon = bounds.max_longitude + buff_lon
+        lon_range = max_lon - min_lon
+        if lon_range > 360:
+            min_lon = -180  # *REASSIGNMENT*
+            max_lon = 180  # *REASSIGNMENT*
+            lon_range = 360  # *REASSIGNMENT*
+
+        # Determine longitude coordinates.
+        row_width = lon_range * m_per_deg_lon
+        col_count = _calculate_safe_count(row_width, delta)
+        lons = _np.linspace(min_lon, max_lon, col_count).tolist()
+        if crit_lons is not None:
+            lons.extend(crit_lons)
+
+        # Create points.
+        points.extend(_coords.LatLonPoint(lat, lon) for lon in lons)
+
+    # Return points.
+    return points
+
+
+def _make_crit_array(num_or_iter: float | _typing.Iterable) -> _np.ndarray:
+    if isinstance(num_or_iter, _typing.Iterable):
+        iterable = num_or_iter
+    else:
+        iterable = (-num_or_iter, num_or_iter)
+    a = _np.fromiter(iterable, dtype=_np.float64)
+    return a
+
+
+def _resolve_file_path_and_layer_name_and_existence(
+    path: _pathlib.Path | str, *, test_exists: bool = True
+) -> tuple[_pathlib.Path, str | None, bool | None]:
+    if not isinstance(path, _pathlib.Path):
+        path = _pathlib.Path(path)  # *REASSIGNMENT*
+    if path.parts[0] == "~":
+        path = path.expanduser()  # *REASSIGNMENT*
+    try:
+        path_name, layer_name = path.name.split("|layername=")
+    except ValueError:
+        file_path = path
+        layer_name = None
+    else:
+        file_path = path.with_name(path_name)
+    if not test_exists:
+        exists = None
+    elif not file_path.exists():
+        exists = False
+    elif layer_name is None:
+        exists = True
+    else:
+        exists = layer_name in _geopandas.list_layers(path)["name"].values
+    return (file_path, layer_name, exists)
 
 
 # endregion
@@ -109,6 +240,7 @@ class GeographicBounds:
     max_longitude: float
     max_latitude: float
 
+    # * INITIALIZATION AND INSTANTIATION. ─────────────────────────────
     def __post_init__(self):
         for field in _dataclasses.fields(self):
             val = getattr(self, field.name)
@@ -139,16 +271,6 @@ class GeographicBounds:
                 f"`max_latitude` ({self.max_latitude}) must be greater than "
                 f"`min_latitude` ({self.min_latitude})."
             )
-
-    def __contains__(self, point: _coords.LatLonPoint) -> bool:
-        if self.min_longitude <= point.longitude <= self.max_longitude:
-            if self.min_latitude <= point.latitude <= self.max_latitude:
-                return True
-        return False
-
-    def __iter__(self) -> _typing.Iterator[float]:
-        for field in _dataclasses.fields(self):
-            yield getattr(self, field.name)
 
     @classmethod
     def from_north_pole_to(cls, min_latitude: float) -> _typing.Self:
@@ -286,108 +408,88 @@ class GeographicBounds:
         """
         return GeographicBounds(-180, -90, 180, max_latitude)
 
+    # * BASIC BEHAVIOR. ───────────────────────────────────────────────
+    def __contains__(self, point: _coords.LatLonPoint) -> bool:
+        if self.min_longitude <= point.longitude <= self.max_longitude:
+            if self.min_latitude <= point.latitude <= self.max_latitude:
+                return True
+        return False
 
-# endregion
-###############################################################################
-# region> UTILITIES
-###############################################################################
-def _calculate_safe_count(span: float, delta: float) -> int:
-    if span == 0:
-        return 1
-    # Note: "+ 2" accounts for first and last point.
-    count = _math.floor(_values.SAFETY_FACTOR * (span / delta)) + 2
-    return count
+    def __iter__(self) -> _typing.Iterator[float]:
+        for field in _dataclasses.fields(self):
+            yield getattr(self, field.name)
 
+    # * CRITICAL LATITUDES AND LONGITUDES. ────────────────────────────
+    # Note: The equator is not "critical" for these purposes, because
+    # LTM boxes mate there precisely, without overlap.
+    _crit_lats_extended_ltm_array = _make_crit_array(
+        _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
+    )
+    _crit_lats_unextended_ltm_array = _make_crit_array(
+        _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+    )
+    _crit_ltm_lons_array = _make_crit_array(range(-356, 361, 8))
 
-def _clip(value: float, minimum: float, maximum: float) -> float:
-    if value < minimum:
-        return minimum
-    if value > maximum:
-        return maximum
-    return value
+    def _get_critical_latitudes(
+        self, constraints: _coords.Constraints
+    ) -> list[float] | None:
+        if constraints.extended_ltm:
+            crit_array = self._crit_lats_extended_ltm_array
+        else:
+            crit_array = self._crit_lats_unextended_ltm_array
+        sliced_array = self._slice_array_by_interval_ends(
+            crit_array, self.min_latitude, self.max_latitude
+        )
+        if sliced_array is None:
+            return None
+        final = sliced_array.tolist()
+        sliced_array[sliced_array < 0] += _values.DEGREE_EPSILON
+        sliced_array[sliced_array > 0] -= _values.DEGREE_EPSILON
+        final.extend(sliced_array.tolist())
+        final.sort()
+        if final[0] < self.min_latitude:
+            del final[0]
+        if final[-1] > self.max_latitude:
+            del final[-1]
+        return final
 
+    def _get_critical_longitudes(
+        self, constraints: _coords.Constraints
+    ) -> list[float] | None:
+        # Note: If in exclusively LPS latitudes, there are no critical
+        # longitudes.
+        if self.min_latitude > constraints._max_abs_ltm_lat:
+            return None
+        elif self.max_longitude < -constraints._max_abs_ltm_lat:
+            return None
+        sliced_array = self._slice_array_by_interval_ends(
+            self._crit_ltm_lons_array,
+            self.min_longitude,
+            self.max_longitude,
+        )
+        if sliced_array is None:
+            return None
+        final = sliced_array.tolist()
+        sliced_array -= _values.DEGREE_EPSILON
+        # Note: Reverse slice so that smallest value is at the end of
+        # the list, for more performant removal, if necessary.
+        final.extend(sliced_array[::-1].tolist())
+        if final[-1] < self.min_longitude:
+            del final[-1]
+        return final
 
-def _construct_latlon_grid(
-    bounds: GeographicBounds, precision: int
-) -> list[_coords.LatLonPoint]:
-    # Find latitude range for (buffered) grid.
-    # Note: Must buffer around bounds to ensure that even a grid cell
-    # for which a small corner extends into bounds is included.
-    buff_length = _values.SAFETY_FACTOR * (0.5 * precision)
-    buff_lat = buff_length / _values.M_PER_DEGREE_LATITUDE
-    min_lat = _clip(bounds.min_latitude - buff_lat, -90, +90)
-    max_lat = _clip(bounds.max_latitude + buff_lat, -90, +90)
-    lat_range = max_lat - min_lat
-
-    # TODO: For large grid generation, most time is spent in converting
-    #  each `LatLonPoint` to a box. This could be expedited by compiling
-    #  lats and lons in arrays, bulk-transforming via `pyproj` (after
-    #  carefully partitioning by CRS), and then directly instantiating
-    #  LPS/LTM points with `validate=False`. Could use a public utility
-    #  in a `util` module that is `pyproj.Transformer`-like, accepting
-    #  either a float or array for each of a `lat` and `lon` argument,
-    #  optimized for those values already being presorted, with an
-    #  option like `latlon: bool | None = False` that determines whether
-    #  `LatLonPoint`s are returned. For `True` and `False` (if caching),
-    #  both `LatLonPoint` and `Lps/LtmPoint` would still be created and
-    #  registered as a cousin to the returned instance. For `None` (and
-    #  if not caching), would merely generate the returned instance.
-
-    # Determine latitude coordinates.
-    # Note: Adopting this `delta` max spacing between grid points
-    # ensures that the greatest distance between the nearest points in
-    # adjacent rows is `precision`.
-    delta = precision / _math.sqrt(2)
-    grid_height = lat_range * _values.M_PER_DEGREE_LATITUDE
-    row_count = _calculate_safe_count(grid_height, delta)
-    lats = _np.linspace(min_lat, max_lat, row_count).tolist()
-
-    # For each sampled latitude...
-    points = []
-    for lat in lats:
-
-        # Find longitude range for (buffered) grid.
-        m_per_deg_lon = _values.calculate_m_per_degree_longitude(lat)
-        buff_lon = buff_length / m_per_deg_lon
-        min_lon = bounds.min_longitude - buff_lon
-        max_lon = bounds.max_longitude + buff_lon
-        lon_range = max_lon - min_lon
-        if lon_range > 360:
-            min_lon = -180  # *REASSIGNMENT*
-            max_lon = 180  # *REASSIGNMENT*
-            lon_range = 360  # *REASSIGNMENT*
-
-        # Determine longitude coordinates.
-        row_width = lon_range * m_per_deg_lon
-        col_count = _calculate_safe_count(row_width, delta)
-        lons = _np.linspace(min_lon, max_lon, col_count).tolist()
-        points.extend(_coords.LatLonPoint(lat, lon) for lon in lons)
-
-    # Return points.
-    return points
-
-
-def _resolve_file_path_and_layer_name_and_existence(
-    path: _pathlib.Path | str, *, test_exists: bool = True
-) -> tuple[_pathlib.Path, str | None, bool | None]:
-    if isinstance(path, str):
-        path = _pathlib.Path(path)  # *REASSIGNMENT*
-    try:
-        path_name, layer_name = path.name.split("|layername=")
-    except ValueError:
-        file_path = path
-        layer_name = None
-    else:
-        file_path = path.with_name(path_name)
-    if not test_exists:
-        exists = None
-    elif not file_path.exists():
-        exists = False
-    elif layer_name is None:
-        exists = True
-    else:
-        exists = layer_name in _geopandas.list_layers(path)["name"].values
-    return (file_path, layer_name, exists)
+    @staticmethod
+    def _slice_array_by_interval_ends(
+        a: _np.ndarray,
+        left: float,
+        right: float,
+    ) -> _np.ndarray | None:
+        idx_0 = a.searchsorted(left, side="left")
+        idx_n = a.searchsorted(right, side="right")
+        if idx_0 == idx_n:
+            return None
+        sliced = a[idx_0:idx_n]
+        return sliced
 
 
 # endregion
@@ -403,9 +505,11 @@ def make_box_grid(
         | _pyproj_aoi.AreaOfUse
     ),
     precision: float,
-    acc: bool = False,
     *,
+    acc: bool = False,
     extended_ltm: bool = False,
+    min_overlap: bool = True,
+    min_zones: bool = False,
 ) -> list[_coords.BoxCoordinate]:
     """
     Generate a grid of LGRS or ACC boxes within geographic bounds.
@@ -428,11 +532,36 @@ def make_box_grid(
     extended_ltm : bool, default=False
         Whether to use the extended LTM region, which extends to 82° N/S
         instead of 80° N/S.
+    min_overlap : bool, default=True
+        Whether to minimize the box overlap. If `True`, boxes only overlap
+        near LPS and LTM zone boundaries, where overlap is necessary to
+        ensure coverage. If `False`, all valid boxes in the targeted area
+        are generated, which may include inter-zone overlaps of up to ~35.4
+        km, that is, the diagonal of a 25-km box. In the special case that
+        `bounds` is specified by an LGRS CRS string, `min_overlap` is
+        instead interpreted to relate to the overlap of that zone with its
+        neighbors. Then, `True` generates only boxes that are within the
+        nominal bounds of the zone whereas `False` generates all valid boxes
+        from the maximally expanded zone.
+    min_zones : bool, default=False
+        Whether to minimize the number of zones (and therefore, CRSes) that
+        are used. If `True`, boxes from non-nominal (expanded) areas of
+        zones may be generated if doing so enables fewer zones to be used
+        overall. For example, when working near the nominal longitudinal
+        boundary between two LTM zones, you may prefer all boxes to come
+        from one zone, if possible, instead of nearly all boxes from that
+        zone and a few from a neighboring zone. If `False`, only boxes from
+        the nominal area of each zone will be generated. If `bounds` is
+        specified by an LGRS CRS string, this argument is ignored.
 
     Returns
     -------
     boxes : list of lgrs.coords.BoxCoordinate instances
         A flat list of boxes. LPS and LTM boxes may be commingled.
+
+    Warnings
+    --------
+    The `True` option for `min_zones` is not yet implemented.
 
     See Also
     --------
@@ -451,29 +580,40 @@ def make_box_grid(
     >>> isinstance(boxes[0], lgrs.coords.LtmAccBox)
     True
     """
-    # Generate geographic sample point grid.
-    # Note: Grid has sufficient density to ensure that all boxes at
-    # desired precision are sampled.
-    # *REASSIGNMENT*
-    precision = _coords.BaseCoordinate._resolve_precision_static(precision)
+    # Raise error if unsupported option is used.
+    if min_zones:
+        raise TypeError("`min_zones=True` not yet implemented.")
+
+    # Determine geographic bounds, the minimum required buffer length,
+    # and whether only default boxes should be used.
+    # Note: `min_overlap` has two different meanings, depending on the
+    # mode. (That mode in determined by how `bounds` is specified).
+    # Initially, one meaning is assumed, but once mode resolution
+    # confirms the intended meaning, `use_default_boxes_only` is set
+    # accordingly.
+    use_expanded_exclusive_crs = not min_overlap  # For clarity.
     if isinstance(bounds, str):
-        exclusive_crs: _srs.CRS | None = _srs.make_lunar_crs(
+        exclusive_crs: _srs.CRS = _srs.make_lunar_crs(
             bounds, extended_ltm=extended_ltm
         )
         geo_bounds = GeographicBounds.from_other(exclusive_crs.area_of_use)
+        if use_expanded_exclusive_crs:
+            min_buffer = _values.calculate_diagonal_length(
+                25_000, safe_up=True
+            )
+        else:
+            min_buffer = 0
+        use_default_boxes_only = True
     else:
         exclusive_crs = None
         geo_bounds = GeographicBounds.from_other(bounds)
-    latlon_sample_points = _construct_latlon_grid(geo_bounds, precision)
+        min_buffer = 0
+        use_default_boxes_only = min_overlap
+    del min_overlap  # Avoid accidental use.
 
-    # Create boxes.
-    if acc:
-        func = _coords.LatLonPoint.to_acc
-    else:
-        func = _coords.LatLonPoint.to_lgrs
+    # Determine the constraints to use.
     if exclusive_crs is None:
         constraints = _coords.Constraints(extended_ltm=extended_ltm)
-        nom_crs_set = set()
     elif exclusive_crs.ltm_zone is None:
         constraints = _coords.Constraints(
             prefer_lps=True, extended_ltm=extended_ltm
@@ -485,28 +625,49 @@ def make_box_grid(
             preferred_ltm_zone=ltm_zone_num,
             extended_ltm=extended_ltm,
         )
-    box_set = set()
-    for samp_pt in latlon_sample_points:
-        box = func(samp_pt, precision=precision, constraints=constraints)
-        if exclusive_crs is None:
-            nom_crs_set.add(box.crs_nominal)
-            if len(nom_crs_set) > 1:
-                # Note: Spanning multiple regions, so much allow for
-                # overlapping boxes:
-                if acc:
-                    all_func = _coords.LatLonPoint.to_all_acc
-                else:
-                    all_func = _coords.LatLonPoint.to_all_lgrs
-                # *REASSIGNMENT*
-                box_set: set[_coords.BoxCoordinate] = {
-                    box
-                    for samp_pt in latlon_sample_points
-                    for box in all_func(
-                        samp_pt, precision=precision, extended_ltm=extended_ltm
-                    )
-                }
-                break
-        box_set.add(box)
+
+    # Generate geographic sample point grid.
+    # Note: Grid has sufficient density to ensure that all boxes at
+    # desired precision are sampled, with careful sampling near region
+    # (relevant zone) boundaries.
+    # *REASSIGNMENT*
+    precision = _coords.BaseCoordinate._resolve_precision_static(precision)
+    latlon_sample_points = _construct_latlon_grid(
+        geo_bounds, precision, constraints, min_buffer=min_buffer
+    )
+
+    # Create boxes.
+    if use_default_boxes_only:
+        if acc:
+            get_box = _coords.LatLonPoint.to_acc
+        else:
+            get_box = _coords.LatLonPoint.to_lgrs
+        box_set = {
+            get_box(samp_pt, constraints=constraints, precision=precision)
+            for samp_pt in latlon_sample_points
+        }
+        # TODO: Delete this block after debugged.
+        # for samp_pt in latlon_sample_points:
+        #     box = get_box(
+        #         samp_pt, constraints=constraints, precision=precision
+        #     )
+        #     field_data = dict(box.field_data)
+        #     field_data["samp_pt"] = repr(samp_pt)
+        #     box.set_field_data(field_data)
+    else:
+        _caching.enable_caching(False)  # TODO: Delete line after debugging.
+        if acc:
+            get_all_boxes = _coords.LatLonPoint.to_all_acc
+        else:
+            get_all_boxes = _coords.LatLonPoint.to_all_lgrs
+        box_set = {
+            box
+            for samp_pt in latlon_sample_points
+            for box in get_all_boxes(
+                samp_pt, extended_ltm=extended_ltm, precision=precision
+            )
+        }
+        _caching.enable_caching(True)  # TODO: Delete line after debugging.
 
     # Filter any boxes that have no corner within bounds.
     if exclusive_crs is None:
@@ -624,3 +785,53 @@ def make_gdfs(
         gdf.name_hint = name_hint
 
     return gdfs
+
+
+# TODO: Remove after proper tests are implemented.
+if __name__ == "__main__":
+    import pathlib
+
+    # Note: Three demos given below, in order of increasing output size.
+    # You must delete the "out" directory between demo executions.
+    bounds = GeographicBounds(
+        min_longitude=12, min_latitude=79, max_longitude=20, max_latitude=81
+    )
+    bounds = GeographicBounds(
+        min_longitude=0, min_latitude=-88, max_longitude=170, max_latitude=88
+    )
+    bounds = GeographicBounds(
+        min_longitude=-175,
+        min_latitude=-89,
+        max_longitude=+175,
+        max_latitude=+89,
+    )
+    bounds = GeographicBounds(
+        min_longitude=-180,
+        min_latitude=-90,
+        max_longitude=+180,
+        max_latitude=+90,
+    )
+    import time
+
+    def print_with_time(string: str = "  Finished.") -> None:
+        print(f"{time.asctime()}: {string}")
+
+    boxes = make_box_grid(
+        bounds, precision=25_000, acc=True, extended_ltm=True
+    )
+    gdfs = make_gdfs(boxes)
+
+    # out_dir_path = pathlib.Path("out")
+    # out_dir_path.mkdir(parents=True, exist_ok=False)
+    # for gdf in gdfs:
+    #     out_path = out_dir_path / f"{gdf.name_hint}.gpkg"
+    #     gdf.to_file(out_path, index=True)
+    #
+    # out_dir_path2 = pathlib.Path("out2")
+    # out_dir_path2.mkdir(parents=True, exist_ok=False)
+    # boxes2 = make_box_grid(
+    #     "23N", precision=25_000, acc=True, extended_ltm=True
+    # )
+    # (gdf2,) = make_gdfs(boxes2)
+    # out_path2 = out_dir_path2 / f"{gdf2.name_hint}.gpkg"
+    # gdf2.to_file(out_path2, index=True)

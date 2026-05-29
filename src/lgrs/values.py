@@ -117,6 +117,11 @@ def geodesic_length_to_min_max_projected(
 # Lengths.
 LUNAR_CIRCUMFERENCE = 2 * _math.pi * _wkt.LUNAR_RADIUS
 M_PER_DEGREE_LATITUDE = LUNAR_CIRCUMFERENCE / 360
+# Note: Small degree increment that never measures >1 mm and is not lost
+# to floating-point precision in common calculations. Actual value could
+# probably be much smaller, but this magnitude suffices for our
+# purposes.
+DEGREE_EPSILON = 0.001 / M_PER_DEGREE_LATITUDE
 
 # Distortion.
 # Note: geodesic_distance = projected_distance / distortion
