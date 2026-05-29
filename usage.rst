@@ -220,13 +220,74 @@ operations specific to grid boxes::
     'K30D45'
 
 
+Generating LGRS and ACC grids
+-----------------------------
+To generate a grid of LGRS or ACC boxes::
+
+    # Create a global grid of 25-km ACC boxes.
+    >>> from lgrs import GeographicBounds, write_grid
+    >>> global_bounds = GeographicBounds(-180, -90, 180, 90)  # doctest: +SKIP
+    >>> write_grid(global_bounds, 25_000, "~/grids/global.gpkg|layername={}", acc=True)  # doctest: +SKIP
+
+    # Specifically, the above example writes out a single GeoPackage (.gpkg
+    # file) with 92 layers, each of which represents an LTM zone or LPS polar
+    # region and has an automatically generated, unique layer name in place of
+    # the "{}" placeholder. To instead write the same grids to Esri shapefiles,
+    # each with the prefix "global":
+    >>> write_grid(global_bounds, 25_000, "~/grids/global_{}.shp", acc=True)  # doctest: +SKIP
+
+
+For your convenience, the *lgrs* library provides several ways to define the
+bounds of the grid::
+
+    # Imagine that you want to generate 100-m LGRS boxes that cover the
+    # footprint of a GeoTiff called "crater.tif" and output the grid as one or
+    # more GeoJSON files (one per CRS).
+    >>> write_grid(r"C:\\geotiffs\\crater.tif", 100, r"C:\\grids\\crater_{}.json")  # doctest: +SKIP
+
+    # The process is similar for using the footprint of vector data.
+    >>> write_grid(r"~/vector/sites.gpkg|layername=shackleton", 100, "~/grids/shackleton.gpkg|layername=new_{}")  # doctest: +SKIP
+
+    # You can also generate boxes across an entire LPS region or LTM zone. For
+    # example, to generate 25-km ACC boxes across the south polar region:
+    >>> write_grid("S", 25_000, "~/grids/{}.shp", acc=True)  # doctest: +SKIP
+
+    # When specifying bounds by an LPS region or LTM zone, you are guaranteed to
+    # get just one CRS, and therefore exactly one output file. You can therefore
+    # skip the placeholder without risking a name collision.
+    >>> write_grid("23N", 25_000, "~/grids/23N_grid.gpkg")  # doctest: +SKIP
+
+
+If you need finer control, you can use the lower-level ``grid`` module::
+
+    >>> from lgrs import grid
+    >>> aoi = GeographicBounds(120.0000, 81.0000, 120.0002, 81.0002)
+    >>> boxes = grid.make_box_grid(aoi, precision=1, extended_ltm=True)
+    >>> poi = LatLonPoint(81.00014637, 120.00012975)
+    >>> for box in boxes:
+    ...     # Calculate the geodesic distance from the center of ``box``
+    ...     # to your point of interest ``poi``.
+    ...     dist_to_poi = box.center_latlon.distance_to(poi)
+    ...     # Get default field data, modify it, and save it to ``box``.
+    ...     # (These data will be included in each ``GeoDataFrame``.)
+    ...     field_data = dict(box.field_data)
+    ...     assert field_data["precision"] == 1  # Example contents.
+    ...     field_data["dist_to_poi"] = dist_to_poi
+    ...     box.set_field_data(field_data)
+    >>> gdfs = grid.make_gdfs(boxes)
+    >>> if len(gdfs) == 1:
+    ...     gdf, = gdfs
+    ...     gdf.to_file("~/grids/aoi.gpkg")
+    ... else:
+    ...     for gdf in gdfs:
+    ...         gdf.to_file(f"~/grids/aoi.gpkg|layername={gdf.name_hint}")
+
+
 Not yet implemented
 -------------------
 
 Coming soon!
 
-- Creation of LGRS and ACC grids.
-
-- Output of LGRS and ACC grids (as boxes, lines, or points) in standard formats (GeoPackage, Shapefile, GeoJSON, etc.)
+- Output of LGRS and ACC grids as lines or points.
 
 - An lgrs command line program (for easy command line access).
