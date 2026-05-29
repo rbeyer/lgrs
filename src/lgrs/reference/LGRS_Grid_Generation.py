@@ -1,17 +1,18 @@
 #!/bin/env python3
-#* Original file name: LGRS_Grid_Generation_mk7.2.py
-#* Version: 7.2
-#* Only changes relative to the original file are 
-#* (1) importing from `LGRS_Coordinate_Conversion` rather than
-#*     `LGRS_Coordinate_Conversion_mk7`
-#* (2) edits to the following escape sequences in some strings: 
-#*     "\{" --> "{" and "\}" --> "}".
-#* (3) `GridName` is now instantiated with equivalent code that avoids
-#*     direct use of `numpy.chararray()`, which is deprecated.
+# * Original file name: LGRS_Grid_Generation_mk7.2.py
+# * Version: 7.2
+# * Only changes relative to the original file are
+# * (1) importing from `LGRS_Coordinate_Conversion` rather than
+# *     `LGRS_Coordinate_Conversion_mk7`
+# * (2) edits to the following escape sequences in some strings:
+# *     "\{" --> "{" and "\}" --> "}".
+# * (3) `GridName` is now instantiated with equivalent code that avoids
+# *     direct use of `numpy.chararray()`, which is deprecated.
 #
 # Additionally, the original file did not clearly indicate its copyright status,
 # but it should have stated:
-#  Unless otherwise noted, this project is in the public domain in the United States.
+#  Unless otherwise noted, this project is in the public domain in the United
+#  States.
 #
 #  It contains materials that originally came from the United States
 #  Geological Survey, an agency of the United States Department of
