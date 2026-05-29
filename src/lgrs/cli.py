@@ -30,7 +30,6 @@ import typing as _typing
 import typer as _typer
 
 # Internal.
-import lgrs.easy as _easy
 
 # endregion
 ###############################################################################
