@@ -648,14 +648,6 @@ def make_box_grid(
             get_box(samp_pt, constraints=constraints, precision=precision)
             for samp_pt in latlon_sample_points
         }
-        # TODO: Delete this block after debugged.
-        # for samp_pt in latlon_sample_points:
-        #     box = get_box(
-        #         samp_pt, constraints=constraints, precision=precision
-        #     )
-        #     field_data = dict(box.field_data)
-        #     field_data["samp_pt"] = repr(samp_pt)
-        #     box.set_field_data(field_data)
     else:
         if acc:
             get_all_boxes = _coords.LatLonPoint.to_all_acc
