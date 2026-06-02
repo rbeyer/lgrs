@@ -186,13 +186,27 @@ via a PR and the requirement for being open 24 h is waived in this
 case.
 
 
-.. Deploying
----------
+..
+  Release Steps
+  -------------
 
-A reminder for the maintainers on how to deploy.
-Make sure all your changes are committed (including an entry in CHANGELOG.rst).
-Then run::
+  A reminder for the maintainers on how to deploy.
 
-$ bump2version patch # possible: major / minor / patch
-$ git push
-$ git push --tags
+  If you think we're ready to release, check the following:
+
+  * $> make test should have no errors
+  * $> make lint should have no errors
+  * Add people to AUTHORS
+  * Make edits to CHANGELOG
+  
+  Make sure all your changes are committed (including an entry in CHANGELOG.rst).
+  Then run::
+
+  $> bump-my-version show-bump
+  $> bump-my-version bump --vv --dry-run release
+
+  If the above all looks okay, then:
+  
+  $> bump-my-version bump release
+  $> git push
+  $> git push --tags
