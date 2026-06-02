@@ -196,6 +196,7 @@ case.
 
   * $> make test should have no errors
   * $> make lint should have no errors
+  # $> make release-check should have no errors
   * Add people to AUTHORS
   * Make edits to CHANGELOG
   
@@ -207,6 +208,13 @@ case.
 
   If the above all looks okay, then:
   
-  $> bump-my-version bump release
+  $> bump-my-version bump --tag release
+  $> make release-check  # optional
+  $> make release
+
+  $> bump-my-version show-bump
+  $> bump-my-version bump --vv --dry-run minor
+  $> bump-my-version bump minor
+
   $> git push
   $> git push --tags
