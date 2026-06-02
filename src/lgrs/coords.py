@@ -2925,7 +2925,6 @@ class BoxCoordinate(BaseCoordinate):
 
     # * REFERENCE POINTS. ─────────────────────────────────────────────
     _global_lps = Constraints(global_lps=True)
-    _global_ltm = Constraints(global_ltm=True)
 
     def _make_reference_point(
         self,
@@ -2936,10 +2935,16 @@ class BoxCoordinate(BaseCoordinate):
         preserve_constraints: bool = False,
     ) -> LpsPoint | LtmPoint | LatLonPoint:
         lps_or_ltm_point = self.to_lps_or_ltm()
-        if lps_or_ltm_point.is_lps_based():
+        # Note: Set `constraints` such that coordinate is guaranteed
+        # valid after application of deltas.
+        if easting_delta == 0 and northing_delta == 0:
+            constraints = lps_or_ltm_point.constraints
+        elif lps_or_ltm_point.is_lps_based():
             constraints = self._global_lps
         else:
-            constraints = self._global_ltm
+            constraints = Constraints(
+                preferred_ltm_zone=lps_or_ltm_point.zone_number
+            )
         proj_point = lps_or_ltm_point.replace(
             easting=lps_or_ltm_point.easting + easting_delta,
             northing=lps_or_ltm_point.northing + northing_delta,
