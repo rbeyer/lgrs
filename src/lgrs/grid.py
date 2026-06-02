@@ -34,7 +34,6 @@ import rasterio as _rasterio
 from pyproj import aoi as _pyproj_aoi
 
 # Internal.
-import lgrs.caching as _caching
 import lgrs.coords as _coords
 import lgrs.database as _database
 import lgrs.srs.srs as _srs
@@ -658,7 +657,6 @@ def make_box_grid(
         #     field_data["samp_pt"] = repr(samp_pt)
         #     box.set_field_data(field_data)
     else:
-        _caching.enable_caching(False)  # TODO: Delete line after debugging.
         if acc:
             get_all_boxes = _coords.LatLonPoint.to_all_acc
         else:
@@ -670,7 +668,6 @@ def make_box_grid(
                 samp_pt, extended_ltm=extended_ltm, precision=precision
             )
         }
-        _caching.enable_caching(True)  # TODO: Delete line after debugging.
 
     # Filter any boxes that have no corner within bounds.
     if exclusive_crs is None:
