@@ -263,9 +263,6 @@ def write_grid(
     --------
     The `True` option for `min_zones` is not yet implemented.
 
-    The `True` option for `min_overlap` is operational but still being
-    refined. It is also extremely slow.
-
     Examples
     --------
     >>> write_grid(  # doctest: +SKIP
