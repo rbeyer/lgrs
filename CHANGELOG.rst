@@ -28,8 +28,93 @@ and the release date, in year-month-day format (see examples below).
 Unreleased
 ----------
 
+0.2.0 (2026-06-02)
+------------------
+
+Added
+^^^^^
+Grid generation is now implemented.
+
+* Supports lat/lon bounds specification by (a) explicit bounds, (b) path to
+  vector or raster data, or (c) name of LPS region or LTM zone (i.e., CRS).
+* All precisions.
+* Output is via geopandas, so a wide variety of formats are supported. (I've
+  only tested GeoPackage, Esri shapefile, and GeoJSON.)
+
+    * Because a single call may produce grids from multiple CRSes and hence
+      multiple files/layers, there is built-in support for generating
+      descriptive names that ensure uniqueness.
+
+        * We may ultimately want to support single-layer (common CRS) output
+          of boxes soured from multiple CRSes, but that's not ideal and there
+          are limits to how usefully that can be expanded to large areas.
+
+* Both LGRS and ACC, with automatically generated field data.
+* With or without the extended LTM region.
+* With the standard write modes: "x", "w", and "a".
+* An option to minimize overlap (min_overlap) near boundries.
+
+    * This works best for <25 km boxes. If you think about it, a maximum
+      ~25 km x ~25 km overlap could hypothetically result in >600 million
+      1-m boxes overlapping. This setting reduces the overlap to approximately
+      what's required to cover an area; boxes closely follow the nominal
+      latitudinal and longitudinal boundaries of their respective zones. (It so
+      happens to be far more performant, too.)
+
+* There's also an "experimental" option (min_overlap=False) to instead generate
+  all boxes across the entire width of the overlap.
+
+    * Due to unresolved caching issues with this specific option, caching is
+      disabled when this option is used, dramatically decreasing performance
+      (perhaps by 2-3 orders of magnitude).
+
+* Boxes now support user-specified field data. (See last example in usage.rst.)
+
+
+Changed
+^^^^^^^
+
+Constraints and Validation
+
+* Constraints are now packaged in their own class (Constraints) and
+  have expanded options.
+
+* Constraints now carefully treat boundaries between LPS and LTM
+  regions (latitudinal) and between adjacent LTM zones (longitudinal).
+  (See especially: Constraints._get_proj_crs_and_new_cousins().)
+
+    * Specifically, a box is valid if any part of its parent 25-km
+      box is within the nominal lat/lon bounds of its zone. This is
+      similar to MGRS and was discussed with Mark in the context of
+      the polar bounding box.
+    * The result is up to ~35 km of overlap (diagonal length of 25-km
+      box) near the aforementioned boundaries where multiple, non-aligned
+      boxes from different CRSes may all be valid.
+
+	* However, note that this is less overlap that in the reference
+	  code, which uses oversized bouding boxes only.
+
+    * Because up to 3 (non-aligned) boxes may overlap a single point,
+      PointCoordinate.to_all_lgrs() and PointCoordinate.to_all_acc()
+      now exist to query those boxes (rather than leave it to the
+      user to brute-force explore constraints-space).
+
+* Coordinate (point and box) validation now follows a multi-tier path:
+
+    * Validation by reconstruction - back-convert to LatLonPoint and
+      forward-convert, to confirm that final value matching starting
+      value. This proved to be a very general way to test some
+      complicated aspects, especially those related to constraints.
+      Validation proceeds only if reconstruction fails, and then,
+      with the sole purpose of producing a more detailed error.
+    * Validation of each field (but not all fields have independent
+      validation).
+    * Validation against regex pattern (for the strings of boxes
+      only).
+
+
 
 0.1.0 (2026-05-07)
 ------------------
 
-- First release.
+* First release.
