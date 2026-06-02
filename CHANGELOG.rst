@@ -28,6 +28,15 @@ and the release date, in year-month-day format (see examples below).
 Unreleased
 ----------
 
+Fixed
+^^^^^
+Constraints are now set with sufficient specificity to guarantee coordinate
+validity when generating box corner coordinates. Consequently, caching now
+remains enabled when using the ``min_overlap=False`` setting of
+``lgrs.grid.make_box_grid()`` and ``lgrs.easy.write_grid()``, greatly
+improving performance.
+
+
 0.2.0 (2026-06-02)
 ------------------
 
