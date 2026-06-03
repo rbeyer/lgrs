@@ -3004,6 +3004,10 @@ class BoxCoordinate(BaseCoordinate):
     # * REFERENCE POINTS. ─────────────────────────────────────────────
     _global_lps = Constraints(global_lps=True)
 
+    @_functools.cached_property
+    def _corners(self) -> ProjectedCorners:
+        return ProjectedCorners(*self._sample_boundary(1, use_cache=False))
+
     def _make_reference_point(
         self,
         easting_delta: float,
@@ -3050,7 +3054,7 @@ class BoxCoordinate(BaseCoordinate):
             if as_latlon:
                 points = self.corners_latlon
             else:
-                points = self.corners
+                points = self._corners
             for point in points:
                 yield point
             return
@@ -3080,7 +3084,7 @@ class BoxCoordinate(BaseCoordinate):
         Box's bounds as a named tuple of coordinates in the underlying CRS.
         """
         (x_sw, y_sw), (x_se, y_se), (x_ne, y_ne), (x_nw, y_nw) = (
-            (point.easting, point.northing) for point in self.corners
+            (point.easting, point.northing) for point in self._corners
         )
         bounds = ProjectedBounds(
             min_easting=min(x_nw, x_sw),
@@ -3103,10 +3107,6 @@ class BoxCoordinate(BaseCoordinate):
         return center
 
     @_functools.cached_property
-    def corners(self) -> ProjectedCorners:
-        return ProjectedCorners(*self._sample_boundary(1, use_cache=False))
-
-    @_functools.cached_property
     def corners_latlon(self) -> GeographicCorners:
         """
         Box's bounds as a named tuple of coordinates in the underlying CRS.
@@ -3114,7 +3114,7 @@ class BoxCoordinate(BaseCoordinate):
         return GeographicCorners(
             *(
                 point.to_latlon(constraints=self.constraints)
-                for point in self.corners
+                for point in self._corners
             )
         )
 
@@ -3139,7 +3139,8 @@ class BoxCoordinate(BaseCoordinate):
 
     @_functools.cached_property
     def geometry(self) -> _shapely.Polygon:
-        return _shapely.box(*self.bounds)
+        polygon = _shapely.box(*self.bounds)
+        return polygon
 
     def set_field_data(
         self, field_data: _collections.abc.Mapping[str, _typing.Any]
