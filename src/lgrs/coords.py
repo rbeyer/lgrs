@@ -3238,7 +3238,7 @@ class BoxCoordinate(BaseCoordinate):
             transformation calculations may not be sufficiently precise to
             provide the correct result unless `tolerance` is nonzero. This
             value may be negative, which makes tests more restrictive.
-            `tolerance` is ignored if `other` is the same CRS as `self`.
+            `tolerance` is ignored in logical tests.
         error : bool, default=True
             Whether to raise a description exception rather than return `False`
             when `logical_only=True` or `same_crs_only=True` and that
