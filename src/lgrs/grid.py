@@ -681,11 +681,7 @@ def make_box_grid(
                 geo_bounds.min_latitude, geo_bounds.min_longitude
             )
             # *REASSIGNMENT*
-            box_list = [
-                box
-                for box in box_set
-                if box.contains(bounds_corner, same_crs_only=False)
-            ]
+            box_list = [box for box in box_set if box.contains(bounds_corner)]
 
     # Filter any boxes from outside the targeted CRS.
     else:
