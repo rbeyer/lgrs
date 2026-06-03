@@ -1645,7 +1645,7 @@ class BaseCoordinate(_BaseCoordinate):
         """
         Transform `self` to the specified coordinate type.
 
-        This is a convenience function to call one or two `._to_*()`s in
+        This is a convenience function to call one or two `.to_*()`s in
         series. See Examples.
 
         Parameters
@@ -1683,29 +1683,46 @@ class BaseCoordinate(_BaseCoordinate):
 
         Examples
         --------
-        >>> latlon_point = LatLonPoint(0, 0)
-        >>> new = latlon_point.to(LtmLgrsBox)  # Transform 1
-        >>> isinstance(new, LtmLgrsBox)
+        >>> latlon_point = LatLonPoint(80, 0)
+        >>> box_1 = latlon_point.to(LpsLgrsBox)  # Transform 1
+        >>> isinstance(box_1, LpsLgrsBox)
         True
 
-        In this case, transformation is exact.
+        You can also relax system requirements. Note that the target `typ`
+        changes in Transform 2 relative to Transform 1.
 
-        >>> new.distance_to(latlon_point)
-        0.0
+        >>> box_2 = latlon_point.to(LtmLgrsBox, any_system=True)  # Transform 2
+        >>> isinstance(box_2, LpsLgrsBox)
+        True
 
-        You can also relax system requirements.
+        Alternatively, you can attempt to force transformation to the target
+        `typ`.
 
-        >>> new_2 = latlon_point.to(LpsLgrsBox, any_system=True)  # Transform 2
-        >>> isinstance(new_2, LtmLgrsBox)
+        >>> box_3 = latlon_point.to(LtmLgrsBox, search=True)  # Transform 3
+        >>> isinstance(box_3, LtmLgrsBox)
         True
 
         Transform 1 is equivalent to::
 
-            latlon_point.to_ltm().to_lgrs()
+            latlon_point.to_lps().to_lgrs()
 
-        and Transform 2 is equivalent to::
+        Transform 2 is equivalent to::
 
             latlon_point.to_lgrs()
+
+        Transform 3 is equivalent to::
+
+            latlon_point.to_ltm(search=True).to_lgrs()
+
+        Note that boxes of either system are not supported everywhere, even
+        with `search=True`.
+
+        >>> latlon_point_2 = LatLonPoint(0, 0)
+        >>> bad_box = latlon_point_2.to(LpsLgrsBox, search=True)  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+          ...
+        lgrs.exceptions.MalformedCoordinate:
+          ...
         """  # noqa: E501
         force_system, convert = self._get_conversion_sequence(typ)
         if (
@@ -1898,6 +1915,10 @@ class BaseCoordinate(_BaseCoordinate):
         lgrs.Exceptions.MalformedCoordinate
             If `constraints` are incompatible with `LpsPoint` for this
             location, and `search` is `False`.
+
+        See Also
+        --------
+        .to : Transformation to any specified coordinate type
         """
         # Determine preferred order of `Constraints` instances.
         if constraints is None:
@@ -1961,6 +1982,11 @@ class BaseCoordinate(_BaseCoordinate):
         out : LpsPoint or LtmPoint
             The transformed coordinate. If `self` is compatible, `self` is
             returned. If caching is enabled, a cached instance may be returned.
+
+        See Also
+        --------
+        .to_lps : Transformation to `LpsPoint` specifically
+        .to_ltm : Transformation to `LtmPoint` specifically
         """
         return self._get_cached_or_create(
             self._to_lps_or_ltm,
@@ -2016,6 +2042,10 @@ class BaseCoordinate(_BaseCoordinate):
         lgrs.Exceptions.MalformedCoordinate
             If `constraints` are incompatible with `LtmPoint` for this
             location, and `search` is `False`.
+
+        See Also
+        --------
+        .to : Transformation to any specified coordinate type
         """
         # Determine preferred order of `Constraints` instances.
         if constraints is None:
