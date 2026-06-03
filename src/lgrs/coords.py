@@ -3206,9 +3206,9 @@ class BoxCoordinate(BaseCoordinate):
         other: BaseCoordinate,
         *,
         logical_only: bool = False,
-        same_crs_only: bool = True,
+        same_crs_only: bool = False,
         tolerance: float = 0.001,
-        error: bool = False,
+        error: bool = True,
     ) -> bool:
         """
         Test whether the areal extent of `self` includes another coordinate.
@@ -3223,15 +3223,15 @@ class BoxCoordinate(BaseCoordinate):
         ----------
         other : BaseCoordinate
             The possibly contained coordinate.
-        same_crs_only : bool, default=True
+        same_crs_only : bool, default=False
             Whether to consider cross-CRS containment. If `False` and `other`
             is from a different nominal CRS (`.crs_nominal`) than `self`,
-            `False` is returned.
+            containment testing is aborted.
         logical_only : bool, default=False
             Whether to require logical containment, that is, only test whether
             `self` and `other` are both boxes in the same CRS. If `True`, and
             `other` is either not a box coordinate or from a different
-            nominal CRS (`.crs_nominal`), `False` is returned.
+            nominal CRS (`.crs_nominal`), containment testing is aborted.
         tolerance : float, default=0.001
             If `other` is within this tolerance (meters) of being contained by
             `self`, `True` is returned. For cross-CRS tests, the underlying
@@ -3239,10 +3239,10 @@ class BoxCoordinate(BaseCoordinate):
             provide the correct result unless `tolerance` is nonzero. This
             value may be negative, which makes tests more restrictive.
             `tolerance` is ignored if `other` is the same CRS as `self`.
-        error : bool, default=False
+        error : bool, default=True
             Whether to raise a description exception rather than return `False`
             when `logical_only=True` or `same_crs_only=True` and that
-            requirement is violated.
+            requirement is violated, aborting containment testing.
 
         Returns
         -------
@@ -3261,14 +3261,16 @@ class BoxCoordinate(BaseCoordinate):
         if logical_only and not other_is_box:
             if error:
                 raise TypeError(f"`other` is not a `BoxCoordinate`: {other!r}")
-            return False
+            else:
+                return False
         is_cross_crs = self.crs_nominal != other.crs_nominal
         if (logical_only or same_crs_only) and is_cross_crs:
             if error:
                 raise TypeError(
                     f"`other` is not from the same (nominal) CRS: {other!r}"
                 )
-            return False
+            else:
+                return False
 
         # Perform logical test, if supported.
         if other_is_box and not is_cross_crs:
@@ -3284,8 +3286,10 @@ class BoxCoordinate(BaseCoordinate):
 
         # Perform spatial (non-logical) test.
         if other_is_box:
-            # TODO: Determine what sampling density is necessary.
-            test_points = other._sample_boundary(1)
+            # TODO: Determine what sampling density is necessary. The
+            #  value 21 is used by `pyproj` for the conceptually similar
+            #  `densify_pts` argument of `Transformer.transform_bounds`.
+            test_points = other._sample_boundary(21)
         else:
             test_points = (other,)
         (
