@@ -661,8 +661,10 @@ def make_box_grid(
             )
         }
 
-    # Filter any boxes that have no corner within bounds.
+    # Filter boxes spatially.
     if exclusive_crs is None:
+        # On first past, filter any boxes that have no corner within
+        # geographic bounds.
         # TODO: Test whether this block generates gaps.
         box_list = []
         for box in box_set:
@@ -670,6 +672,19 @@ def make_box_grid(
                 if corner in geo_bounds:
                     box_list.append(box)
                     break
+        # If all boxes were filtered out in first pass, a single box
+        # fully encloses the geographic bounds, so instead return that
+        # box.
+        if not box_list:
+            bounds_corner = _coords.LatLonPoint(
+                geo_bounds.min_latitude, geo_bounds.min_longitude
+            )
+            # *REASSIGNMENT*
+            box_list = [
+                box
+                for box in box_set
+                if box.contains(bounds_corner, same_crs_only=False)
+            ]
 
     # Filter any boxes from outside the targeted CRS.
     else:
