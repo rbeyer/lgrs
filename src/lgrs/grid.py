@@ -387,7 +387,8 @@ class GeographicBounds:
         transformer = _pyproj.Transformer.from_crs(
             native_crs, _srs.make_lunar_crs(), always_xy=True
         )
-        # TODO: Decide on best `densify_pts` option. Defaults to 21.
+        # TODO: Decide on best `densify_pts` option. Defaults to 21 in
+        #  `pyproj` if unspecified.
         geo_bounds = transformer.transform_bounds(
             *native_bounds, densify_pts=densify_pts
         )
