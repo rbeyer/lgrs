@@ -1663,12 +1663,12 @@ class BaseCoordinate(_BaseCoordinate):
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
             validation is deemed necessary (if any) is performed. Note that if
-            `coord` was created earlier (i.e., is from the cache) and was
-            already validated, it is not re-validated.
+            `out` was created earlier (i.e., is from the cache) and was already
+            validated, it is not re-validated.
 
         Returns
         -------
-        coord : BaseCoordinate (specifically, `typ`)
+        out : BaseCoordinate (specifically, `typ`)
             The transformed coordinate. If `self` is compatible, `self` is
             returned. If caching is enabled, a cached instance may be returned.
 
@@ -1751,8 +1751,8 @@ class BaseCoordinate(_BaseCoordinate):
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
             validation is deemed necessary (if any) is performed. Note that if
-            `coord` was created earlier (i.e., is from the cache) and was
-            already validated, it is not re-validated.
+            `out` was created earlier (i.e., is from the cache) and was already
+            validated, it is not re-validated.
 
         Returns
         -------
@@ -1788,8 +1788,8 @@ class BaseCoordinate(_BaseCoordinate):
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
             validation is deemed necessary (if any) is performed. Note that if
-            `coord` was created earlier (i.e., is from the cache) and was
-            already validated, it is not re-validated.
+            `out` was created earlier (i.e., is from the cache) and was already
+            validated, it is not re-validated.
 
         Returns
         -------
@@ -1831,8 +1831,8 @@ class BaseCoordinate(_BaseCoordinate):
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
             validation is deemed necessary (if any) is performed. Note that if
-            `coord` was created earlier (i.e., is from the cache) and was
-            already validated, it is not re-validated.
+            `out` was created earlier (i.e., is from the cache) and was already
+            validated, it is not re-validated.
 
         Returns
         -------
@@ -1871,7 +1871,7 @@ class BaseCoordinate(_BaseCoordinate):
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
             validation is deemed necessary (if any) is performed. Note that if
-            `coord` was created earlier (i.e., is from the cache) and was
+            `out` was created earlier (i.e., is from the cache) and was
             already validated, it is not re-validated.
 
         Returns
@@ -1917,8 +1917,8 @@ class BaseCoordinate(_BaseCoordinate):
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
             validation is deemed necessary (if any) is performed. Note that if
-            `coord` was created earlier (i.e., is from the cache) and was
-            already validated, it is not re-validated.
+            `out` was created earlier (i.e., is from the cache) and was already
+            validated, it is not re-validated.
 
         Returns
         -------
@@ -1953,7 +1953,7 @@ class BaseCoordinate(_BaseCoordinate):
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
             validation is deemed necessary (if any) is performed. Note that if
-            `coord` was created earlier (i.e., is from the cache) and was
+            `out` was created earlier (i.e., is from the cache) and was
             already validated, it is not re-validated.
 
         Returns
