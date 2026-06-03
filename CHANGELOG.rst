@@ -28,13 +28,29 @@ and the release date, in year-month-day format (see examples below).
 Unreleased
 ----------
 
+Changed
+^^^^^^^
+* For ``lgrs.coords.BaseCoordinate``, ``.to_lps()`` and ``.to_ltm()`` now
+  support a ``search`` argument. Documentation has been added to explain its
+  functionality. The method ``.to()`` inherits this enhanced functionality. Note
+  that the prior implementation of these methods was similar to
+  ``search=True`` but ``search`` defaults to ``False``, which may break existing
+  code.
+
+Removed
+^^^^^^^
+* For ``lgrs.coords.BoxCoordinate``, ``.corners`` is removed. Use
+  ``.corners_latlon``, ``.bounds``, or possibly ``.geometry`` instead.
+
 Fixed
 ^^^^^
-Constraints are now set with sufficient specificity to guarantee coordinate
-validity when generating box corner coordinates. Consequently, caching now
-remains enabled when using the ``min_overlap=False`` setting of
-``lgrs.grid.make_box_grid()`` and ``lgrs.easy.write_grid()``, greatly
-improving performance.
+* Constraints are now set with sufficient specificity to guarantee coordinate
+  validity when generating box corner coordinates. Consequently, caching now
+  remains enabled when using the ``min_overlap=False`` setting of
+  ``lgrs.grid.make_box_grid()`` and ``lgrs.easy.write_grid()``, greatly
+  improving performance.
+* The ``.to_lps()`` and ``.to_ltm()`` methods of ``lgrs.coords.BoxCoordinate``
+  now honor their ``validate`` argument.
 
 
 0.2.0 (2026-06-02)
