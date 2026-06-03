@@ -1471,20 +1471,18 @@ class BaseCoordinate(_BaseCoordinate):
         self,
         bound_method: _collections.abc.Callable,
         targ_typ: type[BaseCoordinate],
-        constraints: Constraints,
+        constraints_list: list[Constraints],
+        *,
+        validate: bool | None,
     ) -> BaseCoordinate:
-        cand = bound_method()
-        if isinstance(cand, targ_typ):
-            return cand
-        reconstrained = self.replace(constraints=constraints)
-        cand = bound_method.__func__(reconstrained)
-        if isinstance(cand, targ_typ):
-            return cand
-        else:
-            raise _exceptions.MalformedCoordinate(
-                f"Location is not compatible with `{targ_typ.__name__}`: "
-                f"{reconstrained}"
-            )
+        for constraints in constraints_list:
+            cand = bound_method(constraints=constraints, validate=validate)
+            if isinstance(cand, targ_typ):
+                return cand
+        raise _exceptions.MalformedCoordinate(
+            f"Location is not compatible with `{targ_typ.__name__}`, "
+            f"given `{constraints_list[0]!r}`: {self!r}"
+        )
 
     def _get_cached_or_create[T](
         self,
@@ -1641,6 +1639,7 @@ class BaseCoordinate(_BaseCoordinate):
         constraints: Constraints | None = None,
         *,
         any_system: bool = False,
+        search: bool = False,
         validate: bool | None = None,
     ) -> BaseCoordinate:
         """
@@ -1658,7 +1657,11 @@ class BaseCoordinate(_BaseCoordinate):
             (or `None`), `self.constraints` is used.
         any_system : bool, default=False
             Whether to allow the output coordinate to be from either system
-            (LPS or LTM).
+            (LPS or LTM). If `False`, `.to_lps()` or `.to_ltm()` is called,
+            if necessary, with `search=search`.
+        search : bool, default=False
+            The `search` argument passed to `.to_lps()` or `.to_ltm()`. Ignored
+            if `any_system` is `True`.
         validate : bool, optional
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
@@ -1698,7 +1701,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Transform 1 is equivalent to::
 
-            latlon_point.to_lps().to_lgrs()
+            latlon_point.to_ltm().to_lgrs()
 
         and Transform 2 is equivalent to::
 
@@ -1713,7 +1716,7 @@ class BaseCoordinate(_BaseCoordinate):
                 or self.is_lps_based() != typ.is_lps_based()
             )
         ):
-            basis = force_system(self)
+            basis = force_system(self, search=search)
         else:
             basis = self
         return convert(basis, constraints=constraints, validate=validate)
@@ -1847,32 +1850,42 @@ class BaseCoordinate(_BaseCoordinate):
             validate=validate,
         )
 
-    # TODO: Reimplement `.to_lps()` and `.to_ltm()` to use the minimum
-    #  constraints necessary to ensure the targeted system, with
-    #  allowance for the user to override the constraints, maybe?
     def to_lps(
         self,
         *,
         constraints: Constraints | None = None,
         validate: bool | None = None,
+        search: bool = False,
     ) -> LpsPoint:
         """
-        Transform coordinate to `LpsPoint`, if allowed.
+        Transform coordinate to `LpsPoint`.
 
-        The constraints of `out` will differ from those of `self` if necessary
-        to support the LPS system.
+        This method is most commonly used to explicitly declare the expected
+        output type, unlike the ambiguity of `.to_lps_or_ltm()` (which it calls
+        internally). Alternatively, this method can be used (with
+        `search=True`) to force transformation to `LpsPoint` by inferring
+        appropriate constraints.
+
+        Note that the transformation from `LatLonPoint` to `LpsPoint` or
+        `LtmPoint` is the foundation that determines the system (LPS or LTM) of
+        all later transformation to `*LgrsBox` and `*AccBox`.
 
         Parameters
         ----------
         constraints : Constraints, optional
-            The constraints to apply to this transformation. If not specified
-            (or `None`), `self.constraints` is used.
+            The (preferred) constraints to apply to this transformation. If not
+            specified (or `None`), `self.constraints` is used.
         validate : bool, optional
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
             validation is deemed necessary (if any) is performed. Note that if
             `out` was created earlier (i.e., is from the cache) and was
             already validated, it is not re-validated.
+        search : bool, default=False
+            If `constraints` is not sufficient to produce an `LpsPoint` output,
+            whether to search (success guaranteed) for a constraints
+            configuration that achieves this. An effort is made not to diverge
+            further from `constraints` than necessary.
 
         Returns
         -------
@@ -1883,13 +1896,36 @@ class BaseCoordinate(_BaseCoordinate):
         Raises
         ------
         lgrs.Exceptions.MalformedCoordinate
-            If the location of `self` on the Moon is outside the LPS region
-            supported by LGRS.
+            If `constraints` are incompatible with `LpsPoint` for this
+            location, and `search` is `False`.
         """
+        # Determine preferred order of `Constraints` instances.
+        if constraints is None:
+            constraints = self.constraints  # *REASSIGNMENT*
+        constraints_list = [constraints]
+        if search:
+            if constraints.extended_ltm:
+                # Note: Since `extended_ltm=True` is preferred, attempt to
+                # retain that constraint if possible.
+                constraints_list.extend(
+                    (
+                        Constraints(extended_ltm=True, prefer_lps=True),
+                        Constraints(extended_ltm=False, prefer_lps=False),
+                    )
+                )
+            constraints_list.extend(
+                (
+                    Constraints(extended_ltm=False, prefer_lps=True),
+                    Constraints(global_lps=True),
+                )
+            )
+
+        # Convert to `LpsPoint`.
         lps_point = self._force_type_or_error(
             self.to_lps_or_ltm,
             LpsPoint,
-            constraints=Constraints(global_lps=True),
+            constraints_list,
+            validate=validate,
         )
         return lps_point
 
@@ -1937,35 +1973,77 @@ class BaseCoordinate(_BaseCoordinate):
         *,
         constraints: Constraints | None = None,
         validate: bool | None = None,
+        search: bool = False,
     ) -> LtmPoint:
         """
         Transform coordinate to `LtmPoint`.
 
-        The constraints of `out` will differ from those of `self` if necessary
-        to support the LTM system.
+        This method is most commonly used to explicitly declare the expected
+        output type, unlike the ambiguity of `.to_lps_or_ltm()` (which it calls
+        internally). Alternatively, this method can be used (with
+        `search=True`) to force transformation to `LtmPoint` by inferring
+        appropriate constraints.
+
+        Note that the transformation from `LatLonPoint` to `LpsPoint` or
+        `LtmPoint` is the foundation that determines the system (LPS or LTM) of
+        all later transformation to `*LgrsBox` and `*AccBox`.
 
         Parameters
         ----------
         constraints : Constraints, optional
-            The constraints to apply to this transformation. If not specified
-            (or `None`), `self.constraints` is used.
+            The (preferred) constraints to apply to this transformation. If not
+            specified (or `None`), `self.constraints` is used.
         validate : bool, optional
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
             validation is deemed necessary (if any) is performed. Note that if
             `out` was created earlier (i.e., is from the cache) and was
             already validated, it is not re-validated.
+        search : bool, default=False
+            If `constraints` is not sufficient to produce an `LtmPoint` output,
+            whether to search (success guaranteed) for a constraints
+            configuration that achieves this. An effort is made not to diverge
+            further from `constraints` than necessary.
 
         Returns
         -------
         out : LtmPoint
             The transformed coordinate. If `self` is compatible, `self` is
             returned. If caching is enabled, a cached instance may be returned.
+
+        Raises
+        ------
+        lgrs.Exceptions.MalformedCoordinate
+            If `constraints` are incompatible with `LtmPoint` for this
+            location, and `search` is `False`.
         """
+        # Determine preferred order of `Constraints` instances.
+        if constraints is None:
+            constraints = self.constraints
+        constraints_list = [constraints]
+        if search:
+            if not constraints.extended_ltm:
+                # Note: Since `extended_ltm=False` is preferred, attempt
+                # to retain that constraint if possible.
+                constraints_list.extend(
+                    (
+                        Constraints(extended_ltm=False, prefer_ltm=True),
+                        Constraints(extended_ltm=True, prefer_ltm=False),
+                    )
+                )
+            constraints_list.extend(
+                (
+                    Constraints(extended_ltm=True, prefer_ltm=True),
+                    Constraints(global_ltm=True),
+                )
+            )
+
+        # Convert to `LtmPoint`.
         ltm_point = self._force_type_or_error(
             self.to_lps_or_ltm,
             LtmPoint,
-            constraints=Constraints(global_ltm=True),
+            constraints_list,
+            validate=validate,
         )
         return ltm_point
 
@@ -3939,7 +4017,7 @@ class LtmLgrsBox(_BaseLgrsBox):
         temp_latlon = LatLonPoint(
             latitude=lat_band_min, longitude=0, validate=False
         )
-        nband_float = temp_latlon.to_ltm().northing
+        nband_float = temp_latlon.to_ltm(search=True).northing
         nband = _floor(nband_float // 25_000) * 25_000  # Eq. 96
         return nband
 
