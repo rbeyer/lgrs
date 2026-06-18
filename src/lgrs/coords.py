@@ -576,7 +576,7 @@ class Constraints(metaclass=_caching._MetaMultiton):
             return result_on_failure
         if target_lps:
             # TODO: Determine how many samples are required per edge.
-            count_per_side = 2
+            count_per_side = 1
         else:
             # TODO: Determine how many samples are required per edge.
             count_per_side = 1
