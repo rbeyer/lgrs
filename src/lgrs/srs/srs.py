@@ -189,20 +189,21 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     False
     """
 
-    lps_hemisphere: _typing.Literal["N", "S", None]
-    ltm_zone: str | None  # Parallels `pyproj.CRS.utm_zone`.
+    def _remove_aou_name_prefix(self, prefix: str) -> str | None:
+        if self.area_of_use is None:
+            return None
+        if not self.area_of_use.name.startswith(prefix):
+            return None
+        # Note: `-1` truncates trailing period.
+        return self.area_of_use.name[len(prefix) : -1]
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        if self.is_geographic:
-            self.lps_hemisphere = None
-            self.ltm_zone = None
-        elif "LTM" in self.name:
-            self.lps_hemisphere = None
-            self.ltm_zone = self.name.rsplit(" ", 1)[-1]
-        else:
-            self.lps_hemisphere = "N" if "North" in self.name else "S"
-            self.ltm_zone = None
+    @_functools.cached_property
+    def lps_hemisphere(self) -> _typing.Literal["N", "S", None]:
+        return self._remove_aou_name_prefix(_wkt._lps_usage_area_prefix)
+
+    @_functools.cached_property
+    def ltm_zone(self) -> str | None:
+        return self._remove_aou_name_prefix(_wkt._ltm_usage_area_prefix)
 
 
 # Note: Only identical calls are cached here. Compare:
