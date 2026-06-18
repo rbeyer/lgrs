@@ -3041,6 +3041,19 @@ class BoxCoordinate(BaseCoordinate):
     def _corners(self) -> ProjectedCorners:
         return ProjectedCorners(*self._sample_boundary(1, use_cache=False))
 
+    def _make_parallel_marching_iter(
+        self, count_per_side: int
+    ) -> _typing.Iterator[tuple[int, int]]:
+        step_size = self.precision / count_per_side
+        deltas = _itertools.count(0, step_size)
+        for delta in deltas:
+            if delta == self.precision:
+                break
+            yield (delta, 0)
+            yield (self.precision, delta)
+            yield (self.precision - delta, self.precision)
+            yield (0, self.precision - delta)
+
     def _make_reference_point(
         self,
         easting_delta: float,
@@ -3054,12 +3067,8 @@ class BoxCoordinate(BaseCoordinate):
         # valid after application of deltas.
         if easting_delta == 0 and northing_delta == 0:
             constraints = lps_or_ltm_point.constraints
-        elif lps_or_ltm_point.is_lps_based():
-            constraints = self._global_lps
         else:
-            constraints = Constraints(
-                preferred_ltm_zone=lps_or_ltm_point.zone_number
-            )
+            constraints = Constraints(global_crs=self.crs_nominal)
         proj_point = lps_or_ltm_point.replace(
             easting=lps_or_ltm_point.easting + easting_delta,
             northing=lps_or_ltm_point.northing + northing_delta,
@@ -3080,9 +3089,12 @@ class BoxCoordinate(BaseCoordinate):
         count_per_side: int,
         *,
         as_latlon: bool = False,
+        serial: bool = False,
         preserve_constraints: bool = False,
         use_cache: bool = True,
     ) -> _collections.abc.Iterator[LpsPoint | LtmPoint | LatLonPoint]:
+        # Cache if special "corners" case.
+        # Note: `serial` is irrelevant in this case.
         if use_cache and count_per_side == 1:
             if as_latlon:
                 points = self.corners_latlon
@@ -3091,25 +3103,23 @@ class BoxCoordinate(BaseCoordinate):
             for point in points:
                 yield point
             return
-        step_size = self.precision / count_per_side
-        deltas = _np.arange(
-            0, self.precision + (0.5 * step_size), step_size
-        ).tolist()
-        for easting_deltas, northing_deltas in (
-            (deltas[:-1], (0,)),
-            ((self.precision,), deltas[:-1]),
-            (deltas[:0:-1], (self.precision,)),
-            ((0,), deltas[:0:-1]),
-        ):
-            for easting_delta in easting_deltas:
-                for northing_delta in northing_deltas:
-                    point = self._make_reference_point(
-                        easting_delta,
-                        northing_delta,
-                        as_latlon=as_latlon,
-                        preserve_constraints=preserve_constraints,
-                    )
-                    yield point
+
+        # Iterate.
+        parallel_iter = self._make_parallel_marching_iter(count_per_side)
+        if serial:
+            deltas_iter = _itertools.chain(
+                *zip(*_itertools.batched(parallel_iter, 4))
+            )
+        else:
+            deltas_iter = parallel_iter
+        for easting_delta, northing_delta in deltas_iter:
+            point = self._make_reference_point(
+                easting_delta,
+                northing_delta,
+                as_latlon=as_latlon,
+                preserve_constraints=preserve_constraints,
+            )
+            yield point
 
     @_functools.cached_property
     def bounds(self) -> ProjectedBounds:
