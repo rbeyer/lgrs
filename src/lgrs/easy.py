@@ -23,8 +23,8 @@ import pathlib as _pathlib
 import typing as _typing
 
 # Internal.
+import lgrs.bounds as _bounds
 import lgrs.grid as _grid
-import lgrs.srs.srs as _srs
 
 
 # endregion
@@ -180,37 +180,55 @@ def write_grid(
     mode: _typing.Literal["x", "w", "a"] = "x",
     min_overlap: bool = True,
     min_zones: bool = False,
+    fallback_to_geo: bool = False,
+    densify_count: int = 21,
 ) -> None:
     """
     Write out an LGRS or ACC box grid to one or more files.
 
     Parameters
     ----------
-    bounds : 4-float tuple, string, or path
-        Sets the geographic bounds of the grid. May be specified in the
-        following ways:
-          (1) a 4-float tuple giving, as degrees,
-              (min_lon, min_lat, max_lon, max_lat)
-          (2) a string giving the short name for an LGRS CRS, such as "S"
-              for the LPS south polar region and "23N" for LTM zone 23 in
-              the Northern Hemisphere. This option generates all boxes
-              within the specified region.
-          (3) a path to a vector or raster file whose approximate
-              geographic bounds will be used. You may specify a layer by the
-              convention: ``"path/to/my.gpkg|layername=layer_name"``.
+    bounds : a resolvable bounds hint
+        Resolved to define the footprint of the box grid. Supported inputs:
+            (1) 4-sequence of `float`s
+                Order of `float`s is (min_lon, min_lat, max_lon, max_lat).
+                Values are in degrees in IAU_2015:30100.
+            (2) 5-sequence of 4 `float`s followed by a CRS hint
+                Order is (min_x, min_y, max_x, max_y, crs_hint). If the
+                final element is not a `CRS`, it is coerced by
+                `lgrs.bounds.resolve_crs()`. For example, "S" indicates the
+                south LPS CRS, "23N" indicates the Northern Hemisphere LTM
+                zone 23 CRS, and `None` indicates the underlying geographic
+                CRS, IAU_2015:30100. Arguments compatible with
+                `pyproj.CRS.from_user_input()` are also supported, such as
+                "IAU_2015:30100" or "ESRI:104903".
+            (3) path (`str` or `pathlib.Path`) to vector or raster data
+                The target's bounds, in its CRS, are used. You may specify a
+                layer or table by the convention:
+                ``"path/to/my.gpkg|layer=my_layer_name"`` or
+                ``"path/to/my.gpkg|table=my_table_name"``, as appropriate.
+            (4) `str` short name for an LGRS CRS
+                This option generates all boxes for the indicated CRS, which
+                is resolved by `lgrs.bounds.resolve_crs()`.
+            (5) `None`
+                Interpreted as global bounds.
+            (6) `bounds.GeographicBounds` or `bounds.ProjectedBounds`
+                Used directly.
+            (7) `pyproj.AreaOfInterest` or `pyproj.AreaOfUse`
+                Converted by ``GeographicBounds.from_area(bounds)``.
     precision : float
         The required precision of the grid. If not a supported precision,
         the actual precision is rounded down to a better precision. All
-        boxes will have the same precision.
+        boxes have the same precision.
     out_path : string or pathlib.Path
         The output file path. You may specify a layer name by the
-        convention: ``"path/to/my.gpkg|layername=layer_name"``. May contain
-        `"{}"` as a placeholder (in file path and/or layer name portions),
-        which will be replaced with an automatically generated descriptive
-        name that ensures uniqueness among the outputs of this call. If the
-        parent directory of `out_path` does not exist, it will be created.
-        If `out_path` is a GeoPackage, each output layer will be appended to
-        it; the GeoPackage will also be created, if necessary.
+        convention: ``"path/to/my.gpkg|layer=layer_name"``. May contain `"{}"`
+        as a placeholder (in file path and/or layer name portions), which will
+        be replaced with an automatically generated descriptive name that
+        ensures uniqueness among the outputs of this call. If the parent
+        directory of `out_path` does not exist, it will be created. If
+        `out_path` is a GeoPackage, each output layer will be appended to it;
+        the GeoPackage will also be created, if necessary.
     acc : bool, default=False
         Whether to use Artemis Condensed Coordinates (ACC) rather than the
         standard Lunar Grid Reference System (LGRS). The geometry of the
@@ -245,6 +263,19 @@ def write_grid(
         zone and a few from a neighboring zone. If `False`, only boxes from
         the nominal area of each zone will be generated. If `bounds` is
         specified by an LGRS CRS string, this argument is ignored.
+    fallback_to_geo: bool, default=False
+        Specifies the behavior when the CRS of a path-like `bounds` cannot
+        be transformed to the geographic CRS IAU_2015:30100. If `True` and
+        that CRS can be transformed to some geographic CRS, that geographic
+        CRS is assumed equivalent to IAU_2015:30100. If `True` but no CRS
+        can be identified for `path`, the coordinates are assumed to
+        already be in IAU_2015:30100, with order (lat, lon). In all other
+        cases, an exception is raised.
+    densify_count : int, default=21
+        Whenever a bounding box must be transformed between CRSes, this number
+        of samples will be added to each edge prior to transformation. Having
+        more samples helps ensure that the transformation of the bounding box
+        is more precise, but higher values will decrease performance.
 
     Returns
     -------
@@ -266,7 +297,7 @@ def write_grid(
     Examples
     --------
     >>> write_grid(  # doctest: +SKIP
-    ...     (3, 3, 5, 5), 1_000, "~/grids/grid_1.gpkg|layername={}",  # doctest: +SKIP
+    ...     (3, 3, 5, 5), 1_000, "~/grids/grid_1.gpkg|layer={}",  # doctest: +SKIP
     ...     acc=True  # doctest: +SKIP
     ... )  # doctest: +SKIP
     >>> write_grid("N", 25_000, r"C:\\my_grids\final_{}_Moon.shp")  # doctest: +SKIP
@@ -275,52 +306,44 @@ def write_grid(
     # Process `out_*` arguments.
     nom_out_path_template = _pathlib.Path(out_path)
     del out_path  # Avoid accidental use.
-    out_file_path_template, out_layer_name_template, _ = (
-        _grid._resolve_file_path_and_layer_name_and_existence(
-            nom_out_path_template, test_exists=False
-        )
+    out_file_path_template, open_kwargs = (
+        _bounds._resolve_file_path_and_open_kwargs(nom_out_path_template)
     )
+    if open_kwargs:
+        ((layer_kw, layer_name),) = open_kwargs.items()
+    else:
+        layer_kw = None
     # Note: Satisfaction of `mode` expectations can only be evaluated
     # once the output file path is resolved.
     file_path_is_dynamic = "{}" in out_file_path_template.name
     if not file_path_is_dynamic:
-        mode = _test_mode(out_file_path_template, mode)  # *REASSIGNMENT*
+        # *REASSIGNMENT*
+        mode = _test_mode(out_file_path_template, mode)
     if not out_file_path_template.parent.parent.exists():
         raise TypeError(
             "The grandparent of `out_path` does not exist: "
             f"'{out_file_path_template.parent.parent}'"
         )
 
-    # Resolves bounds.
-    if isinstance(bounds, str):
-        try:
-            _srs.make_lunar_crs(bounds)
-        except TypeError:
-            bounds = _pathlib.Path(bounds)
-    # noinspection PyUnreachableCode
-    match bounds:
-        case _pathlib.Path():
-            geo_bounds = _grid.GeographicBounds.from_path(bounds)
-        case str():
-            geo_bounds = bounds
-        case _:
-            geo_bounds = _grid.GeographicBounds.from_other(bounds)
-
     # Verify required uniqueness.
     expect_exactly_one_crs = "{}" not in nom_out_path_template.name
     # TODO: Could eventually support output to a single file generally
     #  by using a geographic CRS and densification.
-    if expect_exactly_one_crs and not isinstance(geo_bounds, str):
-        raise TypeError("`out_path.name` must contain '{}'")
+    if expect_exactly_one_crs:
+        _, exclusive_crs = _grid._resolve_bounds(**locals())
+        if exclusive_crs is None:
+            raise TypeError("`out_path.name` must contain '{}'")
 
     # Generate grid `GeoDataFrame`(s).
     boxes = _grid.make_box_grid(
-        geo_bounds,
+        bounds,
         precision=precision,
         acc=acc,
         extended_ltm=extended_ltm,
         min_overlap=min_overlap,
         min_zones=min_zones,
+        fallback_to_geo=fallback_to_geo,
+        densify_count=densify_count,
     )
     gdfs = _grid.make_gdfs(boxes)
 
@@ -339,10 +362,8 @@ def write_grid(
             "index": True,
             "mode": mode,
         }
-        if out_layer_name_template is not None:
-            to_file_kwargs["layer"] = out_layer_name_template.format(
-                gdf.name_hint
-            )
+        if layer_kw is not None:
+            to_file_kwargs[layer_kw] = layer_name.format(gdf.name_hint)
         # Note: Wait to create out directory until necessary.
         if not out_dir_path_exists:
             out_dir_path.mkdir()
