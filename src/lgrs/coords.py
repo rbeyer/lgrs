@@ -72,26 +72,22 @@ type FieldData = _collections.abc.Mapping[str, _typing.Any]
 
 # endregion
 ###############################################################################
-# region> NAMED TUPLES
+# region> CORNERS
 ###############################################################################
-# Note: `beartype` seems to have issues with type hints on named tuples,
-# so disable it.
-@_beartype.beartype(
-    conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0)
-)
-class GeographicCorners(_typing.NamedTuple):
+@_dataclasses.dataclass(frozen=True)
+class GeographicCorners(_bounds._Base):
     lower_left: LatLonPoint
     lower_right: LatLonPoint
     upper_right: LatLonPoint
     upper_left: LatLonPoint
 
+    def __iter__(self) -> _typing.Iterator[LatLonPoint]:
+        for v in self._iter_first_four_field_values():
+            yield v
 
-# Note: `beartype` seems to have issues with type hints on named tuples,
-# so disable it.
-@_beartype.beartype(
-    conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0)
-)
-class ProjectedCorners(_typing.NamedTuple):
+
+@_dataclasses.dataclass(frozen=True)
+class ProjectedCorners(_bounds._Base):
     lower_left: LpsPoint | LtmPoint
     lower_right: LpsPoint | LtmPoint
     upper_right: LpsPoint | LtmPoint
