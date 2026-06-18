@@ -531,9 +531,16 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     # Note: Added because instantiating a `pyproj.CRS` from a
     # `pyproj.CRSInfo` relies on `pyproj.CRS.from_authority()`, which we
     # cannot independently support.
-    def get_crs(self) -> _srs.CRS:
+    def get_crs(self, *, force_nominal: bool = False) -> _srs.CRS:
         """
         Get a `CRS` instance corresponding to this info instance.
+
+        Parameters
+        ----------
+        force_nominal : bool, default=False
+            Whether to get the nominal form of the `CRS` even if `self` does
+            not correspond to that form. The nominal form is the `CRS` with the
+            default LPS/LTM boundary at 80° N/S.
 
         Returns
         -------
@@ -543,18 +550,19 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         suffix = self._internal_name_parsed.suffix
         name = self._internal_name.removesuffix(suffix)
         kwargs = {}
-        match suffix:
-            case "":
-                kwargs["extended_ltm"] = False
-            case "*":
-                kwargs["extended_ltm"] = True
-            case "**":
-                if self.is_lps:
-                    kwargs["global_lps"] = True
-                else:
-                    kwargs["global_ltm"] = True
-            case _:
-                raise TypeError(f"`suffix` is not recognized: {suffix!r}")
+        if not force_nominal:
+            match suffix:
+                case "":
+                    kwargs["extended_ltm"] = False
+                case "*":
+                    kwargs["extended_ltm"] = True
+                case "**":
+                    if self.is_lps:
+                        kwargs["global_lps"] = True
+                    else:
+                        kwargs["global_ltm"] = True
+                case _:
+                    raise TypeError(f"`suffix` is not recognized: {suffix!r}")
         crs = _srs.make_lunar_crs(name, **kwargs)
         return crs
 
