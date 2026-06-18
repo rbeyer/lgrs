@@ -21,7 +21,6 @@
 from __future__ import annotations
 
 import collections as _collections
-import dataclasses as _dataclasses
 import math as _math
 import pathlib as _pathlib
 import typing as _typing
@@ -30,7 +29,6 @@ import typing as _typing
 import geopandas as _geopandas
 import numpy as _np
 import pyproj as _pyproj
-import rasterio as _rasterio
 from pyproj import aoi as _pyproj_aoi
 
 # Internal.
@@ -38,7 +36,6 @@ import lgrs.bounds as _bounds
 import lgrs.coords as _coords
 import lgrs.database as _database
 import lgrs.srs.srs as _srs
-import lgrs.srs.wkt as _wkt
 import lgrs.values as _values
 
 
@@ -136,47 +133,78 @@ def _construct_latlon_grid(
     return points
 
 
-def _make_crit_array(
-    num_or_iter: float | _collections.abc.Iterable,
-) -> _np.ndarray:
-    if isinstance(num_or_iter, _collections.abc.Iterable):
-        iterable = num_or_iter
+def _resolve_bounds(
+    bounds: _typing.Any,
+    *,
+    extended_ltm: bool,
+    fallback_to_geo: bool,
+    **ignore,
+) -> tuple[
+    _bounds.GeographicBounds | _bounds.ProjectedBounds,
+    _srs.CRS | None,
+]:
+    # Standardize `bounds`, so that each type as a single interpretation.
+    geo_crs = _srs.make_lunar_crs()
+    if isinstance(bounds, str):
+        try:
+            std_bounds = _srs.make_lunar_crs(bounds, extended_ltm=extended_ltm)
+        except _pyproj.exceptions.CRSError:
+            std_bounds = _pathlib.Path(bounds)
+    elif isinstance(bounds, _collections.abc.Sequence):
+        match len(bounds):
+            case 4:
+                std_bounds = (*bounds, geo_crs)
+            case 5:
+                crs = _bounds.resolve_crs(bounds[4])
+                std_bounds = (*bounds[:4], crs)
+            case _:
+                raise TypeError(
+                    "If `bounds` is a flat (1D) `sequence`, it must have "
+                    f"length 4 or 5, not: {len(bounds)}"
+                )
+    elif bounds is None:
+        std_bounds = _bounds.GeographicBounds(-180, -90, 180, 90)
     else:
-        iterable = (-num_or_iter, num_or_iter)
-    a = _np.fromiter(iterable, dtype=_np.float64)
-    return a
+        std_bounds = bounds
 
+    # Resolve standardized `bounds` to a bounds instance.
+    exclusive_crs = None  # Default.
+    match std_bounds:
+        case tuple():
+            crs = std_bounds[-1]
+            if crs == geo_crs:
+                final_bounds = _bounds.GeographicBounds(*std_bounds[:-1])
+            else:
+                final_bounds = _bounds.ProjectedBounds(
+                    *std_bounds[:-1], crs_hint=crs
+                )
+        case _pathlib.Path():
+            final_bounds = _bounds._BaseBounds.from_path(
+                std_bounds, fallback_to_geo=fallback_to_geo
+            )
+        case _srs.CRS():
+            exclusive_crs = std_bounds
+            final_bounds = _bounds.GeographicBounds.from_area(
+                std_bounds.area_of_use
+            )
+        case _bounds.GeographicBounds() | _bounds.ProjectedBounds():
+            final_bounds = std_bounds
+        case _pyproj_aoi.AreaOfInterest() | _pyproj_aoi.AreaOfUse():
+            final_bounds = _bounds.GeographicBounds.from_area(std_bounds)
+        case _:
+            raise TypeError(
+                f"Type and/or form of `bounds` not supported: {bounds!r}"
+            )
 
-def _resolve_file_path_and_layer_name_and_existence(
-    path: _pathlib.Path | str, *, test_exists: bool = True
-) -> tuple[_pathlib.Path, str | None, bool | None]:
-    if not isinstance(path, _pathlib.Path):
-        path = _pathlib.Path(path)  # *REASSIGNMENT*
-    if path.parts[0] == "~":
-        path = path.expanduser()  # *REASSIGNMENT*
-    try:
-        path_name, layer_name = path.name.split("|layername=")
-    except ValueError:
-        file_path = path
-        layer_name = None
-    else:
-        file_path = path.with_name(path_name)
-    if not test_exists:
-        exists = None
-    elif not file_path.exists():
-        exists = False
-    elif layer_name is None:
-        exists = True
-    else:
-        exists = layer_name in _geopandas.list_layers(path)["name"].values
-    return (file_path, layer_name, exists)
+    # Return results.
+    return (final_bounds, exclusive_crs)
 
 
 # endregion
 ###############################################################################
 # region> SUPPORT CLASSES
 ###############################################################################
-class GeoDataFrame(_geopandas.GeoDataFrame):
+class LunarGeoDataFrame(_geopandas.GeoDataFrame):
     """Subclass of `geopandas.GeoDataFrame`."""
 
     name_hint: str
@@ -187,38 +215,57 @@ class GeoDataFrame(_geopandas.GeoDataFrame):
 # region> GRID GENERATION
 ###############################################################################
 def make_box_grid(
-    bounds: (
-        GeographicBounds
-        | tuple[float, float, float, float]
-        | str
-        | _pyproj_aoi.AreaOfInterest
-        | _pyproj_aoi.AreaOfUse
-    ),
+    bounds: _typing.Any,
     precision: float,
     *,
     acc: bool = False,
     extended_ltm: bool = False,
     min_overlap: bool = True,
     min_zones: bool = False,
+    fallback_to_geo: bool = False,
+    densify_count: int = 21,
 ) -> list[_coords.BoxCoordinate]:
     """
-    Generate a grid of LGRS or ACC boxes within geographic bounds.
+    Generate a grid of LGRS or ACC boxes spanning specified bounds.
 
     Parameters
     ----------
-    bounds : GeographicBounds, iterable, string, or another hint
-        The geogrpahic bounds, in degrees, for which to generate the grid. Any
-        value compatible with ``GeographicBounds.from_other()`` is valid.
-        Additionally, the name of a CRS (as supported by
-        `lgrs.make_lunar_crs()`) may be used to generate all boxes for that
-        CRS. Examples include "S" for the LPS south polar region and "23N"
-        for LTM zone 23 in the Northern Hemisphere.
+    bounds : a resolvable bounds hint
+        Resolved to define the footprint of the box grid. Supported inputs:
+            (1) 4-sequence of `float`s
+                Order of `float`s is (min_lon, min_lat, max_lon, max_lat).
+                Values are in degrees in IAU_2015:30100.
+            (2) 5-sequence of 4 `float`s followed by a CRS hint
+                Order is (min_x, min_y, max_x, max_y, crs_hint). If the
+                final element is not a `CRS`, it is coerced by
+                `lgrs.bounds.resolve_crs()`. For example, "S" indicates the
+                south LPS CRS, "23N" indicates the Northern Hemisphere LTM
+                zone 23 CRS, and `None` indicates the underlying geographic
+                CRS, IAU_2015:30100. Arguments compatible with
+                `pyproj.CRS.from_user_input()` are also supported, such as
+                "IAU_2015:30100" or "ESRI:104903".
+            (3) path (`str` or `pathlib.Path`) to vector or raster data
+                The target's bounds, in its CRS, are used. You may specify a
+                layer or table by the convention:
+                ``"path/to/my.gpkg|layer=my_layer_name"`` or
+                ``"path/to/my.gpkg|table=my_table_name"``, as appropriate.
+            (4) `str` short name for an LGRS CRS
+                This option generates all boxes for the indicated CRS, which
+                is resolved by `lgrs.bounds.resolve_crs()`.
+            (5) `None`
+                Interpreted as global bounds.
+            (6) `bounds.GeographicBounds` or `bounds.ProjectedBounds`
+                Used directly.
+            (7) `pyproj.AreaOfInterest` or `pyproj.AreaOfUse`
+                Converted by ``GeographicBounds.from_area(bounds)``.
     precision : float
         The required precision of the grid. If not a supported precision,
         the actual precision is rounded down to a better precision. All
         boxes have the same precision.
     acc : bool, default=False
-        Whether to use ACC. If `False`, LGRS is used.
+        Whether to use Artemis Condensed Coordinates (ACC) rather than the
+        standard Lunar Grid Reference System (LGRS). The geometry of the
+        boxes in each case are identical but the field data differ.
     extended_ltm : bool, default=False
         Whether to use the extended LTM region, which extends to 82° N/S
         instead of 80° N/S.
@@ -229,7 +276,7 @@ def make_box_grid(
         are generated, which may include inter-zone overlaps of up to ~35.4
         km, that is, the diagonal of a 25-km box. In the special case that
         `bounds` is specified by an LGRS CRS string, `min_overlap` is
-        instead interpreted to relate to the overlap of that zone with its
+        instead interpreted to relate to the overlap of that region with its
         neighbors. Then, `True` generates only boxes that are within the
         nominal bounds of the zone whereas `False` generates all valid boxes
         from the maximally expanded zone.
@@ -243,6 +290,19 @@ def make_box_grid(
         zone and a few from a neighboring zone. If `False`, only boxes from
         the nominal area of each zone will be generated. If `bounds` is
         specified by an LGRS CRS string, this argument is ignored.
+    fallback_to_geo: bool, default=False
+        Specifies the behavior when the CRS of a path-like `bounds` cannot
+        be transformed to the geographic CRS IAU_2015:30100. If `True` and
+        that CRS can be transformed to some geographic CRS, that geographic
+        CRS is assumed equivalent to IAU_2015:30100. If `True` but no CRS
+        can be identified for `path`, the coordinates are assumed to
+        already be in IAU_2015:30100, with order (lat, lon). In all other
+        cases, an exception is raised.
+    densify_count : int, default=21
+        Whenever a bounding box must be transformed between CRSes, this number
+        of samples will be added to each edge prior to transformation. Having
+        more samples helps ensure that the transformation of the bounding box
+        is more precise, but higher values will decrease performance.
 
     Returns
     -------
@@ -271,32 +331,24 @@ def make_box_grid(
     if min_zones:
         raise TypeError("`min_zones=True` not yet implemented.")
 
-    # Determine geographic bounds, the minimum required buffer length,
-    # and whether only default boxes should be used.
-    # Note: `min_overlap` has two different meanings, depending on the
-    # mode. (That mode in determined by how `bounds` is specified).
-    # Initially, one meaning is assumed, but once mode resolution
-    # confirms the intended meaning, `use_default_boxes_only` is set
-    # accordingly.
-    use_expanded_exclusive_crs = not min_overlap  # For clarity.
-    if isinstance(bounds, str):
-        exclusive_crs: _srs.CRS = _srs.make_lunar_crs(
-            bounds, extended_ltm=extended_ltm
-        )
-        geo_bounds = GeographicBounds.from_other(exclusive_crs.area_of_use)
-        if use_expanded_exclusive_crs:
+    # Resolve `bounds`.
+    final_bounds, exclusive_crs = _resolve_bounds(**locals())
+
+    # Determine geographic bounds for the sample-point grid, the minimum
+    # required buffer length, and whether only default boxes should be
+    # used.
+    geo_bounds = final_bounds.in_crs(densify_count=densify_count)
+    if exclusive_crs:
+        if min_overlap:
+            min_buffer = 0
+        else:
             min_buffer = _values.calculate_diagonal_length(
                 25_000, safe_up=True
             )
-        else:
-            min_buffer = 0
         use_default_boxes_only = True
     else:
-        exclusive_crs = None
-        geo_bounds = GeographicBounds.from_other(bounds)
         min_buffer = 0
         use_default_boxes_only = min_overlap
-    del min_overlap  # Avoid accidental use.
 
     # Determine the constraints to use.
     if exclusive_crs is None:
@@ -313,7 +365,7 @@ def make_box_grid(
             extended_ltm=extended_ltm,
         )
 
-    # Generate geographic sample point grid.
+    # Generate geographic sample-point grid.
     # Note: Grid has sufficient density to ensure that all boxes at
     # desired precision are sampled, with careful sampling near region
     # (relevant zone) boundaries.
@@ -346,30 +398,41 @@ def make_box_grid(
             )
         }
 
-    # Filter boxes spatially.
-    if exclusive_crs is None:
-        # On first past, filter any boxes that have no corner within
-        # geographic bounds.
-        # TODO: Test whether this block generates gaps.
+    # Filter any boxes from outside the targeted CRS.
+    if exclusive_crs:
+        box_list = [box for box in box_set if box.crs == exclusive_crs]
+
+    # Filter boxes spatially, if necessary.
+    elif geo_bounds.is_global:
+        box_list = list(box_set)
+    else:
+        # On first pass, filter out any boxes that have no corner within
+        # within the relevant bounds or, for cross-CRS tests, closer
+        # than a (safe) box width.
+        if final_bounds.crs.is_geographic:
+            short_tolerance = precision / _values.M_PER_DEGREE_LATITUDE
+        else:
+            short_tolerance = precision
+        default_tolerance = short_tolerance * _values.SAFETY_FACTOR
         box_list = []
         for box in box_set:
-            for corner in box.corners_latlon:
-                if corner in geo_bounds:
+            if final_bounds.crs == box.crs_nominal:
+                tolerance = 0
+            else:
+                tolerance = default_tolerance
+            for corner in box._corners:
+                if corner.is_within_bounds(final_bounds, tolerance=tolerance):
                     box_list.append(box)
                     break
-        # If all boxes were filtered out in first pass, a single box
-        # fully encloses the geographic bounds, so instead return that
-        # box.
-        if not box_list:
-            bounds_corner = _coords.LatLonPoint(
-                geo_bounds.min_latitude, geo_bounds.min_longitude
-            )
-            # *REASSIGNMENT*
-            box_list = [box for box in box_set if box.contains(bounds_corner)]
 
-    # Filter any boxes from outside the targeted CRS.
-    else:
-        box_list = [box for box in box_set if box.crs == exclusive_crs]
+        # If all boxes were filtered out in first pass, a single box
+        # fully encloses the bounds (and therefore has no corners within
+        # those bounds), so instead return that box.
+        if not box_list:
+            median_lon, median_lat = geo_bounds.median_xy
+            median_latlon = _coords.LatLonPoint(median_lat, median_lon)
+            # *REASSIGNMENT*
+            box_list = [box for box in box_set if box.contains(median_latlon)]
 
     # Sort and return.
     box_list.sort(key=lambda b: b.string)
@@ -378,7 +441,7 @@ def make_box_grid(
 
 def make_gdfs(
     boxes: _collections.abc.Sequence[_coords.BoxCoordinate],
-) -> list[GeoDataFrame]:
+) -> list[LunarGeoDataFrame]:
     """
     Create one or more `GeoDataFrame` instances from a sequence of boxes.
 
@@ -447,7 +510,7 @@ def make_gdfs(
             for field_name in field_names_view:
                 data[field_name].append(box.field_data.get(field_name))
         data["geometry"] = [box.geometry for box in boxes]
-        gdf = GeoDataFrame(data, crs=crs_info.get_crs())
+        gdf = LunarGeoDataFrame(data, crs=crs_info.get_crs())
         gdfs.append(gdf)
 
         # Construct and attach name hint.
