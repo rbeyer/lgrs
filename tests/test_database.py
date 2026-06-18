@@ -36,7 +36,7 @@ import pyproj.aoi
 class TestQueryDatabase(unittest.TestCase):
     default_kwargs = {
         "contains": False,
-        "primary": True,
+        "nominal": True,
         "extended_ltm": False,
         "global_lps": False,
         "global_ltm": False,
@@ -145,7 +145,7 @@ class TestQueryDatabase(unittest.TestCase):
         self.check_query(
             latitude=81,
             longitude=0,
-            primary=False,
+            nominal=False,
             extended_ltm=False,
             global_ltm=True,
             expected_internal_names=["23N**"],
@@ -178,7 +178,7 @@ class TestQueryDatabase(unittest.TestCase):
         self.check_query(
             latitude=83,
             longitude=0,
-            primary=False,
+            nominal=False,
             extended_ltm=False,
             global_ltm=True,
             expected_internal_names=["23N**"],
