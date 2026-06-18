@@ -54,6 +54,7 @@ from beartype._check.forward.reference.fwdrefmeta import (
 )
 
 # Internal.
+import lgrs.bounds as _bounds
 import lgrs.caching as _caching
 import lgrs.database as _database
 import lgrs.exceptions as _exceptions
@@ -96,17 +97,9 @@ class ProjectedCorners(_typing.NamedTuple):
     upper_right: LpsPoint | LtmPoint
     upper_left: LpsPoint | LtmPoint
 
-
-# Note: `beartype` seems to have issues with type hints on named tuples,
-# so disable it.
-@_beartype.beartype(
-    conf=_beartype.BeartypeConf(strategy=_beartype.BeartypeStrategy.O0)
-)
-class ProjectedBounds(_typing.NamedTuple):
-    min_easting: float
-    min_northing: float
-    max_easting: float
-    max_northing: float
+    def __iter__(self) -> _typing.Iterator[LpsPoint | LtmPoint]:
+        for v in self._iter_first_four_field_values():
+            yield v
 
 
 # endregion
@@ -3120,18 +3113,19 @@ class BoxCoordinate(BaseCoordinate):
             yield point
 
     @_functools.cached_property
-    def bounds(self) -> ProjectedBounds:
+    def bounds(self) -> _bounds.ProjectedBounds:
         """
         Box's bounds as a named tuple of coordinates in the underlying CRS.
         """
         (x_sw, y_sw), (x_se, y_se), (x_ne, y_ne), (x_nw, y_nw) = (
             (point.easting, point.northing) for point in self._corners
         )
-        bounds = ProjectedBounds(
+        bounds = _bounds.ProjectedBounds(
             min_easting=min(x_nw, x_sw),
             min_northing=min(y_se, y_sw),
             max_easting=max(x_ne, x_se),
             max_northing=max(y_ne, y_nw),
+            crs_hint=self.crs_nominal,
         )
         return bounds
 
