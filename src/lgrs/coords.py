@@ -1229,14 +1229,13 @@ class BaseCoordinate(_BaseCoordinate):
     # TODO: Decide whether to support mixed types.
     def is_equal_to(
         self,
-        other: _typing.Self,
+        other: _typing.Any,
         *,
         error: bool = False,
         constraints: bool = False,
     ) -> bool:
         """
-        Test whether two coordinates are equal, optionally including
-        constraints.
+        Test whether two coordinates are equal.
 
         Note that::
 
@@ -1246,12 +1245,10 @@ class BaseCoordinate(_BaseCoordinate):
 
             coord_1.is_equal_to(coord_2, constraints=False)
 
-        except that the latter does not support mixed types.
-
         Parameters
         ----------
-        other : BaseCoordinate
-            The other coordinate to compare to.
+        other : BaseCoordinate or any object
+            The other coordinate (object) to compare to.
         error : bool, default=False
             Whether to raise a descriptive error rather than return `False`.
         constraints : bool, default=False
@@ -1267,7 +1264,7 @@ class BaseCoordinate(_BaseCoordinate):
         Raises
         ------
         TypeError
-            If `self` and `other` are of different types.
+            If `error` is `True` and `self` and `other` are not equal.
 
         Examples
         --------
@@ -1281,6 +1278,10 @@ class BaseCoordinate(_BaseCoordinate):
         False
         """
         # Compare.
+        if type(self) is not type(other):
+            if not error:
+                return False
+            raise TypeError(f"Types are not the same: {self!r} vs. {other!r}")
         err_lines = []
         for field_name, self_val in self._init_kwargs.items():
             if not constraints and field_name == "constraints":
