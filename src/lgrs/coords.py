@@ -46,8 +46,6 @@ import weakref as _weakref
 from math import floor as _floor
 
 # External.
-import beartype as _beartype
-import numpy as _np
 import pyproj as _pyproj
 import regex as _regex
 import shapely as _shapely
