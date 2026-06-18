@@ -66,9 +66,7 @@ import lgrs.values as _values
 # region> TYPE ALIASES
 ###############################################################################
 type _ToMethod = _collections.abc.Callable[..., BaseCoordinate]
-type FieldData = dict[str, _typing.Any] | _types.MappingProxyType[
-    str, _typing.Any
-]
+type FieldData = _collections.abc.Mapping[str, _typing.Any]
 
 
 # endregion
@@ -3167,6 +3165,9 @@ class BoxCoordinate(BaseCoordinate):
 
     @_functools.cached_property
     def default_field_data(self) -> FieldData:
+        """
+        The default (read-only) mapping for `.field_data`.
+        """
         field_data = self._init_kwargs.copy()
         del field_data["constraints"]
         for field_name in self._extra_field_names:
@@ -3175,10 +3176,14 @@ class BoxCoordinate(BaseCoordinate):
 
     @property
     def field_data(self) -> FieldData:
+        """
+        The currently registered mapping for field data.
+        """
         try:
             return self._field_data
         except AttributeError:
-            return self.default_field_data
+            self.set_field_data()
+            return self._field_data
 
     @_functools.cached_property
     def geometry(self) -> _shapely.Polygon:
@@ -3186,30 +3191,32 @@ class BoxCoordinate(BaseCoordinate):
         return polygon
 
     def set_field_data(
-        self, field_data: _collections.abc.Mapping[str, _typing.Any]
-    ) -> FieldData:
+        self,
+        field_data: FieldData | None = None,
+    ) -> None:
         """
-        Set field data for this box.
+        Set field data (`.field_data`) for this box.
+
+        To reset `.field_data` to a writable copy of its default, use::
+
+            box.set_field_data()
+
+        which is equivalent to::
+
+            box.set_field_data(dict(box.default_field_data))
 
         Parameters
         ----------
-        field_data : a mapping with string keys
-            The field data to assign to this box. If neither a `dict` nor
-            a `types.MappingProxyType`, coerced to a `dict`.
-
-        Returns
-        -------
-        processed_data : a mapping with string keys
-            The input `field_data`, coerced if necessary.
+        field_data : a mapping with string keys, optional
+            The field data to assign to this box.
 
         See Also
         --------
         .field_data : The stored (or default) field data for this box.
         """
-        if not isinstance(field_data, (dict, _types.MappingProxyType)):
-            field_data = dict(field_data)  # *REASSIGNMENT*
+        if field_data is None:
+            field_data = dict(self.default_field_data)
         object.__setattr__(self, "_field_data", field_data)
-        return field_data
 
     # * PUBLIC DATA AND METHODS. ──────────────────────────────────────
     precision: int
