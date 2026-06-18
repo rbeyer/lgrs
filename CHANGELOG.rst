@@ -28,14 +28,36 @@ and the release date, in year-month-day format (see examples below).
 Unreleased
 ----------
 
+Added
+^^^^^
+* ``bounds`` module, which includes enhanced versions of ``GeographicBounds``
+  (previously hosted by ``lgrs.grid``) and ``ProjectedBounds`` (previously
+  hosted by ``lgrs.coords``).
+* ``PointCoordinate.is_within_bounds()``.
+
 Changed
 ^^^^^^^
+* The ``bounds`` argument of ``lgrs.grid.make_box_grid()`` and
+  ``lgrs.easy.write_grid()`` can now be specified in seven different ways, as
+  documented in the docstrings for those functions. Most notably, bounds may now
+  be specified in LPS and LTM CRSs, whereas only geographic bounds were
+  previously supported.
 * For ``lgrs.coords.BaseCoordinate``, ``.to_lps()`` and ``.to_ltm()`` now
   support a ``search`` argument. Documentation has been added to explain its
   functionality. The method ``.to()`` inherits this enhanced functionality. Note
   that the prior implementation of these methods was similar to
   ``search=True`` but ``search`` defaults to ``False``, which may break existing
   code.
+* Ambiguous and/or outdated documentation has been updated throughout the
+  library, including ``LatLonPoint``, ``BaseCoordinate.copy()``, and
+  ``BoxCoordinate.contains()`` in the ``lgrs.coords`` module.
+* Some argument defaults have changed, including those for ``same_crs_only`` and
+  ``error`` of ``lgrs.coords.BoxCoordinate.contains()``.
+* The ``primary`` argument of ``lgrs.database.query_lunar_crs_info()`` is now
+  called ``nominal``, to be consistent with use elsewhere in the library.
+* ``pyproj.Transformer`` instances are now universally cached for better
+  performance.
+* ``BaseCoordinate.field_data`` is now a writable ``dict``, by default.
 
 Removed
 ^^^^^^^
@@ -44,6 +66,10 @@ Removed
 
 Fixed
 ^^^^^
+* Grid generation (via ``lgrs.grid.make_box_grid()`` and
+  ``lgrs.easy.write_grid()``) now handles the margins of the input ``bounds``
+  more carefully. Therefore, the footprint of ``bounds`` will be spanned by the
+  generated boxes, generally with some excess fringe.
 * Constraints are now set with sufficient specificity to guarantee coordinate
   validity when generating box corner coordinates. Consequently, caching now
   remains enabled when using the ``min_overlap=False`` setting of
@@ -51,6 +77,8 @@ Fixed
   improving performance.
 * The ``.to_lps()`` and ``.to_ltm()`` methods of ``lgrs.coords.BoxCoordinate``
   now honor their ``validate`` argument.
+* The behavior of ``lgrs.coords.BaseCoordinate.is_equal_to()`` now exactly
+  follows its documentation.
 
 
 0.2.0 (2026-06-02)
