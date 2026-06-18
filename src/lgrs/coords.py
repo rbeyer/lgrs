@@ -2151,6 +2151,65 @@ class PointCoordinate(BaseCoordinate):
         transformer = _srs.get_transformer(crs_from, crs_to, always_xy=False)
         return transformer
 
+    def is_within_bounds(
+        self,
+        bounds: _bounds.GeographicBounds | _bounds.ProjectedBounds,
+        *,
+        tolerance: float = _values.DEGREE_EPSILON,
+    ) -> bool:
+        """
+        Determine whether point (`self`) is within bounds.
+
+        Parameters
+        ----------
+        bounds : GeographicBounds or ProjectedBounds
+            The bounds to test against.
+        tolerance : float, optional
+            If `self` is within this tolerance of being within `bounds`,
+            `True` is returned. Tolerance is applied as a buffer to each
+            dimension of `bounds`. This value may be negative, which
+            makes tests more restrictive.
+
+        Returns
+        -------
+        is_within : bool
+            Whether point (`self`) is within `tolerance` of `bounds`.
+        """
+        # Get equivalent point in target CRS.
+        if isinstance(bounds, _bounds.GeographicBounds):
+            if bounds.is_global:
+                return True
+            same_crs_point = self.to_latlon()
+            is_x_then_y = False
+        elif self.crs_nominal == bounds.crs:
+            same_crs_point = self
+            is_x_then_y = True
+        else:
+            # Note: Don't call `self.to_lps_or_ltm()` as that method may
+            # ultimately call the current method, creating infinite
+            # recursion.
+            transformer: _pyproj.Transformer = _srs.get_transformer(
+                self.crs_nominal, bounds.crs, always_xy=True
+            )
+            if isinstance(self, LatLonPoint):
+                orig_y, orig_x = self
+            else:
+                *_, orig_x, orig_y = self
+            same_crs_point = transformer.transform(orig_x, orig_y)
+            is_x_then_y = True
+
+        # Test containment.
+        if is_x_then_y:
+            *_, x, y = same_crs_point
+        else:
+            *_, y, x = same_crs_point
+        for part in bounds.parts:
+            min_x, min_y, max_x, max_y = part
+            if min_x - tolerance <= x <= max_x + tolerance:
+                if min_y - tolerance <= y <= max_y + tolerance:
+                    return True
+        return False
+
     # * OVERLAPPING BOXES. ────────────────────────────────────────────
     def _calc_min_dist_to_meridian(
         self, latlon_point: LatLonPoint, meridian: float
@@ -3302,28 +3361,10 @@ class BoxCoordinate(BaseCoordinate):
             test_points = other._sample_boundary(21)
         else:
             test_points = (other,)
-        (
-            self_min_easting,
-            self_min_northing,
-            self_max_easting,
-            self_max_northing,
-        ) = self.bounds
-        constraints = Constraints(global_crs=self.to_lps_or_ltm().crs)
+        test_point: PointCoordinate
         for test_point in test_points:
-            same_sys_test_point = test_point.to_lps_or_ltm(
-                constraints=constraints
-            )
-            if (
-                self_min_easting - tolerance
-                <= same_sys_test_point.easting
-                <= self_max_easting + tolerance
-            ):
-                if (
-                    self_min_northing - tolerance
-                    <= same_sys_test_point.northing
-                    <= self_max_northing + tolerance
-                ):
-                    continue
+            if test_point.is_within_bounds(self.bounds, tolerance=tolerance):
+                continue
             return False
         return True
 
