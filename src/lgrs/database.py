@@ -182,7 +182,7 @@ def _get_lunar_crs_internal_names(
     prefer_south_ltm: bool = False,
     prefer_west_ltm: bool = False,
 ) -> list[str]:
-    # Determine LTM vs. LPS condition. ────────────────────────────────
+    # DETERMINE LTM vs. LPS CONDITION. ────────────────────────────────
     _wkt._validate_constraints(**locals())
     if global_lps:
 
