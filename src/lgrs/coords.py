@@ -1222,7 +1222,6 @@ class BaseCoordinate(_BaseCoordinate):
         )
         return dist
 
-    # TODO: Decide whether to support mixed types.
     def is_equal_to(
         self,
         other: _typing.Any,
@@ -1358,7 +1357,6 @@ class BaseCoordinate(_BaseCoordinate):
         """
         return cls._is_x_based("Ltm")
 
-    # TODO: Un-skip doctest once complete validation is implemented.
     def replace(
         self,
         constraints: Constraints | None = None,
@@ -1411,7 +1409,7 @@ class BaseCoordinate(_BaseCoordinate):
         >>> ltm_point = geo_point.to_lps_or_ltm()
         >>> isinstance(ltm_point, LtmPoint)
         True
-        >>> illegal_point = ltm_point.replace(Constraints())  # doctest: +SKIP
+        >>> illegal_point = ltm_point.replace(Constraints())  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
           ...
         lgrs.exceptions.MalformedCoordinate:
@@ -3001,7 +2999,6 @@ class BoxCoordinate(BaseCoordinate):
         simple_pattern = _regex.sub(r"\(\?P<.+?>(.*?)\)", r"\1", unescaped)
         return _regex.compile(simple_pattern)
 
-    # TODO: Test why `LpsLgrsBox.from_string("YZ+")` doesn't work.
     @classmethod
     def from_string(
         cls,
