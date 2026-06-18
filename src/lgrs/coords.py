@@ -2532,7 +2532,6 @@ class PointCoordinate(BaseCoordinate):
         return lgrs_box_tup
 
 
-# TODO: Un-skip Example 3 once complete validation is implemented.
 @_dataclasses.dataclass(frozen=True, repr=False)
 class LatLonPoint(PointCoordinate):
     """
@@ -2572,10 +2571,10 @@ class LatLonPoint(PointCoordinate):
     >>> point = LatLonPoint(0, 0)
 
     Constraints are remembered and honored by all derived coordinate
-    instances (except where explicitly overridden). Thus, even though the
-    `extended_ltm` constraint is irrelevant to `geo_point` (below), that
-    constraint is remembered and determines that `proj_point` belongs to the
-    extended LTM region rather than the LPS region.
+    instances. Thus, even though the `extended_ltm` constraint is irrelevant
+    to `geo_point` (below), that constraint is remembered and determines
+    that `proj_point` belongs to the extended LTM region rather than the LPS
+    region.
 
     >>> extended_ltm = Constraints(extended_ltm=True)
     >>> geo_point = LatLonPoint(81, 0, constraints=extended_ltm)
@@ -2592,12 +2591,22 @@ class LatLonPoint(PointCoordinate):
       ...
     lgrs.exceptions.MalformedCoordinate:
       ...
-    >>> lps_point = geo_point.to_ltm()
-    >>> lps_point.replace(constraints=extended_ltm)  # Example 3  # doctest: +SKIP
+    >>> geo_point.to_lps()  # Example 3  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
       ...
     lgrs.exceptions.MalformedCoordinate:
       ...
+
+    You always have the option to override the constraints, and any override
+    is likewise remembered and honored by all derived coordinte instances.
+
+    >>> default_constraints = Constraints()
+    >>> lps_point = geo_point.to_lps(constraints=Constraints())
+    >>> isinstance(lps_point, LpsPoint)
+    True
+    >>> lgrs_box = lps_point.to_lgrs()
+    >>> lgrs_box.constraints == default_constraints
+    True
 
     Finally, validation may conform values where those can be confidently
     interpreted.
