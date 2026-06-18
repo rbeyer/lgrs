@@ -275,7 +275,7 @@ def make_lunar_crs(
     Raises
     ------
     TypeError
-        If CRS is under- or over-specified, or if `proj` is `"LPS"`/`"LTM"`
+        If CRS cannot be interpreted, or if `proj` is `"LPS"`/`"LTM"`
         but `global_ltm`/`global_lps` is `True`.
 
     Examples
