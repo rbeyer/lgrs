@@ -227,7 +227,7 @@ To generate a grid of LGRS or ACC boxes::
     # Create a global grid of 25-km ACC boxes.
     >>> from lgrs import GeographicBounds, write_grid
     >>> global_bounds = GeographicBounds(-180, -90, 180, 90)  # doctest: +SKIP
-    >>> write_grid(global_bounds, 25_000, "~/grids/global.gpkg|layername={}", acc=True)  # doctest: +SKIP
+    >>> write_grid(global_bounds, 25_000, "~/grids/global.gpkg|layer={}", acc=True)  # doctest: +SKIP
 
     # Specifically, the above example writes out a single GeoPackage (.gpkg
     # file) with 92 layers, each of which represents an LTM zone or LPS polar
@@ -243,10 +243,10 @@ bounds of the grid::
     # Imagine that you want to generate 100-m LGRS boxes that cover the
     # footprint of a GeoTiff called "crater.tif" and output the grid as one or
     # more GeoJSON files (one per CRS).
-    >>> write_grid(r"C:\\geotiffs\\crater.tif", 100, r"C:\\grids\\crater_{}.json")  # doctest: +SKIP
+    >>> write_grid(r"C:\geotiffs\crater.tif", 100, r"C:\grids\crater_{}.json")  # doctest: +SKIP
 
     # The process is similar for using the footprint of vector data.
-    >>> write_grid(r"~/vector/sites.gpkg|layername=shackleton", 100, "~/grids/shackleton.gpkg|layername=new_{}")  # doctest: +SKIP
+    >>> write_grid("~/vector/sites.gpkg|layer=shackleton", 100, "~/grids/shackleton.gpkg|layer=new_{}")  # doctest: +SKIP
 
     # You can also generate boxes across an entire LPS region or LTM zone. For
     # example, to generate 25-km ACC boxes across the south polar region:
@@ -268,19 +268,17 @@ If you need finer control, you can use the lower-level ``grid`` module::
     ...     # Calculate the geodesic distance from the center of ``box``
     ...     # to your point of interest ``poi``.
     ...     dist_to_poi = box.center_latlon.distance_to(poi)
-    ...     # Get default field data, modify it, and save it to ``box``.
+    ...     # Extend the default field data.
     ...     # (These data will be included in each ``GeoDataFrame``.)
-    ...     field_data = dict(box.field_data)
-    ...     assert field_data["precision"] == 1  # Example contents.
-    ...     field_data["dist_to_poi"] = dist_to_poi
-    ...     box.set_field_data(field_data)
+    ...     assert box.field_data["precision"] == 1  # Example contents.
+    ...     box.field_data["dist_to_poi"] = dist_to_poi
     >>> gdfs = grid.make_gdfs(boxes)
     >>> if len(gdfs) == 1:
     ...     gdf, = gdfs
     ...     gdf.to_file("~/grids/aoi.gpkg")
     ... else:
     ...     for gdf in gdfs:
-    ...         gdf.to_file(f"~/grids/aoi.gpkg|layername={gdf.name_hint}")
+    ...         gdf.to_file(f"~/grids/aoi.gpkg|layer={gdf.name_hint}")
 
 
 Not yet implemented
