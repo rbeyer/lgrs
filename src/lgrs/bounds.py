@@ -406,10 +406,10 @@ class GeographicBounds(_BaseBounds):
     geometry : shapely.Polygon
         The shapely polygon form of the bounds.
     logical : 4-float BoundsTuple
-        For bounds bracketing the antimeridian, `logical.right` is conformed
-        to the interval [180, 360) so that it is greater than
-        `logical.left`, which is identical to `.conformed.left`. Otherwise,
-        equivalent to `.conformed`.
+        For bounds bracketing the antimeridian, `logical.left` and
+        `logical.right` are conformed to the interval [-360, +360] so that
+         `logical.right > logical.left`. Otherwise, equivalent to
+         `.conformed`.
     median_xy : tuple[float, float]
         The median longitude and latitude, respectively, calculated from
         `.logical`. The longitude is then conformed to the interval [-180,
@@ -432,8 +432,8 @@ class GeographicBounds(_BaseBounds):
     >>> bounds_1 = GeographicBounds(10, 10, 20, 20)
 
     To specify bounds that cross the antimeridian, either use longitudes
-    outside the standard interval [-180, 180] or specify `left` greater
-    than `right`.
+    outside the standard interval [-180, 180] (but within [-360, 360]) or
+    specify `left` greater than `right`.
 
     >>> bounds_2 = GeographicBounds(-190, 10, -170, 20)
     >>> bounds_3 = GeographicBounds(170, 10, 190, 20)
@@ -554,7 +554,7 @@ class GeographicBounds(_BaseBounds):
     _crit_lats_unextended_ltm_array = _make_crit_array(
         _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
     )
-    _crit_ltm_lons_array = _make_crit_array(range(-180, 361, 8))
+    _crit_ltm_lons_array = _make_crit_array(range(-356, 361, 8))
 
     # Note: Type-hinting `coords.Constraints` would cause circular
     # import in Python <= 3.13.
@@ -640,8 +640,8 @@ class GeographicBounds(_BaseBounds):
         c_left = _database._conform_longitude(left)
         c_right = _database._conform_longitude(right)
         if c_left == c_right:
-            c_left = -180
-            c_right = +180
+            c_left = -180  # *REASSIGNMENT*
+            c_right = +180  # *REASSIGNMENT*
         return BoundsTuple(c_left, bottom, c_right, top)
 
     @_functools.cached_property
@@ -656,8 +656,16 @@ class GeographicBounds(_BaseBounds):
     @_functools.cached_property
     def logical(self) -> BoundsTuple:
         if self.brackets_antimeridian:
-            c_left, c_bottom, c_top, c_right = self.conformed
-            return BoundsTuple(c_left, c_bottom, c_right + 180, c_top)
+            c_left, c_bottom, c_right, c_top = self.conformed
+            lon_delta = (c_right - c_left) + 360
+            cand_log_right = c_left + lon_delta
+            if cand_log_right > 360:
+                log_left = c_right - lon_delta
+                log_right = c_right
+            else:
+                log_left = c_left
+                log_right = cand_log_right
+            return BoundsTuple(log_left, c_bottom, log_right, c_top)
         else:
             return self.conformed
 
