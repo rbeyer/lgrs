@@ -3177,8 +3177,8 @@ class BoxCoordinate(BaseCoordinate):
 
     @_functools.cached_property
     def geometry(self) -> _shapely.Polygon:
-        polygon = _shapely.box(*self.bounds)
-        return polygon
+        """The shapely polygon form of the box."""
+        return self.bounds.geometry
 
     def set_field_data(
         self,
