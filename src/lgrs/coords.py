@@ -1133,13 +1133,12 @@ class BaseCoordinate(_BaseCoordinate):
             raise TypeError("`LatLonPoint` is neither LPS- nor LTM-based")
         return cls.__name__.startswith(prefix)
 
-    # TODO: Un-skip doctest once complete validation is implemented.
     def copy(self, *, validate: bool = False) -> _typing.Self:
         """
         Create independent copy of this coordinate.
 
-        Although `copy` is a different instance from `self`, its cache is not
-        guaranteed independnet. See Examples.
+        `copy` is a different instance from `self`, and its cache is
+        guaranteed independent. See Examples.
 
         Parameters
         ----------
@@ -1157,18 +1156,15 @@ class BaseCoordinate(_BaseCoordinate):
         --------
         >>> import lgrs.caching
         >>> lgrs.caching.enable_caching()
-        >>> example_latlon = LatLonPoint(0, 0)
-        >>> example_lgrs = example_latlon.to_lgrs()
-        >>> alt_latlon = example_latlon.copy()
-        >>> example_latlon is alt_latlon
+        >>> example_geo_point = LatLonPoint(0, 0)
+        >>> example_lgrs_point = example_geo_point.to_lgrs()
+        >>> alt_geo_point = example_geo_point.copy()
+        >>> example_geo_point is alt_geo_point
         False
-        >>> example_latlon.to_lgrs() is example_latlon.to_lgrs()
+        >>> example_geo_point.to_lgrs() is example_geo_point.to_lgrs()
         True
-        >>> example_latlon.to_lgrs() is alt_latlon.to_lgrs()  # doctest: +SKIP
-
-        Whether this final statement evaluates as `True` or `False` is not
-        guaranteed. To guarantee independence, caching should be disabled
-        globally by `lgrs.caching.enable_caching(False)`.
+        >>> example_geo_point.to_lgrs() is alt_geo_point.to_lgrs()
+        False
         """
         # Note: `self` can only exist if validated or explicitly not
         # validated. Either way, defaulting `validate` to `False` is
