@@ -2148,7 +2148,7 @@ class PointCoordinate(BaseCoordinate):
         else:
             crs_from = geo_crs
             crs_to = proj_crs
-        transformer = _pyproj.Transformer.from_crs(crs_from, crs_to)
+        transformer = _srs.get_transformer(crs_from, crs_to, always_xy=False)
         return transformer
 
     # * OVERLAPPING BOXES. ────────────────────────────────────────────
