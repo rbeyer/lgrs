@@ -104,6 +104,7 @@ LPS_LONGITUDE_OF_PROJECTION_ORIGIN: float = (
 # Below: Format taken from p. 36 of M2025. Only deviation from M2025 is
 # the addition of USAGE, which parallels that for the LTM WKT in the
 # current module.
+_lps_usage_area_prefix = "Lunar Polar Stereographic Zone LPS_"
 _format_lps_wkt = f"""
 PROJCRS[“Moon (2015) - Sphere / Ocentric / {{north_or_south}} Polar”,
   BASEGEOGCRS[“Moon (2015) - Sphere / Ocentric”,
@@ -139,7 +140,7 @@ PROJCRS[“Moon (2015) - Sphere / Ocentric / {{north_or_south}} Polar”,
       ORDER[2],
       LENGTHUNIT[“metre”,1]],
   USAGE[
-    AREA["Lunar Polar Stereographic Zone LPS_{{hemisphere}}."],
+    AREA["{_lps_usage_area_prefix}{{hemisphere}}."],
     {{bbox_string}}],
 ID[“USGS”,{{id_num}},{{hemisphere}}]]]
 """.strip().format  # noqa: E501
@@ -147,6 +148,7 @@ ID[“USGS”,{{id_num}},{{hemisphere}}]]]
 # Below: Format taken from p. 18 of M2025. Only deviations from M2025
 # are that SCOPE is replaced with AREA, which seems better suited for
 # the content, and PROJCRS name is extended to include zone number.
+_ltm_usage_area_prefix = "Lunar Transverse Mercator Zone LTM_"
 _format_ltm_wkt = f"""
 PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone_number}}{{hemisphere}}",
   BASEGEOGCRS["Moon (2015) - Sphere / Ocentric",
@@ -182,7 +184,7 @@ PROJCRS["Moon (2015) - Sphere / Ocentric / Transverse Mercator / LTM zone {{zone
       ORDER[2],
       LENGTHUNIT["metre",1]],
   USAGE[
-    AREA["Lunar Transverse Mercator Zone LTM_{{zone_number}}{{hemisphere}}."],
+    AREA["{_ltm_usage_area_prefix}{{zone_number}}{{hemisphere}}."],
     {{bbox_string}}]]
 """.strip().format  # noqa: E501
 
