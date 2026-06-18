@@ -628,7 +628,7 @@ def query_lunar_crs_info(
     area_of_interest: _pyproj_aoi.AreaOfInterest | None = None,
     contains: bool = False,
     *,
-    primary: bool = True,
+    nominal: bool = True,
     extended_ltm: bool = False,
     global_lps: bool = False,
     global_ltm: bool = False,
@@ -654,8 +654,8 @@ def query_lunar_crs_info(
         entirely contains all spatial inputs, that is, `area_of_interest` or
         all `latitude` and `longitude`. If `False`, `infos` will reference a
         CRS if its area of use intersects any part of a spatial filter.
-    primary : bool, default=True
-        Whether to include the primary configuration, in which the Moon is
+    nominal : bool, default=True
+        Whether to include the nominal configuration, in which the Moon is
         subdivided at 80 degrees N and S, with LTM zones equatorward and
         LPS regions (one per pole) poleward.
     extended_ltm : bool, default=False
@@ -751,7 +751,7 @@ def query_lunar_crs_info(
         get_lunar_crs_internal_names = _get_all_lunar_crs_internal_names
         latlon_kwargs = {}
     lps_and_ltm_kwargs_list = []
-    if primary:
+    if nominal:
         lps_and_ltm_kwargs_list.append({})
     if extended_ltm:
         lps_and_ltm_kwargs_list.append({"extended_ltm": True})
