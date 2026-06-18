@@ -31,6 +31,21 @@ import pyproj as _pyproj
 import lgrs.caching as _caching
 import lgrs.srs.wkt as _wkt
 
+
+# endregion
+###############################################################################
+# region> UTILITIES
+###############################################################################
+@_caching._optionally_cache
+def get_transformer(
+    crs_from: _pyproj.CRS, crs_to: _pyproj.CRS, always_xy: bool, **kwargs
+) -> _pyproj.Transformer:
+    transformer = _pyproj.Transformer.from_crs(
+        crs_from, crs_to, always_xy=always_xy, **kwargs
+    )
+    return transformer
+
+
 # endregion
 ###############################################################################
 # region> COORDINATE REFERENCE SYSTEMS
