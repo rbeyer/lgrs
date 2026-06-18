@@ -22,15 +22,15 @@ import beartype.claw
 
 # * BUBBLE-UP MOST USEFUL CLASSES AND FUNCTIONS. ──────────────────────
 # Note: Unlike in `pyproj`:
+from lgrs.bounds import GeographicBounds, ProjectedBounds
 from lgrs.caching import enable_caching
 from lgrs.database import query_lunar_crs_info
 from lgrs.easy import write_grid
-from lgrs.grid import GeographicBounds
 
 # from lgrs.easy import from_geographic, from_gridded, from_lps_or_ltm
 
 # Note: Analogous to `pyproj`:
-from lgrs.srs.srs import CRS, GRS, make_lunar_crs
+from lgrs.srs.srs import CRS, make_lunar_crs
 
 # * ENABLE TYPE-CHECKING AT PACKAGE LEVEL. ───────────────────────────
 beartype.claw.beartype_this_package(
