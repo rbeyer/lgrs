@@ -2052,19 +2052,24 @@ class BaseCoordinate(_BaseCoordinate):
             constraints = self.constraints
         constraints_list = [constraints]
         if search:
+            kwargs = {"preferred_ltm_zone": constraints.preferred_ltm_zone}
             if not constraints.extended_ltm:
                 # Note: Since `extended_ltm=False` is preferred, attempt
                 # to retain that constraint if possible.
                 constraints_list.extend(
                     (
-                        Constraints(extended_ltm=False, prefer_ltm=True),
-                        Constraints(extended_ltm=True, prefer_ltm=False),
+                        Constraints(
+                            extended_ltm=False, prefer_ltm=True, **kwargs
+                        ),
+                        Constraints(
+                            extended_ltm=True, prefer_ltm=False, **kwargs
+                        ),
                     )
                 )
             constraints_list.extend(
                 (
-                    Constraints(extended_ltm=True, prefer_ltm=True),
-                    Constraints(global_ltm=True),
+                    Constraints(extended_ltm=True, prefer_ltm=True, **kwargs),
+                    Constraints(global_ltm=True, **kwargs),
                 )
             )
 
