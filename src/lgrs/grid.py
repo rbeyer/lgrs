@@ -303,12 +303,11 @@ def make_box_grid(
     --------
     >>> import lgrs.bounds
     >>> aoi = lgrs.bounds.GeographicBounds(
-    ...     min_longitude=20, min_latitude=20,
-    ...     max_longitude=40, max_latitude=40
+    ...     left=20, bottom=20, right=40, top=40
     ... )
     >>> boxes = make_box_grid(aoi, precision=25_000, acc=True)
     >>> len(boxes)
-    650
+    717
     >>> import lgrs.coords
     >>> isinstance(boxes[0], lgrs.coords.LtmAccBox)
     True
@@ -452,8 +451,7 @@ def make_gdfs(
     --------
     >>> import lgrs.bounds
     >>> aoi = lgrs.bounds.GeographicBounds(
-    ...     min_longitude=20, min_latitude=20,
-    ...     max_longitude=40, max_latitude=40
+    ...     left=20, bottom=20, right=40, top=40
     ... )
     >>> boxes = make_box_grid(aoi, precision=25_000, acc=True)
     >>> gdfs = make_gdfs(boxes)
