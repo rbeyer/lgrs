@@ -34,6 +34,7 @@ import rasterio as _rasterio
 from pyproj import aoi as _pyproj_aoi
 
 # Internal.
+import lgrs.bounds as _bounds
 import lgrs.coords as _coords
 import lgrs.database as _database
 import lgrs.srs.srs as _srs
@@ -62,7 +63,7 @@ def _clip(value: float, minimum: float, maximum: float) -> float:
 
 
 def _construct_latlon_grid(
-    bounds: GeographicBounds,
+    bounds: _bounds.GeographicBounds,
     precision: int,
     constraints: _coords.Constraints,
     *,
@@ -73,8 +74,8 @@ def _construct_latlon_grid(
     # for which a small corner extends into bounds is included.
     buff_length = max((_values.SAFETY_FACTOR * (0.5 * precision)), min_buffer)
     buff_lat = buff_length / _values.M_PER_DEGREE_LATITUDE
-    min_lat = _clip(bounds.min_latitude - buff_lat, -90, +90)
-    max_lat = _clip(bounds.max_latitude + buff_lat, -90, +90)
+    min_lat = _clip(bounds.bottom - buff_lat, -90, +90)
+    max_lat = _clip(bounds.top + buff_lat, -90, +90)
     lat_range = max_lat - min_lat
 
     # TODO: For large grid generation, most time is spent in converting
@@ -99,9 +100,9 @@ def _construct_latlon_grid(
     grid_height = lat_range * _values.M_PER_DEGREE_LATITUDE
     row_count = _calculate_safe_count(grid_height, delta)
     lats = _np.linspace(min_lat, max_lat, row_count).tolist()
-    crit_lats = bounds._get_critical_latitudes(constraints)
 
     # Determine critical latitude and longitude coordinates.
+    crit_lats = bounds._get_critical_latitudes(constraints)
     if crit_lats is not None:
         lats.extend(crit_lats)
     crit_lons = bounds._get_critical_longitudes(constraints)
@@ -113,8 +114,8 @@ def _construct_latlon_grid(
         # Find longitude range for (buffered) grid.
         m_per_deg_lon = _values.calculate_m_per_degree_longitude(lat)
         buff_lon = buff_length / m_per_deg_lon
-        min_lon = bounds.min_longitude - buff_lon
-        max_lon = bounds.max_longitude + buff_lon
+        min_lon = bounds.logical.left - buff_lon
+        max_lon = bounds.logical.right + buff_lon
         lon_range = max_lon - min_lon
         if lon_range > 360:
             min_lon = -180  # *REASSIGNMENT*
@@ -179,320 +180,6 @@ class GeoDataFrame(_geopandas.GeoDataFrame):
     """Subclass of `geopandas.GeoDataFrame`."""
 
     name_hint: str
-
-
-@_dataclasses.dataclass(frozen=True)
-class GeographicBounds:
-    """
-    Create an instance describing a geographic bounding box (envelope).
-
-    Parameters
-    ----------
-    min_longitude : float
-        The minimum longitude, in degrees.
-    min_latitude : float
-        The minimum latitude, in degrees.
-    max_longitude : float
-        The maximum longitude, in degrees.
-    max_latitude : float
-        That maximum latitude, in degrees.
-
-    Raises
-    ------
-    TypeError
-        If values are invalid. Namely, if the absolute value of any
-        longitude exceeds 360, the absolute value of any latitude exceeds
-        90, any maximum is not greater than its counterpart minimum, or
-        the range implied by the minimum and maximum longitudes exceeds 360.
-
-    Examples
-    --------
-    >>> bounds_1 = GeographicBounds(10, 10, 20, 20)
-
-    Bounds can validly cross critical meridians but may not span from higher
-    to lower values. Below, `bounds_2` and `bounds_3` are functionally
-    equivalent, but `bounds_4` and `bounds_5` are invalid.
-
-
-    >>> bounds_2 = GeographicBounds(-190, 10, -170, 20)
-    >>> bounds_3 = GeographicBounds(170, 10, 190, 20)
-    >>> bounds_4 = GeographicBounds(170, 10, -170, 20)  # doctest: +IGNORE_EXCEPTION_DETAIL
-    Traceback (most recent call last):
-      ...
-    TypeError:
-      ...
-    >>> bounds_5 = GeographicBounds(0, 89, 10, 87)  # doctest: +IGNORE_EXCEPTION_DETAIL
-    Traceback (most recent call last):
-      ...
-    TypeError:
-      ...
-
-    If the user intended to specify `bounds_5` as crossing the North Pole,
-    they could achieve an area centered the pole thusly.
-
-    >>> alt_bounds_5 = GeographicBounds(0, 87, 360, 90)
-
-    Or, equivalently:
-
-    >>> all_bounds_5b = GeographicBounds.from_north_pole_to(87)
-    """  # noqa: E501
-
-    min_longitude: float
-    min_latitude: float
-    max_longitude: float
-    max_latitude: float
-
-    # * INITIALIZATION AND INSTANTIATION. ─────────────────────────────
-    def __post_init__(self):
-        for field in _dataclasses.fields(self):
-            val = getattr(self, field.name)
-            match field.name:
-                case "min_longitude" | "max_longitude":
-                    max_abs = 360
-                case "min_latitude" | "max_latitude":
-                    max_abs = 90
-                case _:
-                    continue
-            if abs(val) > max_abs:
-                raise TypeError(
-                    f"Absolute value of `{field.name}` must be <={max_abs}, "
-                    f"not: {val!r}>"
-                )
-        if self.min_longitude >= self.max_longitude:
-            raise TypeError(
-                f"`max_longitude` ({self.max_longitude}) must be greater than "
-                f"`min_longitude` ({self.min_longitude})."
-            )
-        if self.max_longitude - self.min_longitude > 360:
-            raise TypeError(
-                "The difference between `max_longitude` and `min_longitude` "
-                "cannot exceed 360."
-            )
-        if self.min_latitude >= self.max_latitude:
-            raise TypeError(
-                f"`max_latitude` ({self.max_latitude}) must be greater than "
-                f"`min_latitude` ({self.min_latitude})."
-            )
-
-    @classmethod
-    def from_north_pole_to(cls, min_latitude: float) -> _typing.Self:
-        """
-        Create `GeographicBounds` from North Pole south to some latitude.
-
-        Parameters
-        ----------
-        min_latitude : float
-            The latitude to which the bounds should extend.
-
-        Returns
-        -------
-        GeographicBounds
-            The new instance.
-        """
-        return GeographicBounds(-180, min_latitude, 180, 90)
-
-    @classmethod
-    def from_other(
-        cls,
-        other: (
-            _collections.abc.Iterable
-            | _pyproj_aoi.AreaOfInterest
-            | _pyproj_aoi.AreaOfUse
-        ),
-    ) -> _typing.Self:
-        """
-        Create `GeographicBounds` from iterable or `pyproj.aoi.AreaOfInterest`.
-
-        Parameters
-        ----------
-        other : iterable or AreaOfInterest or AreaOfUse from pypoj
-            An iterable of 4 numbers, in the same order as expected by
-            `GeographicBounds()`, or a `pyproj.aoi.AreaOfInterest` or
-            `pyproj.aoi.AreaOfUse`.
-
-        Returns
-        -------
-        bounds : GeographicBounds
-            The `GeographicBounds` instance. In the special case that `other`
-            a `GeographicBounds` instance, `bounds` itself is returned.
-        """
-        match other:
-            case GeographicBounds():
-                return other
-            case _pyproj_aoi.AreaOfUse():
-                return cls(*tuple(other)[:4])
-            case _collections.abc.Iterable():
-                return cls(*other)
-            case _pyproj_aoi.AreaOfInterest():
-                return cls(
-                    other.west_lon_degree,
-                    other.south_lat_degree,
-                    other.east_lon_degree,
-                    other.north_lat_degree,
-                )
-            case _:
-                raise TypeError(f"Unsupported type for `other`: {other!r}.")
-
-    @classmethod
-    def from_path(
-        cls, path: _pathlib.Path | str, densify_pts: int = 21
-    ) -> _typing.Self:
-        """
-        Create `GeographicBounds` based on a vector or raster file.
-
-        Parameters
-        ----------
-        path :
-            Path to a vector or raster file whose approximate geographic bounds
-            will be used. You may specify a layer by the convention:
-            ``"path/to/my.gpkg|layername=layer_name"``.
-        densify_pts : int, default=21
-            Number of points to add to each edge of the box. Having more
-            vertices helps ensure that the transformation of the bounding box
-            (from the CRS native to `path` to a geographic version) is
-            more precise, but higher values will decrease performance.
-
-        Returns
-        -------
-        bounds : GeographicBounds
-            The `GeographicBounds` instance.
-        """
-        # Resolve CRS and bounds in that CRS.
-        file_path, layer_name, exists = (
-            _resolve_file_path_and_layer_name_and_existence(path)
-        )
-        if not exists:
-            raise TypeError(f"Path could not be found: {path}")
-        if layer_name is None:
-            kwargs = {}
-        else:
-            kwargs = {"layer": layer_name}
-        try:
-            gdf = _geopandas.read_file(file_path, **kwargs)
-        except Exception:
-            try:
-                with _rasterio.open(path) as src:
-                    native_bounds = src.bounds
-                    native_crs = src.crs
-            except Exception:
-                raise TypeError(
-                    f"Path could not be read either as vector or raster data: "
-                    f"{path}."
-                )
-        else:
-            native_bounds = gdf.total_bounds
-            native_crs = gdf.crs
-
-        # Convert to geographic bounds.
-        transformer = _pyproj.Transformer.from_crs(
-            native_crs, _srs.make_lunar_crs(), always_xy=True
-        )
-        # TODO: Decide on best `densify_pts` option. Defaults to 21 in
-        #  `pyproj` if unspecified.
-        geo_bounds = transformer.transform_bounds(
-            *native_bounds, densify_pts=densify_pts
-        )
-        return GeographicBounds(*geo_bounds)
-
-    @classmethod
-    def from_south_pole_to(cls, max_latitude: float) -> _typing.Self:
-        """
-        Create `GeographicBounds` from South Pole north to some latitude.
-
-        Parameters
-        ----------
-        max_latitude : float
-            The latitude to which the bounds should extend.
-
-        Returns
-        -------
-        GeographicBounds
-            The new instance.
-        """
-        return GeographicBounds(-180, -90, 180, max_latitude)
-
-    # * BASIC BEHAVIOR. ───────────────────────────────────────────────
-    def __contains__(self, point: _coords.LatLonPoint) -> bool:
-        if self.min_longitude <= point.longitude <= self.max_longitude:
-            if self.min_latitude <= point.latitude <= self.max_latitude:
-                return True
-        return False
-
-    def __iter__(self) -> _collections.abc.Iterator[float]:
-        for field in _dataclasses.fields(self):
-            yield getattr(self, field.name)
-
-    # * CRITICAL LATITUDES AND LONGITUDES. ────────────────────────────
-    # Note: The equator is not "critical" for these purposes, because
-    # LTM boxes mate there precisely, without overlap.
-    _crit_lats_extended_ltm_array = _make_crit_array(
-        _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
-    )
-    _crit_lats_unextended_ltm_array = _make_crit_array(
-        _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
-    )
-    _crit_ltm_lons_array = _make_crit_array(range(-356, 361, 8))
-
-    def _get_critical_latitudes(
-        self, constraints: _coords.Constraints
-    ) -> list[float] | None:
-        if constraints.extended_ltm:
-            crit_array = self._crit_lats_extended_ltm_array
-        else:
-            crit_array = self._crit_lats_unextended_ltm_array
-        sliced_array = self._slice_array_by_interval_ends(
-            crit_array, self.min_latitude, self.max_latitude
-        )
-        if sliced_array is None:
-            return None
-        final = sliced_array.tolist()
-        sliced_array[sliced_array < 0] += _values.DEGREE_EPSILON
-        sliced_array[sliced_array > 0] -= _values.DEGREE_EPSILON
-        final.extend(sliced_array.tolist())
-        final.sort()
-        if final[0] < self.min_latitude:
-            del final[0]
-        if final[-1] > self.max_latitude:
-            del final[-1]
-        return final
-
-    def _get_critical_longitudes(
-        self, constraints: _coords.Constraints
-    ) -> list[float] | None:
-        # Note: If in exclusively LPS latitudes, there are no critical
-        # longitudes.
-        if self.min_latitude > constraints._max_abs_ltm_lat:
-            return None
-        elif self.max_longitude < -constraints._max_abs_ltm_lat:
-            return None
-        sliced_array = self._slice_array_by_interval_ends(
-            self._crit_ltm_lons_array,
-            self.min_longitude,
-            self.max_longitude,
-        )
-        if sliced_array is None:
-            return None
-        final = sliced_array.tolist()
-        sliced_array -= _values.DEGREE_EPSILON
-        # Note: Reverse slice so that smallest value is at the end of
-        # the list, for more performant removal, if necessary.
-        final.extend(sliced_array[::-1].tolist())
-        if final[-1] < self.min_longitude:
-            del final[-1]
-        return final
-
-    @staticmethod
-    def _slice_array_by_interval_ends(
-        a: _np.ndarray,
-        left: float,
-        right: float,
-    ) -> _np.ndarray | None:
-        idx_0 = a.searchsorted(left, side="left")
-        idx_n = a.searchsorted(right, side="right")
-        if idx_0 == idx_n:
-            return None
-        sliced = a[idx_0:idx_n]
-        return sliced
 
 
 # endregion
@@ -566,13 +253,10 @@ def make_box_grid(
     --------
     The `True` option for `min_zones` is not yet implemented.
 
-    See Also
-    --------
-    GeographicBounds.from_path : Get geographic bounds from a file path
-
     Examples
     --------
-    >>> aoi = GeographicBounds(
+    >>> import lgrs.bounds
+    >>> aoi = lgrs.bounds.GeographicBounds(
     ...     min_longitude=20, min_latitude=20,
     ...     max_longitude=40, max_latitude=40
     ... )
@@ -717,7 +401,8 @@ def make_gdfs(
 
     Examples
     --------
-    >>> aoi = GeographicBounds(
+    >>> import lgrs.bounds
+    >>> aoi = lgrs.bounds.GeographicBounds(
     ...     min_longitude=20, min_latitude=20,
     ...     max_longitude=40, max_latitude=40
     ... )
