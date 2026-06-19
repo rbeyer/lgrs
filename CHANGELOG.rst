@@ -30,6 +30,8 @@ Unreleased
 
 Added
 ^^^^^
+* Basic support for ``min_zones=True`` option when generating grids
+  (``lgrs.grid.make_box_grid()`` and ``lgrs.easy.write_grid()``).
 * ``bounds`` module, which includes enhanced versions of ``GeographicBounds``
   (previously hosted by ``lgrs.grid``) and ``ProjectedBounds`` (previously
   hosted by ``lgrs.coords``).
