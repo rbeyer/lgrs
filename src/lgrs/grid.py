@@ -186,6 +186,28 @@ def _resolve_bounds(
     return (final_bounds, exclusive_crs)
 
 
+def _spatially_filter_boxes(
+    boxes: _collections.abc.Sequence[_coords.BoxCoordinate],
+    *,
+    precision: int,
+    bounds: _bounds.GeographicBounds | _bounds.ProjectedBounds,
+) -> _collections.abc.Iterator[_coords.BoxCoordinate]:
+    if bounds.crs.is_geographic:
+        short_tolerance = precision / _values.M_PER_DEGREE_LATITUDE
+    else:
+        short_tolerance = precision
+    default_tolerance = short_tolerance * _values.SAFETY_FACTOR
+    for box in boxes:
+        if bounds.crs == box.crs_nominal:
+            tolerance = 0
+        else:
+            tolerance = default_tolerance
+        for corner in box._corners:
+            if corner.is_within_bounds(bounds, tolerance=tolerance):
+                yield box
+                break
+
+
 # endregion
 ###############################################################################
 # region> SUPPORT CLASSES
@@ -256,16 +278,16 @@ def make_box_grid(
         Whether to use the extended LTM region, which extends to 82° N/S
         instead of 80° N/S.
     min_overlap : bool, default=True
-        Whether to minimize the box overlap. If `True`, boxes only overlap
-        near LPS and LTM zone boundaries, where overlap is necessary to
-        ensure coverage. If `False`, all valid boxes in the targeted area
-        are generated, which may include inter-zone overlaps of up to ~35.4
-        km, that is, the diagonal of a 25-km box. In the special case that
-        `bounds` is specified by an LGRS CRS string, `min_overlap` is
-        instead interpreted to relate to the overlap of that region with its
-        neighbors. Then, `True` generates only boxes that are within the
-        nominal bounds of the zone whereas `False` generates all valid boxes
-        from the maximally expanded zone.
+        Whether to reduce box overlap. If `True`, boxes only overlap near LPS
+        and LTM zone boundaries, where overlap is necessary to ensure coverage.
+        If `False`, all valid boxes in the targeted area are generated, which
+        may include inter-zone overlaps of up to ~35.4 km, that is, the
+        diagonal of a 25-km box. In the special case that `bounds` is specified
+        by an LGRS CRS string, `min_overlap` is instead interpreted to relate
+        to the overlap of that region with its neighbors. Then, `True`
+        generates only boxes that are within the nominal bounds of the zone
+        whereas `False` generates all valid boxes from the maximally expanded
+        zone.
     min_zones : bool, default=False
         Whether to minimize the number of zones (and therefore, CRSs) that are
         used. If `True`, boxes from non-nominal (expanded) areas of zones may
@@ -273,9 +295,7 @@ def make_box_grid(
         example, when working near the nominal longitudinal boundary between
         two LTM zones, you may prefer all boxes to come from one zone, if
         possible, instead of nearly all boxes from that zone and a few from a
-        neighboring zone. If `False`, only boxes from the nominal area of each
-        zone will be generated. If `bounds` is specified by an LGRS CRS string,
-        this argument is ignored.
+        neighboring zone.
     fallback_to_geo: bool, default=False
         Specifies the behavior when the CRS of a path-like `bounds` cannot
         be transformed to the geographic CRS IAU_2015:30100. If `True` and
@@ -297,7 +317,8 @@ def make_box_grid(
 
     Warnings
     --------
-    The `True` option for `min_zones` is not yet implemented.
+    In the current implementation, the `True` option for `min_zones` has no
+    effect unless `bounds` can be spanned by boxes from a single CRS.
 
     Examples
     --------
@@ -312,12 +333,9 @@ def make_box_grid(
     >>> isinstance(boxes[0], lgrs.coords.LtmAccBox)
     True
     """
-    # Raise error if unsupported option is used.
-    if min_zones:
-        raise TypeError("`min_zones=True` not yet implemented.")
-
     # Resolve `bounds`.
     final_bounds, exclusive_crs = _resolve_bounds(**locals())
+    final_bounds_are_global = getattr(final_bounds, "is_global", False)
 
     # Determine geographic bounds for the sample-point grid, the minimum
     # required buffer length, and whether only default boxes should be
@@ -361,20 +379,18 @@ def make_box_grid(
     )
 
     # Create boxes.
+    if acc:
+        get_box = _coords.LatLonPoint.to_acc
+        get_all_boxes = _coords.LatLonPoint.to_all_acc
+    else:
+        get_box = _coords.LatLonPoint.to_lgrs
+        get_all_boxes = _coords.LatLonPoint.to_all_lgrs
     if use_default_boxes_only:
-        if acc:
-            get_box = _coords.LatLonPoint.to_acc
-        else:
-            get_box = _coords.LatLonPoint.to_lgrs
         box_set = {
             get_box(samp_pt, constraints=constraints, precision=precision)
             for samp_pt in latlon_sample_points
         }
     else:
-        if acc:
-            get_all_boxes = _coords.LatLonPoint.to_all_acc
-        else:
-            get_all_boxes = _coords.LatLonPoint.to_all_lgrs
         box_set = {
             box
             for samp_pt in latlon_sample_points
@@ -388,27 +404,17 @@ def make_box_grid(
         box_list = [box for box in box_set if box.crs == exclusive_crs]
 
     # Filter boxes spatially, if necessary.
-    elif geo_bounds.is_global:
+    elif final_bounds_are_global:
         box_list = list(box_set)
     else:
         # On first pass, filter out any boxes that have no corner within
         # within the relevant bounds or, for cross-CRS tests, closer
         # than a (safe) box width.
-        if final_bounds.crs.is_geographic:
-            short_tolerance = precision / _values.M_PER_DEGREE_LATITUDE
-        else:
-            short_tolerance = precision
-        default_tolerance = short_tolerance * _values.SAFETY_FACTOR
-        box_list = []
-        for box in box_set:
-            if final_bounds.crs == box.crs_nominal:
-                tolerance = 0
-            else:
-                tolerance = default_tolerance
-            for corner in box._corners:
-                if corner.is_within_bounds(final_bounds, tolerance=tolerance):
-                    box_list.append(box)
-                    break
+        box_list = list(
+            _spatially_filter_boxes(
+                box_set, precision=precision, bounds=final_bounds
+            )
+        )
 
         # If all boxes were filtered out in first pass, a single box
         # fully encloses the bounds (and therefore has no corners within
@@ -418,6 +424,65 @@ def make_box_grid(
             median_latlon = _coords.LatLonPoint(median_lat, median_lon)
             # *REASSIGNMENT*
             box_list = [box for box in box_set if box.contains(median_latlon)]
+
+        # If requested and possible, reduce zone (CRS) count.
+        if min_zones:
+            crs_set = {box.crs_nominal for box in box_list}
+            if len(crs_set) > 1:
+                full_crs_to_box_list = [
+                    {
+                        box.crs_nominal: box
+                        for box in get_all_boxes(
+                            samp_pt,
+                            extended_ltm=extended_ltm,
+                            precision=precision,
+                        )
+                    }
+                    for samp_pt in latlon_sample_points
+                ]
+                remaining_crs_to_box_list = full_crs_to_box_list
+                required_crses = []
+                while remaining_crs_to_box_list:
+                    crs_counter = _collections.Counter(
+                        crs
+                        for crs_to_box in remaining_crs_to_box_list
+                        for crs in crs_to_box
+                    )
+                    max_crs = crs_counter.most_common(1)[0][0]
+                    required_crses.append(max_crs)
+                    # *REASSIGNMENT*
+                    remaining_crs_to_box_list = [
+                        crs_to_box
+                        for crs_to_box in remaining_crs_to_box_list
+                        if max_crs not in crs_to_box
+                    ]
+                    break  # See note on next line.
+                # Note: Commented-out code below should work (after
+                # removal of `break` on line above) but would suffer
+                # from inter-zone edge effects.
+                # box_set = set()  # *REASSIGNMENT*
+                # for crs_to_box in full_crs_to_box_list:
+                #     for crs in required_crses:
+                #         try:
+                #             box = crs_to_box.pop(crs)
+                #         except KeyError:
+                #             continue
+                #         else:
+                #             box_set.add(box)
+                #             if min_overlap:
+                #                 break
+                if not remaining_crs_to_box_list:
+                    # *REASSIGNMENT*
+                    box_set = {
+                        crs_to_box[max_crs]
+                        for crs_to_box in full_crs_to_box_list
+                    }
+                    # *REASSIGNMENT*
+                    box_list = list(
+                        _spatially_filter_boxes(
+                            box_set, precision=precision, bounds=final_bounds
+                        )
+                    )
 
     # Sort and return.
     box_list.sort(key=lambda b: b.string)
