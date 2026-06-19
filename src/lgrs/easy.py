@@ -243,16 +243,16 @@ def write_grid(
         ``"a"`` requires that the file preexist and appends to that file;
         if the layer also preexists, it is likewise appended to.
     min_overlap : bool, default=True
-        Whether to minimize the box overlap. If `True`, boxes only overlap
-        near LPS and LTM zone boundaries, where overlap is necessary to
-        ensure coverage. If `False`, all valid boxes in the targeted area
-        are generated, which may include inter-zone overlaps of up to ~35.4
-        km, that is, the diagonal of a 25-km box. In the special case that
-        `bounds` is specified by an LGRS CRS string, `min_overlap` is
-        instead interpreted to relate to the overlap of that region with its
-        neighbors. Then, `True` generates only boxes that are within the
-        nominal bounds of the zone whereas `False` generates all valid boxes
-        from the maximally expanded zone.
+        Whether to reduce box overlap. If `True`, boxes only overlap near LPS
+        and LTM zone boundaries, where overlap is necessary to ensure coverage.
+        If `False`, all valid boxes in the targeted area are generated, which
+        may include inter-zone overlaps of up to ~35.4 km, that is, the
+        diagonal of a 25-km box. In the special case that `bounds` is specified
+        by an LGRS CRS string, `min_overlap` is instead interpreted to relate
+        to the overlap of that region with its neighbors. Then, `True`
+        generates only boxes that are within the nominal bounds of the zone
+        whereas `False` generates all valid boxes from the maximally expanded
+        zone.
     min_zones : bool, default=False
         Whether to minimize the number of zones (and therefore, CRSs) that are
         used. If `True`, boxes from non-nominal (expanded) areas of zones may
@@ -260,9 +260,7 @@ def write_grid(
         example, when working near the nominal longitudinal boundary between
         two LTM zones, you may prefer all boxes to come from one zone, if
         possible, instead of nearly all boxes from that zone and a few from a
-        neighboring zone. If `False`, only boxes from the nominal area of each
-        zone will be generated. If `bounds` is specified by an LGRS CRS string,
-        this argument is ignored.
+        neighboring zone.
     fallback_to_geo: bool, default=False
         Specifies the behavior when the CRS of a path-like `bounds` cannot
         be transformed to the geographic CRS IAU_2015:30100. If `True` and
@@ -292,7 +290,8 @@ def write_grid(
 
     Warnings
     --------
-    The `True` option for `min_zones` is not yet implemented.
+    In the current implementation, the `True` option for `min_zones` has no
+    effect unless `bounds` can be spanned by boxes from a single CRS.
 
     Examples
     --------
