@@ -19,16 +19,17 @@
 ###############################################################################
 # Standard.
 from __future__ import annotations
+
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
+import pathlib as _pathlib
 import re as _re
 import typing as _typing
 
 # External.
 import geopandas as _geopandas
 import numpy as _np
-import pathlib as _pathlib
 import pyproj as _pyproj
 import pyproj.aoi as _pyproj_aoi
 import rasterio as _rasterio
