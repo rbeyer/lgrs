@@ -247,7 +247,7 @@ def make_box_grid(
                 layer or table by the convention:
                 ``"path/to/my.gpkg|layer=my_layer_name"`` or
                 ``"path/to/my.gpkg|table=my_table_name"``, as appropriate.
-            (4) `str` short name for an LGRS CRS
+            (4) short name (`str`) for an LGRS CRS
                 This option generates all boxes for the indicated CRS, which
                 is resolved by `lgrs.bounds.resolve_crs()`.
             (5) `None`
