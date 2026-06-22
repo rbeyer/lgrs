@@ -191,18 +191,9 @@ def _spatially_filter_boxes(
     precision: int,
     bounds: _bounds.GeographicBounds | _bounds.ProjectedBounds,
 ) -> _collections.abc.Iterator[_coords.BoxCoordinate]:
-    if bounds.crs.is_geographic:
-        short_tolerance = precision / _values.M_PER_DEGREE_LATITUDE
-    else:
-        short_tolerance = precision
-    default_tolerance = short_tolerance * _values.SAFETY_FACTOR
     for box in boxes:
-        if bounds.crs == box.crs_nominal:
-            tolerance = 0
-        else:
-            tolerance = default_tolerance
         for corner in box._corners:
-            if corner.is_within_bounds(bounds, tolerance=tolerance):
+            if corner.is_within_bounds(bounds):
                 yield box
                 break
 
