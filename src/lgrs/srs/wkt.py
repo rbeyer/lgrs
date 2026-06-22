@@ -145,7 +145,7 @@ PROJCRS[“Moon (2015) - Sphere / Ocentric / {{north_or_south}} Polar”,
 ID[“USGS”,{{id_num}},{{hemisphere}}]]]
 """.strip().format  # noqa: E501
 
-# Below: Format taken from p. 18 of M2025. Only deviations from M2025
+# Below: Format taken from p. 23 of M2025. Only deviations from M2025
 # are that SCOPE is replaced with AREA, which seems better suited for
 # the content, and PROJCRS name is extended to include zone number.
 _ltm_usage_area_prefix = "Lunar Transverse Mercator Zone LTM_"
