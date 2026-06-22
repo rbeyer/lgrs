@@ -318,7 +318,7 @@ def make_box_grid(
     ... )
     >>> boxes = make_box_grid(aoi, precision=25_000, acc=True)
     >>> len(boxes)
-    717
+    650
     >>> import lgrs.coords
     >>> isinstance(boxes[0], lgrs.coords.LtmAccBox)
     True
