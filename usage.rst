@@ -275,10 +275,10 @@ If you need finer control, you can use the lower-level ``grid`` module::
     >>> gdfs = grid.make_gdfs(boxes)
     >>> if len(gdfs) == 1:
     ...     gdf, = gdfs
-    ...     gdf.to_file("~/grids/aoi.gpkg")
+    ...     gdf.to_file("~/grids/aoi.gpkg")  # doctest: +SKIP
     ... else:
     ...     for gdf in gdfs:
-    ...         gdf.to_file(f"~/grids/aoi.gpkg|layer={gdf.name_hint}")
+    ...         gdf.to_file(f"~/grids/aoi.gpkg|layer={gdf.name_hint}")  # doctest: +SKIP
 
 
 Not yet implemented
