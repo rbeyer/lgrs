@@ -28,7 +28,6 @@ import typing as _typing
 # External.
 import geopandas as _geopandas
 import numpy as _np
-import pyproj as _pyproj
 from pyproj import aoi as _pyproj_aoi
 
 # Internal.
@@ -134,7 +133,7 @@ def _resolve_bounds(
     if isinstance(bounds, str):
         try:
             std_bounds = _srs.make_lunar_crs(bounds, extended_ltm=extended_ltm)
-        except _pyproj.exceptions.CRSError:
+        except TypeError:
             std_bounds = _pathlib.Path(bounds)
     elif isinstance(bounds, _collections.abc.Sequence):
         match len(bounds):
