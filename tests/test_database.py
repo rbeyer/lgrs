@@ -318,7 +318,6 @@ class TestQueryDatabase(unittest.TestCase):
             expected_internal_names=["23N"],
         )
 
-    # TODO: Decide how we plan to deal with this test.
     @unittest.skip("expensive")
     def test_aoi_expensive(self) -> None:
         # Test latitudinal sampling.
