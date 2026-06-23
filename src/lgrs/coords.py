@@ -3488,11 +3488,6 @@ class BoxCoordinate(BaseCoordinate):
         else:
             init_kwargs["easting"] = None
             init_kwargs["northing"] = None
-        # TODO: Consider how to handle the possibility that a truncated
-        #  LPS-based coordinate now plots outside the `prefer_lps=False`
-        #  zone. Simplest solution would be to assign `prefer_lps=True`
-        #  for any LPS-based coordinate upon truncation, but that might
-        #  not be what the user expects.
         new_lgrs_box = type(self_lgrs_box)(**init_kwargs, validate=validate)
         if not copy:
             self._register_cousin(new_lgrs_box)
