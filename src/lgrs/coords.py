@@ -332,12 +332,12 @@ class Constraints(metaclass=_caching._MetaMultiton):
         poleward extent of the LTM region is 82° N/S instead of 80° N/S.
     global_lps : bool, default=False
         Whether to extend the LPS region globally. If `True`, there is no
-        LTM region. This constraint is incompatible with all box
-        coordinates.
+        LTM region and each LPS regions extends from a pole to the equator.
+        This constraint is incompatible with all box coordinates.
     global_ltm : bool, default=False
         Whether to extend the LTM region globally. If `True`, there is no
-        LPS region. This constraint is incompatible with all box
-        coordinates.
+        LPS region and each LTM zone extends from the equator to a pole.
+        This constraint is incompatible with all box coordinates.
     global_crs : lgrs.srs.srs.CRS, optional
         Used to force a specific CRS. Mostly intended for internal use. Not
         compatible with box coordinates nor with any other constraint.
