@@ -2895,6 +2895,9 @@ class LtmPoint(PointCoordinate):
         # -11.
         # Table 6
         lat_band = LtmLgrsBox._latitudinal_band_chars[lat_band_idx + 11]
+        # TODO: Let Mark know.
+        # Note: Although `LtmLgrsBox._easting_area_chars` is 0-indexed
+        # and Table 7 is 1-indexed, Eq. 82 is exactly reproduced here.
         ea_idx = _floor(self.easting // 25_000) - 5  # Eq. 82
         ea = LtmLgrsBox._easting_area_chars[ea_idx]  # Table 7
         na_letterset = _calc_na_letterset(self.zone_number)  # Eq. 83
