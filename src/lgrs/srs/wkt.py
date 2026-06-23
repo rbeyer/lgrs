@@ -11,11 +11,8 @@ and Lunar Transverse Mercator (LTM) projections described by:
         and Methods, book 11, chap. E1, 308 p.,
         https://doi.org/10.3133/tm11E1
 
-For brevity, this paper is referred to as M2025 hereinafter.
+For brevity, this paper is referred to as "M2025" hereinafter.
 """
-
-# TODO: Finalize reference. Current form is copied from "Suggested
-#  citation" in M2025.
 
 # Copyright © 2026, Ethan I. Schaefer (eschaefer@seti.org)
 #
