@@ -171,7 +171,7 @@ def _test_mode(path: _pathlib.Path, mode: str) -> str:
 
 
 def write_grid(
-    bounds: tuple[float, float, float, float] | str | _pathlib.Path,
+    bounds: _typing.Any,
     precision: float,
     out_path: _pathlib.Path | str,
     *,
