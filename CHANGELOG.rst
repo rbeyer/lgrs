@@ -28,6 +28,9 @@ and the release date, in year-month-day format (see examples below).
 Unreleased
 ----------
 
+0.3.0 (2026-06-25)
+------------------
+
 Added
 ^^^^^
 * Basic support for ``min_zones=True`` option when generating grids
