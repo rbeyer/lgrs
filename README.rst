@@ -7,6 +7,9 @@ lgrs
 .. image:: https://img.shields.io/pypi/v/lgrs.svg
         :target: https://pypi.python.org/pypi/lgrs
 
+.. image:: https://codecov.io/gh/rbeyer/lgrs/graph/badge.svg?token=EDQUQE6S9I 
+        :target: https://codecov.io/gh/rbeyer/lgrs
+
 
 The *lgrs* package is software to support the Lunar Grid Reference
 System and also provides utility functions for coordinate projections
