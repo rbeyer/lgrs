@@ -19,7 +19,10 @@
 ###############################################################################
 # Standard.
 import enum as _enum
+import functools as _functools
 import pathlib as _pathlib
+import re as _re
+import types as _types
 import typing as _typing
 
 # Internal.
@@ -56,6 +59,125 @@ class Type(_enum.StrEnum):
 ###############################################################################
 # region> UTILITIES
 ###############################################################################
+class _Adapter:
+    def __init__(self, func: _types.FunctionType):
+        self.func = func
+
+    # * DATA ATTRIBUTES. ──────────────────────────────────────────────
+    @_functools.cached_property
+    def annotations(self) -> dict[str, _typing.Any]:
+        return self.func.__annotations__.copy()
+
+    @_functools.cached_property
+    def docstring(self) -> str:
+        self._set_clean_docstring(self.func.__doc__)
+        return self.docstring
+
+    # * UTILITIES. ────────────────────────────────────────────────────
+    @staticmethod
+    def _process_section_count(title: str, count: int) -> None:
+        match count:
+            case 1:
+                return
+            case 0:
+                raise TypeError(f"Section not found for: {title!r}")
+            case _:
+                raise TypeError(f"Multiple sections found for: {title!r}")
+
+    def _set_clean_docstring(self, raw_docstring: str) -> None:
+        # Note: Collapse any sequences of 2+ empty/space-only lines to 1
+        # empty line.
+        clean_doc = _re.sub(r"(?m)(^ *\n){2,}", r"\n", raw_docstring).strip()
+        self.docstring = clean_doc
+
+    # * PUBLIC FUNCTIONS. ─────────────────────────────────────────────
+    def add_to_notes(self, addition: str, *, prepend: bool = False) -> None:
+        # Peel back each section that can follow Notes, in reverse
+        # order.
+        later_section_blocks = []
+        for sec_title in ("Examples", "References"):
+            sec_block_match = self.get_doc_section_match(
+                sec_title, error=False
+            )
+            if sec_block_match is None:
+                continue
+            if sec_block_match.end() != len(self.docstring):
+                raise TypeError(
+                    "`.docstring` unexpectedly does not end with "
+                    f"{sec_title!r} section."
+                )
+            sec_block = sec_block_match.group()
+            later_section_blocks.append(sec_block)
+            self.docstring = self.docstring[: sec_block_match.start()].rstrip()
+
+        # Extract Notes section and body, or add stub, if necessary.
+        notes_block_match = self.get_doc_section_match("Notes", error=False)
+        if notes_block_match is None:
+            self.docstring += "\n\nNotes\n-----\n..."
+            old_notes_body = ""
+        else:
+            old_notes_body = notes_block_match.group("body").rstrip()
+
+        # Replace Notes section with updated body.
+        if prepend:
+            new_notes_body = f"{addition}\n\n{old_notes_body}"
+        else:
+            new_notes_body = f"{old_notes_body}\n\n{addition}"
+        self.replace_doc_section("Notes", new_notes_body)
+
+        # Add back any terminal sections.
+        if later_section_blocks:
+            self._set_clean_docstring(
+                r"\n\n".join((self.docstring, *later_section_blocks))
+            )
+
+    def get_doc_section_match(
+        self, title: str, *, error: bool = True
+    ) -> _re.Match | None:
+        pattern = self.get_doc_section_pattern(title)
+        matches = tuple(pattern.finditer(self.docstring))
+        if not error and not matches:
+            return None
+        self._process_section_count(title, len(matches))
+        (match,) = matches
+        return match
+
+    @staticmethod
+    @_functools.cache
+    def get_doc_section_pattern(title: str) -> _re.Pattern:
+        pattern = _re.compile(
+            rf"(?ms)^{title} *\n-+ *\n(?P<body>.*?(\Z|(^ *$)))"
+        )
+        pattern = _re.compile(rf"(?ms)^{title} *$.*?((^ *$)|\Z)")
+        return pattern
+
+    def make_new_func(self) -> _types.FunctionType:
+        func = self.func
+        new = _types.FunctionType(
+            func.__code__,
+            func.__globals__,
+            func.__name__,
+            func.__defaults__,
+            func.__closure__,
+        )
+        _functools.update_wrapper(new, func)
+        del new.__wrapped__
+        new.__annotations__ = self.annotations
+        new.__doc__ = self.docstring
+        new.__kwdefaults__ = func.__kwdefaults__
+        return new
+
+    def replace_doc_section(self, title: str, new: str = "") -> None:
+        pattern = self.get_doc_section_pattern(title)
+        if new:
+            full_new = "\n".join((title, "-" * len(title), new))
+        else:
+            full_new = ""
+        raw_doc, sub_count = pattern.subn(full_new, self.docstring)
+        self._process_section_count(title, sub_count)
+        self._set_clean_docstring(raw_doc)
+
+
 def _test_mode(path: _pathlib.Path, mode: str) -> str:
     match mode:
         case "x":
