@@ -18,6 +18,7 @@ __author__ = "lgrs Developers"
 __email__ = "eschaefer@seti.org"
 __version__ = "0.4.0-dev"
 
+# * IMPORT BEARTYPE. ──────────────────────────────────────────────────
 import beartype.claw
 
 # * BUBBLE-UP MOST USEFUL CLASSES AND FUNCTIONS. ──────────────────────
