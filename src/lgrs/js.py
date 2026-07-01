@@ -68,7 +68,7 @@ def _prep_for_js(
 @_functools.cache
 def _get_grid_type_hints(
     *, bounds_numerics_only: bool = False
-) -> dict[str, type]:
+) -> dict[str, _typing.Any]:
     if bounds_numerics_only:
         name_to_type = {
             name: float for name in ("left", "bottom", "right", "top")
