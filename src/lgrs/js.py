@@ -19,6 +19,7 @@
 ###############################################################################
 # Standard.
 import builtins as _builtins
+import inspect as _inspect
 import pathlib as _pathlib
 import shutil as _shutil
 
@@ -95,8 +96,9 @@ def generate_grid(
         `out_path` in `easy.write_grid()`.
     **kwargs
         Extra arguments (except those used to populate `bounds`) are passed
-        to `easy.write_grid()`. Arguments that should be numeric but are
-        passed as strings will be coerced, for convenience.
+        to `easy.write_grid()`, but `out_path` is not supported. Arguments
+        that should be numeric but are passed as strings will be coerced,
+        for convenience.
 
     Returns
     -------
@@ -183,23 +185,56 @@ def generate_grid_from_form(form_id: str, **kwargs) -> None:
     Generate and download an LGRS grid that is specified by an HTML form.
 
     This can be the easiest way to generate an LGRS grid from JavaScript,
-    but you must be careful to set the name of each form element so that
-    it coincides with an argument name in `generate_grid()`.
+    but note:
+        (1) Any element with the same name as an argument supported by
+            `generate_grid()` will have its value used for that argument.
+            For example, ``<input name="precision">``.
+        (2) Checkboxes are processed as booleans: `True` if checked and
+            `False` if unchecked.
+        (3) For radio buttons with the same name, the value of the
+            checked button (if any) is used.
+        (4) Any element whose name is not that of an argument supported by
+            `generate_grid()` is silently ignored.
+        (5) `generate_grid()` coerces strings to numeric values, where
+            appropriate.
 
     Parameters
     ----------
     form_id : string
         The ID of the form, that is, ``<form id=form_id>``. The elements of
-        the form are extracted and their values passed to `generate_grid()`.
+        the form are extracted and their values (as described above) are
+        passed to `generate_grid()`.
     **kwargs
-        Extra arguments are passed `generate_grid()`. They must not collide
-        with the names of any elements in the HTML form.
+        Extra arguments are passed `generate_grid()`. In the event of
+        collision, these arguments override those set by the form.
 
     Returns
     -------
     None
     """
+    # Collect set of valid argument names.
+    ok_arg_name_set = set(_inspect.signature(_easy.write_grid).parameters)
+    ok_arg_name_set.remove("out_path")
+    ok_arg_name_set.update(_inspect.signature(generate_grid).parameters)
+    ok_arg_name_set.update(("left", "bottom", "right", "top", "crs"))
+
+    # Read form.
     form = _js.document.getElementById(form_id)
-    data = _js.FormData.new(form)
-    form_kwargs = _js.Object.fromEntries(data).to_py()
-    return generate_grid(**form_kwargs, **kwargs)
+    form_kwargs = {}
+    for elem in form:
+        if elem.name not in ok_arg_name_set:
+            continue
+        match form.type:
+            case "checkbox":
+                value = elem.checked
+            case "radio":
+                if not elem.checked:
+                    continue
+                value = elem.value
+            case _:
+                value = elem.value
+        form_kwargs[elem.name] = value
+
+    # Pass to `grid_generation()`.
+    form_kwargs.update(kwargs)
+    return generate_grid(**form_kwargs)
