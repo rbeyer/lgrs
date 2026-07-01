@@ -45,11 +45,15 @@ import lgrs.easy as _easy
 ###############################################################################
 # region> UTILITIES
 ###############################################################################
-def _coerce_to_type[T](arg: str | _typing.Any, typ: type[T]) -> T:
+def _coerce_to_type[T](
+    *, raw_val: str | _typing.Any, name: str, typ: type[T]
+) -> T:
     try:
-        return typ(arg)
+        return typ(raw_val)
     except Exception:
-        raise TypeError(f"Could not coerce to `{typ.__name__}`: {arg!r}")
+        raise TypeError(
+            f"Could not coerce {name!r} to `{typ.__name__}`: {raw_val!r}"
+        ) from None
 
 
 def _prep_for_js(
@@ -164,13 +168,16 @@ def generate_grid(
                 typ = float
             case _:
                 continue
-        coerced_val = _coerce_to_type(raw_val, typ)
+        coerced_val = _coerce_to_type(raw_val=raw_val, name=arg_name, typ=typ)
         kwargs[arg_name] = coerced_val
     if isinstance(bounds, _pyodide.ffi.JsProxy):
         temp_bounds = bounds.to_py()
         # *REASSIGNMENT*
         bounds = [
-            _coerce_to_type(raw_val, float) for raw_val in temp_bounds[:4]
+            _coerce_to_type(
+                raw_val=raw_val, name="<bounds component>", typ=float
+            )
+            for raw_val in temp_bounds[:4]
         ]
         if len(temp_bounds) == 5:
             bounds.append(temp_bounds[4])
