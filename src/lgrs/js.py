@@ -224,7 +224,7 @@ def generate_grid_from_form(form_id: str, **kwargs) -> None:
     for elem in form:
         if elem.name not in ok_arg_name_set:
             continue
-        match form.type:
+        match elem.type:
             case "checkbox":
                 value = elem.checked
             case "radio":
