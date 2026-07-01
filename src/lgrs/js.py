@@ -118,11 +118,16 @@ def generate_grid(
     out_name : string, default="out.gpkg|layer={}
         Specify the output name, equivalent to the final path component of
         `out_path` in `easy.write_grid()`.
+    left, bottom, right, top : float, optional
+        Components of `bounds`. Should only be specified if `bounds` is `None`,
+        but then required.
+    crs : string, CRS, or None, optional
+        Final component of `bounds`. Should only be specified if `bounds` is
+        `None`, in which case it defaults to `None`.
     **kwargs
-        Extra arguments (except those used to populate `bounds`) are passed
-        to `easy.write_grid()`, but `out_path` is not supported. Arguments
-        that should be numeric but are passed as strings will be coerced,
-        for convenience.
+        Extra arguments are passed to `easy.write_grid()`, but `out_path` is
+        not supported. Arguments that should be numeric are coerced if
+        necessary, for convenience.
 
     Returns
     -------
