@@ -19,7 +19,7 @@
 ###############################################################################
 # Standard.
 import builtins as _builtins
-import inspect as _inspect
+import functools as _functools
 import pathlib as _pathlib
 import shutil as _shutil
 
@@ -45,6 +45,13 @@ import lgrs.easy as _easy
 ###############################################################################
 # region> UTILITIES
 ###############################################################################
+def _coerce_to_type[T](arg: str | _typing.Any, typ: type[T]) -> T:
+    try:
+        return typ(arg)
+    except Exception:
+        raise TypeError(f"Could not coerce to `{typ.__name__}`: {arg!r}")
+
+
 def _prep_for_js(
     func: _types.FunctionType, notes: str, *, prepend: bool = False
 ) -> _types.FunctionType:
@@ -58,9 +65,26 @@ def _prep_for_js(
 ###############################################################################
 # region> FUNCTIONS
 ###############################################################################
+@_functools.cache
+def _get_grid_type_hints(
+    *, bounds_numerics_only: bool = False
+) -> dict[str, type]:
+    if bounds_numerics_only:
+        name_to_type = {
+            name: float for name in ("left", "bottom", "right", "top")
+        }
+    else:
+        name_to_type = _typing.get_type_hints(_easy.write_grid)
+        del name_to_type["out_path"]
+        name_to_type["out_name"] = str
+        name_to_type.update(_get_grid_type_hints(bounds_numerics_only=True))
+        name_to_type["crs"] = _typing.Any
+    return name_to_type
+
+
 def generate_grid(
     bounds: _typing.Any = None,
-    precision: int | str = None,
+    precision: int | str | None = None,
     out_name: str = "out.gpkg|layer={}",
     **kwargs,
 ) -> None:
@@ -123,36 +147,38 @@ def generate_grid(
     # Standardize argument values.
     if precision is None:
         raise TypeError("Must specify `precision`.")
-    if isinstance(bounds, _pyodide.ffi.JsProxy):
-        temp_bounds = bounds.to_py()
-        bounds = list(map(float, temp_bounds[:4]))  # *REASSIGNMENT*
-        if len(temp_bounds) == 5:
-            bounds.append(temp_bounds[4])
-    elif bounds is None:
-        bounds = []  # *REASSIGNMENT*
-        for arg_name in ("left", "bottom", "right", "top"):
-            raw_val = kwargs.pop(arg_name, None)
-            if raw_val is None:
-                raise TypeError(
-                    "Neither `bounds` nor its components are specified."
-                )
-            bounds.append(float(raw_val))
-        bounds.append(kwargs.pop("crs", None))
     kwargs["precision"] = precision
-    for arg_name, type_hint in _typing.get_type_hints(
-        _easy.write_grid
-    ).items():
+    for arg_name, type_hint in _get_grid_type_hints().items():
         raw_val = kwargs.get(arg_name)
         if raw_val is None:
             continue
         match type_hint:
             case _builtins.int:
-                new_val = int(raw_val)
+                typ = int
             case _builtins.float:
-                new_val = float(raw_val)
+                typ = float
             case _:
                 continue
-        kwargs[arg_name] = new_val
+        coerced_val = _coerce_to_type(raw_val, typ)
+        kwargs[arg_name] = coerced_val
+    if isinstance(bounds, _pyodide.ffi.JsProxy):
+        temp_bounds = bounds.to_py()
+        # *REASSIGNMENT*
+        bounds = [
+            _coerce_to_type(raw_val, float) for raw_val in temp_bounds[:4]
+        ]
+        if len(temp_bounds) == 5:
+            bounds.append(temp_bounds[4])
+    elif bounds is None:
+        bounds = []  # *REASSIGNMENT*
+        for arg_name in _get_grid_type_hints(bounds_numerics_only=True):
+            val = kwargs.pop(arg_name, None)
+            if val is None:
+                raise TypeError(
+                    f"Neither `bounds` nor `{arg_name}` are specified."
+                )
+            bounds.append(val)
+        bounds.append(kwargs.pop("crs", None))
 
     # Create temporary directory...
     with _tempfile.TemporaryDirectory(prefix="grid__") as temp_dir_name:
@@ -212,17 +238,12 @@ def generate_grid_from_form(form_id: str, **kwargs) -> None:
     -------
     None
     """
-    # Collect set of valid argument names.
-    ok_arg_name_set = set(_inspect.signature(_easy.write_grid).parameters)
-    ok_arg_name_set.remove("out_path")
-    ok_arg_name_set.update(_inspect.signature(generate_grid).parameters)
-    ok_arg_name_set.update(("left", "bottom", "right", "top", "crs"))
-
     # Read form.
     form = _js.document.getElementById(form_id)
+    ok_arg_names = _get_grid_type_hints()
     form_kwargs = {}
     for elem in form:
-        if elem.name not in ok_arg_name_set:
+        if elem.name not in ok_arg_names:
             continue
         match elem.type:
             case "checkbox":
