@@ -90,8 +90,95 @@ def _get_grid_type_hints(
     return name_to_type
 
 
-def generate_grid(
-    bounds: _typing.Any = None,
+def make_box_grid(
+    bounds: _typing.Any, precision: float, **kwargs
+) -> _pyodide.ffi.JsProxy:
+    """
+    Generate grid as an array of LGRS/ACC boxes spanning specified bounds.
+
+    This function wraps, and is identical to, `lgrs.grid.make_box_grid()`
+    except as noted below. See that function's documentation.
+
+    Parameters
+    ----------
+    bounds : a resolvable bounds hint
+        In addition to the forms accepted by the `bounds` argument of
+        `lgrs.grid.make_box_grid()`, may be specified by a 4- or 5-element
+        JavaScript array.
+    **kwargs
+        Remaining arguments are passed to `lgrs.grid.make_box_grid()`.
+
+    Returns
+    -------
+    box_array : pyodide.ffi.JsProxy
+        A JavaScript array of `pyodide.ffi.JsProxy` instances, each
+        representing an `lgrs.coords.BoxCoordinate` instance.
+
+    See Also
+    --------
+    package_grid : High-level grid packaging.
+    package_grid_from_form :  Packages grid from an HTML form.
+
+    Examples
+    --------
+    In JavaScript::
+
+        // Create grid as array of boxes.
+        const bounds = {1, 1, 2, 2, "IAU_2015:30100}";
+        const boxes = make_box_grid(bounds, 25_000);
+
+        // Print LGRS reference for first box.
+        console.log(boxes[0].string);
+    """
+    if isinstance(bounds, _pyodide.ffi.JsProxy):
+        bounds = bounds.to_py()  # *REASSIGNMENT*
+    boxes = _grid.make_box_grid(bounds, precision, **kwargs)
+    return _pyodide.ffi.to_js(boxes)
+
+
+def make_gdfs(
+    boxes: (
+        _collections.abc.Sequence[_coords.BoxCoordinate] | _pyodide.ffi.JsProxy
+    ),
+) -> _pyodide.ffi.JsProxy:
+    """
+    Create one or more `GeoDataFrame` instances from a sequence of boxes.
+
+    This function wraps, and is identical to, `lgrs.grid.make_gdfs()`
+    except as noted below. See that function's documentation.
+
+    Parameters
+    ----------
+    boxes : sequence of lgrs.coords.BoxCoordinates instances
+        Sequence may be a JavaScript array.
+    **kwargs
+        Remaining arguments are passed to `lgrs.grid.make_gdfs()`.
+
+    Returns
+    -------
+    gdfs : pyodide.ffi.JsProxy
+        A JavaScript array of `pyodide.ffi.JsProxy` instances, each
+        representing a `geopandas.GeoDataFrame` instance.
+
+    Examples
+    --------
+    In JavaScript::
+
+        // Create grid as an array of `geopandas.GeoDataFrame` instances.
+        const bounds = {1, 1, 2, 2, "IAU_2015:30100}";
+        const boxes = make_box_grid(bounds, 25_000);
+        const gdfs = make_gdfs(boxes);
+
+        // Print LGRS reference for first box of first gdf.
+        const gdf = gdfs[0];
+        console.log(gdf.iloc[0]["string"]);
+    """
+    if isinstance(boxes, _pyodide.ffi.JsProxy):
+        boxes = boxes.to_py()  # *REASSIGNMENT*
+    gdfs = _grid.make_gdfs(boxes)
+    return _pyodide.ffi.to_js(gdfs)
+
+
 def package_grid(
     bounds: _typing.Any = _values.DEFAULT,
     precision: int | str | None = None,
