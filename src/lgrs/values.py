@@ -1,5 +1,5 @@
 """
-Cross-library reference values.
+Cross-library reference values, sentinels, and related utilities.
 
 In some comments, the following reference is cited as "M2025", for
 brevity:
@@ -152,3 +152,18 @@ SAFETY_FACTOR = 1.1
 assert (SAFETY_FACTOR - 1.0) > 10 * (
     max(MIN_LINEAR_DISTORTION**-1, MAX_LINEAR_DISTORTION) - 1.0
 )
+
+
+# endregion
+###############################################################################
+# region> SENTINELS
+###############################################################################
+class _DefaultType:
+    def __repr__(self):
+        return "<DEFAULT>"
+
+
+DEFAULT = _DefaultType()
+
+
+# endregion
