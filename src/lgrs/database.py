@@ -331,15 +331,17 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         Whether CRS is LTM.
     hemisphere: string
         ``"N"`` or ``"S"``.
+    lps_hemisphere : string or None
+        The LPS hemisphere (``"N"`` or ``"S"``), or ``None`` if `.is_ltm`.
     ltm_zone : string or None
         The LTM zone (such as ``"23N"``), or ``None`` if `.is_lps`.
     ltm_zone_number : int or None
         The LTM zone number (such as ``23``), or ``None``, if `.is_lps`.
-    lps_hemisphere : string or None
-        The LPS hemisphere (``"N"`` or ``"S"``), or ``None`` if `.is_ltm`.
     absolute_ltm_limit : float
         The magnitude of the LTM/LPS boundary: ``80``, ``82``, or ``90``
         degrees.
+    hint : str or None
+        ``self.lps_hemisphere or self.ltm_zone``
 
     Methods
     -------
@@ -495,6 +497,10 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     @_functools.cached_property
     def hemisphere(self) -> str:
         return self._internal_name_parsed.hemisphere
+
+    @_functools.cached_property
+    def hint(self) -> str | None:
+        return self.lps_hemisphere or self.ltm_zone
 
     @_functools.cached_property
     def is_lps(self) -> bool:
