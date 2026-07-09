@@ -34,7 +34,11 @@ from lgrs.easy import write_grid
 from lgrs.srs.srs import CRS, make_lunar_crs
 
 # * ENABLE TYPE-CHECKING AT PACKAGE LEVEL. ───────────────────────────
+# Note: Types and execution in `lgrs.js` are not available outside a
+# JavaScript (Pyodide) environment, so disable type-checking.
 beartype.claw.beartype_this_package(
-    conf=beartype.BeartypeConf(is_pep484_tower=True)
+    conf=beartype.BeartypeConf(
+        is_pep484_tower=True, claw_skip_package_names=("lgrs.js",)
+    )
 )
 del beartype
