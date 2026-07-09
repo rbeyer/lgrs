@@ -19,6 +19,7 @@
 ###############################################################################
 # Standard.
 import builtins as _builtins
+import collections as _collections
 import functools as _functools
 import pathlib as _pathlib
 import shutil as _shutil
@@ -38,7 +39,10 @@ except ModuleNotFoundError:
     pass
 
 # Internal.
+import lgrs.coords as _coords
+import lgrs.grid as _grid
 import lgrs.easy as _easy
+import lgrs.values as _values
 
 
 # endregion
@@ -88,54 +92,57 @@ def _get_grid_type_hints(
 
 def generate_grid(
     bounds: _typing.Any = None,
+def package_grid(
+    bounds: _typing.Any = _values.DEFAULT,
     precision: int | str | None = None,
-    out_name: str = "out.gpkg|layer={}",
+    out_name: str | None = None,
     **kwargs,
-) -> None:
+) -> _pyodide.ffi.JsProxy | None:
     """
-    Generate and download an LGRS grid.
+    Package an LGRS grid to a standard format and optionally download it.
 
-    This function wraps `easy.write_grid()` and is intended to make grid
-    generation easier from a JavaScript environment. In addition to argument
-    accommodations (described in the Parmaters section), the function
-    handles compression of all outputs to a single .zip file and triggers
-    downloading of that file. All outputs, including the .zip file, are also
-    cleared on exit.
+    This function wraps `lgrs.easy.write_grid()` and is intended to make
+    grid packaging easier from a JavaScript environment. In addition to
+    argument accommodations (described in the Parmaters section), the
+    function optionally handles compression of all outputs to a single .zip
+    file and triggers downloading of that file. All outputs, including the
+    .zip file, are also cleared on exit.
 
     Parameters
     ----------
     bounds : a resolvable bounds hint
         In addition to the forms accepted by the `bounds` argument of
-        `easy.write_grid()`, the following are also supported:
+        `lgrs.easy.write_grid()`, the following are also supported:
             (1) a 4- or 5-element JavaScript array
                 This is converted to a Python list of the same length, and
                 the first four elements are coerced from strings
                 to numbers, if necessary.
-            (2) component keywords, if `bounds` is `None`
-                If `bounds` is `None`, it is populated by other expected
-                keyword arguments thusly:
+            (2) component keywords
+                If `bounds` is not specified directly, it is populated by
+                other expected keyword arguments thusly:
                     ``[left, botton, right, top, crs]``
-                The first four keywords must be present. `crs` defaults to
-                `None`.
-    precision : integer or string
-        If specified as a sting, `precision` is coerced to an integer.
-    out_name : string, default="out.gpkg|layer={}
-        Specify the output name, equivalent to the final path component of
-        `out_path` in `easy.write_grid()`.
+    precision : float or string
+        If specified as a sting, `precision` is coerced to a number.
+    out_name : string or None, default=None
+        The output name, equivalent to the final path component of
+        `out_path` in `lgrs.easy.write_grid()`.
     left, bottom, right, top : float, optional
-        Components of `bounds`. Should only be specified if `bounds` is `None`,
-        but then required.
+        Components of `bounds`. Should only be specified if `bounds` is not
+        specified directly, but then required.
     crs : string, CRS, or None, optional
         Final component of `bounds`. Should only be specified if `bounds` is
-        `None`, in which case it defaults to `None`.
+        not specified directly, in which case it defaults to `None`.
     **kwargs
-        Extra arguments are passed to `easy.write_grid()`, but `out_path` is
-        not supported. Arguments that should be numeric are coerced if
-        necessary, for convenience.
+        Extra arguments are passed to `lgrs.easy.write_grid()`, but
+        `out_path` is not supported. Arguments that should be numeric are
+        coerced if necessary, for convenience.
 
     Returns
     -------
-    None
+    multilayer_object : pyodide.ffi.JsProxy or None
+        If `out_name` is `None`, a JavaScript ``Object`` created from
+        the `hint_to_dict` mapping returned by `lgrs.easy.write_grid()`.
+        (In that case, no download is triggered.) Otherwise, `None`.
 
     Raises
     ------
@@ -144,14 +151,23 @@ def generate_grid(
 
     See Also
     --------
-    generate_grid_from_form :  Similar but accepts an HTML form name
+    package_grid_from_form :  Similar but accepts an HTML form name
 
     Examples
     --------
     In JavaScript::
 
-    lgrs.js.generate_grid({"1", "1", "2", "2", "IAU_2015:30100}", "25000");
+        // Create multi-layer grid object.
+        const bounds = {1, 1, 2, 2, "IAU_2015:30100}";
+        const multiLyrObj = package_grid(bounds, "25000");
 
+        // Print LGRS reference for first box of first layer.
+        const lyrObj = Object.values(gridObj)[0];
+        const feature = lyrObj.features[0];
+        console.log(feature.properties.string);
+
+        // Instead package grid to multi-layer GeoPackage and download.
+        package_grid(bounds, 25_000, "out.gpkg|layer={}");
     """
     # Standardize argument values.
     if precision is None:
@@ -181,7 +197,7 @@ def generate_grid(
         ]
         if len(temp_bounds) == 5:
             bounds.append(temp_bounds[4])
-    elif bounds is None:
+    elif bounds is _values.DEFAULT:
         bounds = []  # *REASSIGNMENT*
         for arg_name in _get_grid_type_hints(bounds_numerics_only=True):
             val = kwargs.pop(arg_name, None)
@@ -191,6 +207,12 @@ def generate_grid(
                 )
             bounds.append(val)
         bounds.append(kwargs.pop("crs", None))
+
+    # Return (proxied) JavaScript `Object`, if applicable.
+    if out_name is None:
+        name_to_json = _easy.write_grid(bounds, out_path=None, **kwargs)
+        obj = _pyodide.ffi.to_js(name_to_json)
+        return obj
 
     # Create temporary directory...
     with _tempfile.TemporaryDirectory(prefix="grid__") as temp_dir_name:
@@ -218,22 +240,23 @@ def generate_grid(
         _js.URL.revokeObjectURL(url)
 
 
-def generate_grid_from_form(form_id: str, **kwargs) -> None:
+def package_grid_from_form(
+    form_id: str, **kwargs
+) -> _pyodide.ffi.JsProxy | None:
     """
     Generate and download an LGRS grid that is specified by an HTML form.
 
-    This can be the easiest way to generate an LGRS grid from JavaScript,
-    but note:
+    Note:
         (1) Any element with the same name as an argument supported by
-            `generate_grid()` will have its value used for that argument.
-            For example, ``<input name="precision">``.
+            `package_grid()` will have its value used for that argument. For
+            example, ``<input name="precision">``.
         (2) Checkboxes are processed as booleans: `True` if checked and
             `False` if unchecked.
         (3) For radio buttons with the same name, the value of the
             checked button (if any) is used.
         (4) Any element whose name is not that of an argument supported by
-            `generate_grid()` is silently ignored.
-        (5) `generate_grid()` coerces strings to numeric values, where
+            `package_grid()` is silently ignored.
+        (5) `package_grid()` coerces strings to numeric values, where
             appropriate.
 
     Parameters
@@ -241,14 +264,15 @@ def generate_grid_from_form(form_id: str, **kwargs) -> None:
     form_id : string
         The ID of the form, that is, ``<form id=form_id>``. The elements of
         the form are extracted and their values (as described above) are
-        passed to `generate_grid()`.
+        passed to `package_grid()`.
     **kwargs
-        Extra arguments are passed `generate_grid()`. In the event of
+        Extra arguments are passed `package_grid()`. In the event of
         collision, these arguments override those set by the form.
 
     Returns
     -------
-    None
+    geojson_object : pyodide.ffi.JsProxy or None
+        See `package_grid()`.
     """
     # Read form.
     form = _js.document.getElementById(form_id)
@@ -270,4 +294,7 @@ def generate_grid_from_form(form_id: str, **kwargs) -> None:
 
     # Pass to `grid_generation()`.
     form_kwargs.update(kwargs)
-    return generate_grid(**form_kwargs)
+    return package_grid(**form_kwargs)
+
+
+# endregion
