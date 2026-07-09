@@ -36,7 +36,10 @@ try:
     import js as _js
     import pyodide as _pyodide
 except ModuleNotFoundError:
-    pass
+    # Note: Allows corresponding type hints to be resolved.
+    _JsProxyHint = _typing.Any
+else:
+    from pyodide.ffi import JsProxy as _JsProxyHint
 
 # Internal.
 import lgrs.coords as _coords
@@ -92,7 +95,7 @@ def _get_grid_type_hints(
 
 def make_box_grid(
     bounds: _typing.Any, precision: float, **kwargs
-) -> _pyodide.ffi.JsProxy:
+) -> _JsProxyHint:
     """
     Generate grid as an array of LGRS/ACC boxes spanning specified bounds.
 
@@ -137,10 +140,8 @@ def make_box_grid(
 
 
 def make_gdfs(
-    boxes: (
-        _collections.abc.Sequence[_coords.BoxCoordinate] | _pyodide.ffi.JsProxy
-    ),
-) -> _pyodide.ffi.JsProxy:
+    boxes: _collections.abc.Sequence[_coords.BoxCoordinate] | _JsProxyHint,
+) -> _JsProxyHint:
     """
     Create one or more `GeoDataFrame` instances from a sequence of boxes.
 
@@ -184,7 +185,7 @@ def package_grid(
     precision: int | str | None = None,
     out_name: str | None = None,
     **kwargs,
-) -> _pyodide.ffi.JsProxy | None:
+) -> _JsProxyHint | None:
     """
     Package an LGRS grid to a standard format and optionally download it.
 
@@ -327,9 +328,7 @@ def package_grid(
         _js.URL.revokeObjectURL(url)
 
 
-def package_grid_from_form(
-    form_id: str, **kwargs
-) -> _pyodide.ffi.JsProxy | None:
+def package_grid_from_form(form_id: str, **kwargs) -> _JsProxyHint | None:
     """
     Generate and download an LGRS grid that is specified by an HTML form.
 
