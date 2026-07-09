@@ -224,7 +224,7 @@ def make_box_grid(
     densify_count: int = 21,
 ) -> list[_coords.BoxCoordinate]:
     """
-    Generate a grid of LGRS or ACC boxes spanning specified bounds.
+    Generate grid as a list of LGRS or ACC boxes spanning specified bounds.
 
     Parameters
     ----------
