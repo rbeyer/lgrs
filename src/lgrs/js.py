@@ -40,8 +40,8 @@ except ModuleNotFoundError:
 
 # Internal.
 import lgrs.coords as _coords
-import lgrs.grid as _grid
 import lgrs.easy as _easy
+import lgrs.grid as _grid
 import lgrs.values as _values
 
 
