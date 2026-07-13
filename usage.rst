@@ -86,7 +86,7 @@ creating a coordinate object::
 
     # Lots of ways to get at the returned information:
     >>> str(converted)
-    '23N310589.1246840328E30311.488262646784N'
+    '23N 310589.1246840328 30311.488262646784'
     >>> list(converted)
     [23, 'N', 310589.1246840328, 30311.488262646784]
     >>> print(converted.easting)
