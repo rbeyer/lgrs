@@ -1755,8 +1755,11 @@ class BaseCoordinate(_BaseCoordinate):
             The constraints to apply to this transformation. If not specified
             (or `None`), `self.constraints` is used.
         precision : float, optional
-            The maximum allowed value of `out.precision`. If not specified,
-            defaults to 1 if `self` is a point else `self.precision`.
+            The maximum allowed value of `out.precision`, which is the nominal
+            side length of the box. If not specified, defaults to 1 if `self`
+            is a point else `self.precision`. If the specified precision is not
+            a supported precision, the actual precision is rounded down to a
+            better precision.
         validate : bool, optional
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
@@ -1835,8 +1838,11 @@ class BaseCoordinate(_BaseCoordinate):
             The constraints to apply to this transformation. If not specified
             (or `None`), `self.constraints` is used.
         precision : float, optional
-            The maximum allowed value of `out.precision`. If not specified,
-            defaults to 1 if `self` is a point else `self.precision`.
+            The maximum allowed value of `out.precision`, which is the nominal
+            side length of the box. If not specified, defaults to 1 if `self`
+            is a point else `self.precision`. If the specified precision is not
+            a supported precision, the actual precision is rounded down to a
+            better precision.
         validate : bool, optional
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
@@ -2420,7 +2426,12 @@ class PointCoordinate(BaseCoordinate):
             poleward extent of the LTM region is 82° N/S instead of 80° N/S.
             If `None`, `self.constraints.extended_ltm` is used.
         precision : float, default=1
-            The maximum allowed value of `out.precision`.
+            The maximum allowed value of `box.precision` for each `box` in
+            `boxes`, which is the nominal side length of the box. If not
+            specified, defaults to 1 if `self` is a point else
+            `self.precision`. If the specified precision is not a supported
+            precision, the actual precision is rounded down to a better
+            precision.
         validate : bool | None
             Whether to fully validate each box in `boxes`. If `False`, no
             validation is performed. If not specified (or `None`), whatever
@@ -3413,7 +3424,9 @@ class BoxCoordinate(BaseCoordinate):
         Parameters
         ----------
         precision : float
-             The maximum allowed value of `out.precision`.
+            The maximum allowed value of `out.precision`, which is the nominal
+            side length of the box. If not a supported precision, the actual
+            precision is rounded down to a better precision.
         copy : bool, default=False
             Whether to ensure that `out` is not `self`. If `False` and `self`
             is suitable, it is returned as `out`.
