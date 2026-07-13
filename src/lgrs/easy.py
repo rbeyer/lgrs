@@ -17,11 +17,16 @@
 ###############################################################################
 # region> IMPORT
 ###############################################################################
+# Special.
+from __future__ import annotations
+
 # Standard.
 import collections as _collections
+import dataclasses as _dataclasses
 import enum as _enum
 import functools as _functools
 import inspect as _inspect
+import itertools as _itertools
 import json as _json
 import pathlib as _pathlib
 import re as _re
@@ -30,6 +35,7 @@ import typing as _typing
 
 # Internal.
 import lgrs.bounds as _bounds
+import lgrs.coords as _coords
 import lgrs.database as _database
 import lgrs.grid as _grid
 
@@ -57,6 +63,434 @@ class Type(_enum.StrEnum):
     LABELED = _enum.auto()
     STRING = _enum.auto()
     PRETTY = _enum.auto()
+
+
+# endregion
+###############################################################################
+# region> FAMILIES
+###############################################################################
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class _BaseFamily:
+    """A group of coordinates derived from `input_point`."""
+
+
+class _BaseFullFamily:
+    """
+    A family of related coordinates derived from `input_point`.
+
+    Attributes
+    ----------
+    point: lgrs.coords.LpsPoint | lgrs.coords.LtmPoint
+        A point at the same location as `input_point`.
+    lgrs: lgrs.coords.LpsLgrsBox | lgrs.coords.LtmLgrsBox
+        An LGRS box that contains `input_point`.
+    acc: lgrs.coords.LpsAccBox | lgrs.coords.LtmAccBox
+        An ACC box that contains `input_point`.
+    corner: lgrs.coords.LpsPoint | lgrs.coords.LtmPoint
+        The reference (lower-left) corner of `lgrs` and `acc`.
+    center: lgrs.coords.LpsPoint | lgrs.coords.LtmPoint
+        The center point of `lgrs` and `acc`.
+    """
+
+
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class _FamilyTemplate:
+    input_latlon: _coords.LatLonPoint
+    input_lgrs: _coords.LpsLgrsBox | _coords.LtmLgrsBox | None = None
+    precision: float = 1  # Aligned with `input_lgrs`.
+    extended_ltm: bool = False  # Aligned with `input_lgrs`.
+
+    def __post_init__(self):
+        if self.input_lgrs is not None:
+            object.__setattr__(self, "precision", self.input_lgrs.precision)
+            object.__setattr__(
+                self, "extended_ltm", self.input_lgrs.constraints.extended_ltm
+            )
+
+    # * DATA ATTRIBUTES. ──────────────────────────────────────────────
+    @_functools.cached_property
+    def acc(self) -> _coords.LpsAccBox | _coords.LtmAccBox:
+        return self.lgrs.to_acc()
+
+    @_functools.cached_property
+    def center(self) -> _coords.LpsPoint | _coords.LtmPoint:
+        return self.lgrs.center_latlon.to_lps_or_ltm(
+            constraints=self.constraints
+        )
+
+    @_functools.cached_property
+    def constraints(self) -> _coords.Constraints:
+        if self.input_lgrs is None:
+            constraints = _coords.Constraints(extended_ltm=self.extended_ltm)
+        else:
+            constraints = _coords.Constraints(global_crs=self.input_lgrs.crs)
+        return constraints
+
+    @_functools.cached_property
+    def corner(self) -> _coords.LpsPoint | _coords.LtmPoint:
+        return self.lgrs.to_lps_or_ltm(constraints=self.constraints)
+
+    @_functools.cached_property
+    def lgrs(self) -> _coords.LpsLgrsBox | _coords.LtmLgrsBox:
+        if self.input_lgrs is None:
+            return self.input_latlon.to_lgrs(
+                precision=self.precision, constraints=self.constraints
+            )
+        else:
+            return self.input_lgrs
+
+    @_functools.cached_property
+    def point(self) -> _coords.LpsPoint | _coords.LtmPoint:
+        return self.input_latlon.to_lps_or_ltm(constraints=self.constraints)
+
+    # * METHODS. ──────────────────────────────────────────────────────
+    def make_family(self) -> LpsFamily | LtmFamily:
+        if self.input_lgrs is None:
+            fam_typ = NominalFamily
+        else:
+            match self.lgrs:
+                case _coords.LpsLgrsBox():
+                    fam_typ = LpsFamily
+                case _coords.LtmLgrsBox():
+                    fam_typ = LtmFamily
+                case _:
+                    raise TypeError(
+                        "`.lgrs` does not have an expected type: "
+                        f"{self.lgrs!r}"
+                    )
+        fam = fam_typ(
+            point=self.point,
+            lgrs=self.lgrs,
+            acc=self.acc,
+            corner=self.corner,
+            center=self.center,
+        )
+        return fam
+
+
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class ForcedFamily(_BaseFamily):
+    lps: _coords.LpsPoint
+    ltm: _coords.LtmPoint
+
+
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class LpsFamily(_BaseFamily):
+    point: _coords.LpsPoint
+    lgrs: _coords.LpsLgrsBox
+    acc: _coords.LpsAccBox
+    corner: _coords.LpsPoint
+    center: _coords.LpsPoint
+
+
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class LtmFamily(_BaseFamily):
+    point: _coords.LtmPoint
+    lgrs: _coords.LtmLgrsBox
+    acc: _coords.LtmAccBox
+    corner: _coords.LtmPoint
+    center: _coords.LtmPoint
+
+
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class NominalFamily(_BaseFamily):
+    point: _coords.LpsPoint | _coords.LtmPoint
+    lgrs: _coords.LpsLgrsBox | _coords.LtmLgrsBox
+    acc: _coords.LpsAccBox | _coords.LtmAccBox
+    corner: _coords.LpsPoint | _coords.LtmPoint
+    center: _coords.LpsPoint | _coords.LtmPoint
+
+
+# endregion
+###############################################################################
+# region> RELATIVES
+###############################################################################
+@_dataclasses.dataclass(frozen=True)
+class GeoRelatives:
+    """
+    Create an organized structure of related coordinates.
+
+    Most coordinates are grouped into "families", but not all families may
+    be relevant for a given `input_point`. Each coordinate within a family
+    is called a "member".
+
+    Parameters
+    ----------
+    input_point : lgrs.coords.PointCoordinate
+        The point from which all relatives are derived.
+    precision : float
+        The maximum allowed nominal side length of each box coordinate. If
+        not a supported precision, the actual precision is rounded down to a
+        better precision.
+    extended_ltm : bool, default=False
+        Whether to use the extended LTM region, which extends to 82° N/S
+        instead of 80° N/S.
+    center_proximity : bool, default=True
+        If `.ltm_2` is populated, it will represent the box whose center
+        (if `True`) or reference (lower-left) corner (if `False`) is closest
+        to `input_point`.
+    note : str, optional
+        A custom note.
+
+    Attributes
+    ----------
+    latlon : lgrs.coords.LatLonPoint
+        `input_point` as a geographic coordinate.
+    nominal : NominalFamily
+        The family of nominal coordinates. Each member is derived from
+        `latlon` using default constraints only, except that `extended_ltm`
+        is honored.
+    lps : LpsFamily | None
+        The family of LPS-based coordinates, which all share the same CRS.
+        `None` if no LPS-based box is compatible with `latlon`.
+    ltm_1 : LtmFamily | None
+        A family of LTM-based coordinates, which all share the same CRS.
+        `None` if no LTM-based box is compatible with `latlon`.
+    ltm_2 : LpsFamily | None
+        A second family of LTM-based coordinates, which all share the same
+        CRS. Only populated when `latlon` is near the boundary between two
+        LTM zones, so that a valid box in each zone contains `latlon`. Then,
+        the CRS of `ltm_2` differs from that of `ltm_1`. See
+        `center_proximity`.
+    forced : ForcedFamily
+        A pair of LPS and LTM coordinates representing the same location as
+        `input_point`. Each of these is populated regardless of the location
+        of `latlon` (hence "forced").
+    json_dict : dict
+        A mapping representation that includes input parameters and all
+        attributes except for `json` and `json_dict`.
+    json : string
+        A JSON-compatible pretty string representation of `json_dict` whose
+        values are all JSON objects, strings, numbers (int or real),
+        booleans, or null. Created by calling `.to_json()`.
+
+    Notes
+    -----
+    When all families are relevant, the overall structure is as shown below.
+    For easy reference, each attribute name representing a family is shown
+    in square brackets (for example, ``[nominal]``, even though the
+    attribute name is ``nominal``) and comments are shown in angle
+    brackets::
+
+        GeoRelatives
+        ├── input_point
+        ├── precision
+        ├── extended_ltm
+        ├── center_proximity
+        ├── latlon
+        ├── note
+        ├── [nominal]
+        │   ├── point: LpsPoint | LtmPoint <same location as `input_point`>
+        │   ├── lgrs: LpsLgrsBox | LtmLgrsBox <contains `input_point`>
+        │   ├── acc: LpsAccBox | LtmAccBox <contains `input_point`>
+        │   ├── corner: LpsPoint | LtmPoint <`lgrs`/`acc` lower-left corner>
+        │   └── center: LpsPoint | LtmPoint <`lgrs`/`acc` center>
+        ├── [lps]
+        │   ├── point: LpsPoint <same location as `input_point`>
+        │   ├── lgrs: LpsLgrsBox <contains `input_point`>
+        │   ├── acc: LpsAccBox <contains `input_point`>
+        │   ├── corner: LpsPoint <`lgrs`/`acc` lower-left corner>
+        │   └── center: LpsPoint <`lgrs`/`acc` center>
+        ├── [ltm_1]
+        │   ├── point: LtmPoint <same location as `input_point`>
+        │   ├── lgrs: LtmLgrsBox <contains `input_point`>
+        │   ├── acc: LtmAccBox <contains `input_point`>
+        │   ├── corner: LtmPoint <`lgrs`/`acc` lower-left corner>
+        │   └── center: LtmPoint <`lgrs`/`acc` center>
+        ├── [ltm_2]
+        │   ├── point: LtmPoint <same location as `input_point`>
+        │   ├── lgrs: LtmLgrsBox <contains `input_point`>
+        │   ├── acc: LtmAccBox <contains `input_point`>
+        │   ├── corner: LtmPoint <`lgrs`/`acc` lower-left corner>
+        │   └── center: LtmPoint <`lgrs`/`acc` center>
+        ├── [forced]
+        │   ├── lps: LpsPoint <same location as `input_point`>
+        │   └── ltm: LtmPoint <same location as `input_point`>
+        ├── json_dict
+        └── json
+
+    It is guaranteed that `nominal.point`, `nominal.lgrs`, and `nominal.acc`
+    are identical to their counterparts in exactly one of `lps`, `ltm_1`, or
+    `ltm_2`. Typically, all members of `nominal` are identical to their
+    counterparts in one of those other families, but this is not guaranteed
+    generally due to complications near zone boundaries.
+
+    All `lgrs` members come from `latlon.to_all_lgrs(...)`. Better
+    performance and more precise control can be achieved using coordinate
+    instances and their methods directly.
+    """
+
+    input_point: _coords.PointCoordinate
+    _: _dataclasses.KW_ONLY
+    precision: float
+    extended_ltm: bool = False
+    center_proximity: bool = True
+    note: str | None = None
+
+    # * UTILITIES. ────────────────────────────────────────────────────
+    def _assign_nonnominal(self) -> None:
+        # Organize LGRS boxes by region.
+        region_to_boxes = _collections.defaultdict(list)
+        for box in self.latlon.to_all_lgrs(
+            precision=self.precision, extended_ltm=self.extended_ltm
+        ):
+            match box:
+                case _coords.LpsLgrsBox():
+                    region = "LPS"
+                case _coords.LtmLgrsBox():
+                    region = "LTM"
+                case _:
+                    raise TypeError(
+                        f"`box` does not have an expected type: {box!r}"
+                    )
+            region_to_boxes[region].append(box)
+
+        # Sort LTM boxes, if necessary.
+        ltm_boxes = region_to_boxes["LTM"]
+        if len(ltm_boxes) > 1:
+            if self.center_proximity:
+                sorter = self._sort_by_center
+            else:
+                sorter = self._sort_by_corner
+            ltm_boxes.sort(key=sorter)
+
+        # Assign attributes.
+        lps_boxes = region_to_boxes["LPS"]
+        for boxes, attr_names in (
+            (lps_boxes, ("lps",)),
+            (ltm_boxes, ("ltm_1", "ltm_2")),
+        ):
+            for box, attr_name in _itertools.zip_longest(boxes, attr_names):
+                if box is None:
+                    fam = None
+                elif attr_name is None:
+                    region = attr_name.split("_")[0].upper()
+                    max_count = len(attr_names)
+                    box_count = len(boxes)
+                    raise TypeError(
+                        f"{region} region expected to have {max_count} "
+                        f"boxes at most, but has: {box_count}"
+                    )
+                else:
+                    fam = _FamilyTemplate(
+                        input_latlon=self.latlon, input_lgrs=box
+                    ).make_family()
+                object.__setattr__(self, attr_name, fam)
+
+    def _sort_by_center(self, box: _coords.LtmLgrsBox) -> float:
+        return box.center_latlon.distance_to(self.latlon)
+
+    def _sort_by_corner(self, box: _coords.LtmLgrsBox) -> float:
+        return box.to_latlon().distance_to(self.latlon)
+
+    # * BASIC DATA ATTRIBUTES. ────────────────────────────────────────
+    @_functools.cached_property
+    def forced(self) -> ForcedFamily:
+        return ForcedFamily(
+            lps=self.input_point.to_lps(search=True),
+            ltm=self.input_point.to_ltm(search=True),
+        )
+
+    @_functools.cached_property
+    def latlon(self) -> _coords.LatLonPoint:
+        return self.input_point.to_latlon()
+
+    @_functools.cached_property
+    def lps(self) -> LpsFamily | None:
+        self._assign_nonnominal()
+        return self.lps
+
+    @_functools.cached_property
+    def ltm_1(self) -> LtmFamily | None:
+        self._assign_nonnominal()
+        return self.ltm_1
+
+    @_functools.cached_property
+    def ltm_2(self) -> LtmFamily | None:
+        self._assign_nonnominal()
+        return self.ltm_2
+
+    @_functools.cached_property
+    def nominal(self) -> LpsFamily | LtmFamily:
+        return _FamilyTemplate(
+            input_latlon=self.latlon, precision=self.precision
+        ).make_family()
+
+    # * DERIVED ATTRIBUTES. ───────────────────────────────────────────
+    @_functools.cached_property
+    def json(self) -> str:
+        return self.to_json()
+
+    @_functools.cached_property
+    def json_dict(self) -> dict:
+        json_dict = {}
+        for top_key in (
+            *(field.name for field in _dataclasses.fields(self)),
+            "latlon",
+            "nominal",
+            "lps",
+            "ltm_1",
+            "ltm_2",
+            "forced",
+        ):
+            val = getattr(self, top_key)
+            if isinstance(val, _BaseFamily):
+                # *REASSIGNMENT*
+                val = {
+                    field.name: getattr(val, field.name)
+                    for field in _dataclasses.fields(val)
+                }
+            json_dict[top_key] = val
+        return json_dict
+
+    # * METHODS. ──────────────────────────────────────────────────────
+    def to_json(
+        self,
+        *,
+        use_objects: bool = False,
+        ensure_ascii: bool = False,
+        indent: int | str | None = 4,
+        **kwargs,
+    ) -> str:
+        """
+        Make JSON string representation of `.json_dict`.
+
+        Parameters
+        ----------
+        use_objects : bool, default=False
+            Whether to represent coordinates as JSON objects rather than
+            strings. Internally, sets ``default`` to `str` if `False` or
+            `lgrs.coords.BaseCoordinate.to_json` if `True`. If ``default``
+            is specified explicitly, that argument overrides `use_objects`.
+        ensure_ascii : bool, default=False
+            Passed to ``json.dumps()``. Note default.
+        indent : int or str or None, default=4
+            Passed to ``json.dumps()``. Note default.
+        **kwargs
+            Additional keyword arguments, including ``default``, are passed
+            to ``json.dumps()``.
+
+        Returns
+        -------
+        string : str
+            The JSON representation.
+        """
+        # Collect `json.dumps()` kwargs.
+        dumps_kwargs = locals().copy()
+        del dumps_kwargs["self"]
+        del dumps_kwargs["use_objects"]
+        dumps_kwargs.update(dumps_kwargs.pop("kwargs"))
+
+        # Set `default`, if applicable.
+        if "default" not in dumps_kwargs:
+            if use_objects:
+                default = _coords.BaseCoordinate.to_json_dict
+            else:
+                default = str
+            dumps_kwargs["default"] = default
+
+        # Dump to string and return.
+        return _json.dumps(self.json_dict, **dumps_kwargs)
 
 
 # endregion
