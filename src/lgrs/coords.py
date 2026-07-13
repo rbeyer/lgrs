@@ -253,6 +253,39 @@ def _remove_i_and_o(match: _regex.Match) -> str:
 ###############################################################################
 @_dataclasses.dataclass(frozen=True)
 class _EasyFields:
+    @staticmethod
+    def _format_arg_value(value: _typing.Any) -> str:
+        match value:
+            case bool():
+                val_str = repr(value)
+            case int() | float():
+                val_str = f"{value:_}"
+            case _:
+                val_str = repr(value)
+        return val_str
+
+    @classmethod
+    def _format_repr(
+        cls,
+        func_or_cls: _collections.abc.Callable | type,
+        kwargs: dict[str, _typing.Any],
+        args: _collections.abc.Sequence = (),
+        /,
+        **overrides: str,
+    ) -> str:
+        arg_strs = []
+        for arg_val in args:
+            val_str = cls._format_arg_value(arg_val)
+            arg_strs.append(val_str)
+        for kwarg_name, kwarg_val in kwargs.items():
+            val_str = overrides.get(kwarg_name)
+            if val_str is None:
+                # *REASSIGNMENT*
+                val_str = cls._format_arg_value(kwarg_val)
+            arg_strs.append(f"{kwarg_name}={val_str}")
+        repr_str = f"{func_or_cls.__name__}({', '.join(arg_strs)})"
+        return repr_str
+
     @classmethod
     @_functools.cache
     def _get_field_name_to_type(cls) -> dict[str, type]:
@@ -299,22 +332,14 @@ class _EasyFields:
             init_kwargs = self._init_kwargs_nondefaulted.copy()
         return init_kwargs
 
-    def _make_repr(self, *, include_defaulted: bool = True) -> str:
+    def _make_repr(
+        self, *, include_defaulted: bool = True, **overrides: str
+    ) -> str:
         if include_defaulted:
             init_kwargs = self._init_kwargs
         else:
             init_kwargs = self._init_kwargs_nondefaulted
-        arg_strs = []
-        for kwarg_name, kwarg_val in init_kwargs.items():
-            match kwarg_val:
-                case bool():
-                    val_str = repr(kwarg_val)
-                case int() | float():
-                    val_str = f"{kwarg_val:_}"
-                case _:
-                    val_str = repr(kwarg_val)
-            arg_strs.append(f"{kwarg_name}={val_str}")
-        repr_str = f"{self.__class__.__name__}({', '.join(arg_strs)})"
+        repr_str = self._format_repr(type(self), init_kwargs, **overrides)
         return repr_str
 
 
@@ -436,7 +461,17 @@ class Constraints(_EasyFields, metaclass=_caching._MetaMultiton):
             )
 
     def __repr__(self) -> str:
-        return self._make_repr(include_defaulted=False)
+        overrides = {}
+        if self.global_crs is not None:
+            crs_info: _database.LunarCrsInfo = _database.LunarCrsInfo.from_crs(
+                self.global_crs
+            )
+            name, kwargs = crs_info._get_name_and_kwargs_for_make()
+            crs_repr_str = _EasyFields._format_repr(
+                _srs.make_lunar_crs, kwargs, (name,)
+            )
+            overrides["global_crs"] = crs_repr_str
+        return self._make_repr(include_defaulted=False, **overrides)
 
     _max_geod_length_of_25km_box_diag = _values.calculate_diagonal_length(
         25_000, safe_up=True

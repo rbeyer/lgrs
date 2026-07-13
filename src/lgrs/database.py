@@ -357,11 +357,33 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     pyproj.database.CRSInfo : Parent class, with additional documentation.
     """
 
-    # * BASIC BEHAVIOR. ───────────────────────────────────────────────
+    # * UTILITIES. ────────────────────────────────────────────────────
     # Below: Assigned by `._from_internal_name()`. All instances should
     # be created by that factory function.
     _internal_name: str
     _internal_name_parsed: _InternalNameParsed
+
+    @_functools.cache
+    def _get_name_and_kwargs_for_make(
+        self, *, force_nominal: bool = False
+    ) -> tuple[str, dict[str, _typing.Any]]:
+        suffix = self._internal_name_parsed.suffix
+        name = self._internal_name.removesuffix(suffix)
+        kwargs = {}
+        if not force_nominal:
+            match suffix:
+                case "":
+                    pass
+                case "*":
+                    kwargs["extended_ltm"] = True
+                case "**":
+                    if self.is_lps:
+                        kwargs["global_lps"] = True
+                    else:
+                        kwargs["global_ltm"] = True
+                case _:
+                    raise TypeError(f"`suffix` is not recognized: {suffix!r}")
+        return (name, kwargs)
 
     @_functools.cached_property
     def _sort_tuple(self) -> tuple[int, int, int | None, str]:
@@ -565,22 +587,9 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         crs : lgrs.CRS
             The `CRS` instance corresponding to this info instance.
         """
-        suffix = self._internal_name_parsed.suffix
-        name = self._internal_name.removesuffix(suffix)
-        kwargs = {}
-        if not force_nominal:
-            match suffix:
-                case "":
-                    kwargs["extended_ltm"] = False
-                case "*":
-                    kwargs["extended_ltm"] = True
-                case "**":
-                    if self.is_lps:
-                        kwargs["global_lps"] = True
-                    else:
-                        kwargs["global_ltm"] = True
-                case _:
-                    raise TypeError(f"`suffix` is not recognized: {suffix!r}")
+        name, kwargs = self._get_name_and_kwargs_for_make(
+            force_nominal=force_nominal
+        )
         crs = _srs.make_lunar_crs(name, **kwargs)
         return crs
 
