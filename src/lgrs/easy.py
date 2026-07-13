@@ -315,9 +315,10 @@ class GeoRelatives:
     counterparts in one of those other families, but this is not guaranteed
     generally due to complications near zone boundaries.
 
-    All `lgrs` members come from `latlon.to_all_lgrs(...)`. Better
+    All `lgrs` members come from ``latlon.to_all_lgrs(...)``. Better
     performance and more precise control can be achieved using coordinate
-    instances and their methods directly.
+    instances and their methods directly. In that case, use
+    `lgrs.coords.Constraints()` to target non-nominal coordinates.
     """
 
     input_point: _coords.PointCoordinate
