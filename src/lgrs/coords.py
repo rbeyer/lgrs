@@ -2941,8 +2941,8 @@ class LatLonPoint(PointCoordinate):
         else:
             e_or_w = "W"
         return (
-            f"{abs(self.latitude)!r}°{n_or_s} "
-            f"{abs(self.longitude)!r}°{e_or_w}"
+            f"{abs(self.latitude)!r}° {n_or_s}, "
+            f"{abs(self.longitude)!r}° {e_or_w}"
         )
 
     def _validate(self) -> None:
@@ -3039,7 +3039,7 @@ class LpsPoint(PointCoordinate):
     """
 
     # * FIELDS AND VALIDATION. ────────────────────────────────────────
-    _template = "{hemisphere}{easting!r}E{northing!r}N"
+    _template = "{hemisphere} {easting!r} {northing!r}"
     hemisphere: str
     easting: float
     northing: float
@@ -3160,7 +3160,7 @@ class LtmPoint(PointCoordinate):
     """
 
     # * FIELDS AND VALIDATION. ────────────────────────────────────────
-    _template = "{zone_number}{hemisphere}{easting!r}E{northing!r}N"
+    _template = "{zone_number}{hemisphere} {easting!r} {northing!r}"
     zone_number: int
     hemisphere: str
     easting: float
