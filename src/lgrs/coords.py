@@ -837,6 +837,124 @@ class BaseCoordinate(_BaseCoordinate):
         }
         return cls(**init_kwargs)
 
+    @staticmethod
+    def _raise_parsing_error(string: str) -> _typing.NoReturn:
+        raise _exceptions.MalformedCoordinate(
+            f"`string` is not in a supported format: {string!r}"
+        )
+
+    @classmethod
+    def from_string(
+        cls,
+        string: str,
+        *,
+        constraints: Constraints = _default_constraints,
+        validate: bool = True,
+    ) -> _typing.Self:
+        """
+        Create a point or box coordinate instance from a string.
+
+        Parameters
+        ----------
+        string : str
+            The string form of the coordinate, comparable to `new.string`. See
+            Notes for supported formats.
+        constraints : Constraints, default=Constraints()
+            See `LatLonPoint` documentation.
+        validate : bool, default=True
+            Whether to validate `new`. `True` is highly suggested here!
+
+        Returns
+        -------
+        new : BaseCoordinate
+            The new coordinate instance. The type is ultimately determined by
+            `string` but is restricted by the calling class. See Examples.
+
+        Raises
+        ------
+        lgrs.Exceptions.MalformedCoordinate
+            If `string` cannot be parsed to a valid coordinate instance.
+
+        Warnings
+        --------
+        The intent of this method is to broadly accommodate valid strings. You
+        should not rely on it to necessarily identify strings that you might
+        consider invalid for your purposes.
+
+        Notes
+        -----
+        Because there is no universal standard for representing point
+        coordinates in a string, a wide variety of formats are supported,
+        including (but not limited to) the examples below. However, note that
+        only decimal degrees are supported for `LatLonPoint`.
+            ``"45 120"`` -> ``LatLonPoint(45, 120)``
+            ``"45.0° 120.0°"`` -> ``LatLonPoint(45.0, 120.0)``
+            ``"-45.0°, +120.0°"`` -> ``LatLonPoint(-45.0, 120.0)``
+            ``"45.0°S, 120.0°W"`` -> ``LatLonPoint(-45.0, -120.0)``
+            ``"N 500000 197819"`` -> ``LpsPoint("N", 500000, 197819)``
+            ``"N 500000E 197819N"`` -> ``LpsPoint("N", 500000, 197819)``
+            ``"N500000E197819N"`` -> ``LpsPoint("N", 500000, 197819)``
+            ``"23 N 250000.0 0.0"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)``
+            ``"23 N 250000.0 E 0.0 N"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)``
+            ``"23N250000.0E0.0N"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)``
+
+        Conversely, the only deviation from the LGRS standard that is
+        accommodated for box coordinates is the inclusion of space delimiters.
+            ``"AZS1359008480"`` ->
+                ``LpsLgrsBox("A", "Z", "S", "13590", "08480")``
+            ``"AZS13590848"`` ->
+                ``LpsLgrsBox("A", "Z", "S", "1359", "0848")``
+            ``"AZSN59H48"`` ->
+                ``LpsAccBox("A", "Z", "S", "N", "59", "H", "48")``
+            ``"42SAM2468910101"`` ->
+                ``LtmLgrsBox(42, "S" "A", "M", "24689", "10101")``
+            ``"42 S A M 24689 10101"`` ->
+                ``LtmLgrsBox(42, "S" "A", "M", "24689", "10101")``
+            ``"42 SAM 24689 10101"`` ->
+                ``LtmLgrsBox(42, "S" "A", "M", "24689", "10101")``
+
+        Examples
+        --------
+        When called from a base class (`BaseCoordinate`, `PointCoordinate`, or
+        `BoxCoordinate`), an instance of a subclass is returned, if possible,
+        or an error is raised.
+
+        >>> geo_1 = BaseCoordinate.from_string("45.0 -120.0")
+        >>> isinstance(geo_1, LatLonPoint)
+        True
+        >>> box_1 = BoxCoordinate.from_string("42SAM2468910101")
+        >>> isinstance(box_1, LtmLgrsBox)
+        True
+        >>> PointCoordinate.from_string("42SAM2468910101")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+          ...
+        lgrs.exceptions.MalformedCoordinate:
+          ...
+
+        When called from any other class (or instance), an instance of the same
+        type is returned, if possible, or an error is raised.
+
+        >>> geo_2 = LatLonPoint.from_string("45.0°N, 120.0°W")
+        >>> geo_1 == geo_2
+        True
+        >>> LtmPoint.from_string("45.0°N, 120.0°W")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+          ...
+        lgrs.exceptions.MalformedCoordinate:
+          ...
+        """  # noqa: E501
+        kwargs = {"constraints": constraints, "validate": validate}
+        if cls is BaseCoordinate:
+            funcs = (PointCoordinate._from_string, BoxCoordinate._from_string)
+        else:
+            funcs = (cls._from_string,)
+        for func in funcs:
+            try:
+                return func(string, **kwargs)
+            except _exceptions.MalformedCoordinate:
+                continue
+        cls._raise_parsing_error(string)
+
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
     _precision: int
     # Note: `_precision_origin` records the the underlying precision,
@@ -2236,6 +2354,86 @@ class BaseCoordinate(_BaseCoordinate):
 class PointCoordinate(BaseCoordinate):
     """The base class for all point coordinates."""
 
+    # * INSTANTIATION. ────────────────────────────────────────────────
+    @classmethod
+    def _from_string(
+        cls,
+        string: str,
+        *,
+        constraints: Constraints = _default_constraints,
+        validate: bool = True,
+    ) -> _typing.Self:
+        parts = cls._parse_string(string)
+        kwargs = {"constraints": constraints, "validate": validate}
+        for typ in (
+            LatLonPoint,
+            LpsPoint,
+            LtmPoint,
+        ):
+            if not issubclass(typ, cls):
+                continue
+            try:
+                new = typ(*parts, **kwargs)
+            except (TypeError, _exceptions.MalformedCoordinate):
+                continue
+            else:
+                return new
+        cls._raise_parsing_error(string)
+
+    @classmethod
+    def _parse_string(cls, string: str) -> list[str | int | float]:
+        # Replace likely delimiters with a " ".
+        spaced_str = _regex.sub(r"([,°/;|]|\s)+", " ", string)
+
+        # Split into `xy_coords` (suffix starting from penultimate
+        # number) and `prefix` (everything before `xy_coords`).
+        last_two_num_regex = _regex.compile(
+            "([-0-9.]+)(?:[^-0-9.]+)([-0-9.]+)(?:[^-0-9.]*)$"
+        )
+        xy_coords_match = last_two_num_regex.search(spaced_str)
+        if xy_coords_match is None:
+            raise TypeError(f"Could not parse: {string!r}")
+        xy_coords = xy_coords_match.group()
+        prefix = spaced_str.removesuffix(xy_coords)
+
+        # Within `xy_coords`, treat a trailing "S" or "W" as a leading
+        # "-", but simply discard any "N" or "E".
+        signed_xy_coords = _regex.sub(
+            "(?P<num>[0-9.]+) *(W|S)", r"-\g<num> ", xy_coords
+        )
+        cleaner_signed_xy_coords = _regex.sub("[EN]", " ", signed_xy_coords)
+
+        # Within `xy_coords`, treat double negatives ("--") as a
+        # positive.
+        cleanest_signed_xy_coords = cleaner_signed_xy_coords.replace("--", "")
+
+        # Coerce each component.
+        # Note: Split `prefix` wherever there is a space or a letter
+        # follows a number, or vice versa.
+        str_parts = _regex.split(
+            "(?: +)|(?:(?<=[A-Za-z])(?=[-0-9.]))|(?:(?<=[-0-9.])(?=[A-Za-z]))",
+            prefix,
+        )
+        str_parts.extend(
+            last_two_num_regex.search(cleanest_signed_xy_coords).groups()
+        )
+        parts = []
+        for str_part in str_parts:
+            clean_str_part = str_part.strip()
+            if not clean_str_part:
+                continue
+            for typ in (int, float):
+                try:
+                    coerced_part = typ(clean_str_part)
+                except ValueError:
+                    continue
+                else:
+                    parts.append(coerced_part)
+                    break
+            else:
+                parts.append(clean_str_part)
+        return parts
+
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
     _precision: int = 0  # True by definition.
     _precision_origin: int = 0  # Default.
@@ -3109,66 +3307,20 @@ class BoxCoordinate(BaseCoordinate):
     _pattern: _regex.Pattern
 
     @classmethod
-    @_functools.cache
-    def _get_simple_pattern(cls) -> _regex.Pattern:
-        match = _regex.search(r"\(\?# *(?P<s>.*)\)$", cls._pattern.pattern)
-        orig_pattern = match.group("s")
-        unescaped = orig_pattern.replace("\\", "")
-        simple_pattern = _regex.sub(r"\(\?P<.+?>(.*?)\)", r"\1", unescaped)
-        return _regex.compile(simple_pattern)
-
-    @classmethod
-    def from_string(
+    def _from_string(
         cls,
         string: str,
         *,
         constraints: Constraints = _default_constraints,
         validate: bool = True,
     ) -> _typing.Self:
-        """
-        Create a box coordinate instance from a string.
-
-        Parameters
-        ----------
-        string : str
-            The string form of the box coordinate, equivalent to `new.string`.
-        constraints : Constraints, default=Constraints()
-            See `LatLonPoint` documentation.
-        validate : bool, default=True
-            Whether to validate `new`.
-
-        Returns
-        -------
-        new : BoxCoordinate
-            The new box coordinate instance. The type is determined by the
-            call. See Examples.
-
-        Examples
-        --------
-        When called the `BoxCoordinate` base class, an instance of the
-        appropriate type is returned.
-
-        >>> box_1 = BoxCoordinate.from_string("42SAM2468910101")
-        >>> isinstance(box_1, LtmLgrsBox)
-        True
-
-        When called from any other class (or instance), an instance of the same
-        type is returned, if possible, or an error is raised.
-
-        >>> box_2 = LtmLgrsBox.from_string("42SAM2468910101")
-        >>> box_1 == box_2
-        True
-        >>> box_3 = LpsLgrsBox.from_string("42SAM2468910101")  # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-          ...
-        lgrs.exceptions.MalformedCoordinate:
-          ...
-        """  # noqa: E501
         # Support call from `BoxCoordinate` itself.
+        collapsed_string = string.replace(" ", "")
+        kwargs = {"constraints": constraints, "validate": validate}
         if cls is BoxCoordinate:
             for typ in (LpsLgrsBox, LpsAccBox, LtmLgrsBox, LtmAccBox):
                 try:
-                    new = typ.from_string(string)
+                    new = typ.from_string(collapsed_string, **kwargs)
                 except _exceptions.MalformedCoordinate:
                     continue
                 else:
@@ -3178,7 +3330,7 @@ class BoxCoordinate(BaseCoordinate):
             )
 
         # Match to pattern.
-        match = cls._validate_against_pattern(string)
+        match = cls._validate_against_pattern(collapsed_string)
         match_dict = match.groupdict()
 
         # Coerce each argument to the correct type.
@@ -3195,7 +3347,16 @@ class BoxCoordinate(BaseCoordinate):
             for name, value_string in match_dict.items()
             if value_string is not None
         }
-        return cls(**init_kwargs, constraints=constraints, validate=validate)
+        return cls(**init_kwargs, **kwargs)
+
+    @classmethod
+    @_functools.cache
+    def _get_simple_pattern(cls) -> _regex.Pattern:
+        match = _regex.search(r"\(\?# *(?P<s>.*)\)$", cls._pattern.pattern)
+        orig_pattern = match.group("s")
+        unescaped = orig_pattern.replace("\\", "")
+        simple_pattern = _regex.sub(r"\(\?P<.+?>(.*?)\)", r"\1", unescaped)
+        return _regex.compile(simple_pattern)
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     def _get_crs_name(self) -> str:
