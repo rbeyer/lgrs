@@ -373,9 +373,9 @@ def write_grid(
             (7) `pyproj.AreaOfInterest` or `pyproj.AreaOfUse`
                 Converted by ``GeographicBounds.from_area(bounds)``.
     precision : float
-        The required precision of the grid. If not a supported precision,
-        the actual precision is rounded down to a better precision. All
-        boxes have the same precision.
+        The maximum allowed precision, which is the nominal side length of
+        each grid box. If not a supported precision, the actual precision is
+        rounded down to a better precision. All boxes have the same precision.
     out_path : string, pathlib.Path, or None
         The output file path, or `None` to return a GeoJSON-like `dict`. You
         may specify a layer name by the convention:
