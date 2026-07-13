@@ -49,6 +49,7 @@ import abc as _abc
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
+import inspect as _inspect
 import itertools as _itertools
 import types as _types
 import typing as _typing
@@ -248,6 +249,77 @@ def _remove_i_and_o(match: _regex.Match) -> str:
 
 # endregion
 ###############################################################################
+# region> UTILITIES: FIELD SUPPORT
+###############################################################################
+@_dataclasses.dataclass(frozen=True)
+class _EasyFields:
+    @classmethod
+    @_functools.cache
+    def _get_field_name_to_type(cls) -> dict[str, type]:
+        field_name_to_type = {}
+        all_name_to_type = _typing.get_type_hints(cls)
+        for field in cls._get_fields():
+            typ = all_name_to_type[field.name]
+            if isinstance(typ, _types.UnionType):
+                types = list(_typing.get_args(typ))
+                types.remove(type(None))
+                (typ,) = types  # *REASSIGNMENT*
+            field_name_to_type[field.name] = typ
+        return field_name_to_type
+
+    @classmethod
+    @_functools.cache
+    def _get_fields(cls) -> tuple[_dataclasses.Field, ...]:
+        # Note: Ensure that field order follows the argument order used
+        # to initialize.
+        init_kwarg_names = tuple(_inspect.signature(cls.__init__).parameters)
+        fields = list(_dataclasses.fields(cls))
+        fields.sort(key=lambda f: init_kwarg_names.index(f.name))
+        return tuple(fields)
+
+    @_functools.cached_property
+    def _init_kwargs(self) -> dict[str, _typing.Any]:
+        return {
+            field.name: getattr(self, field.name)
+            for field in self._get_fields()
+        }
+
+    @_functools.cached_property
+    def _init_kwargs_nondefaulted(self) -> dict[str, _typing.Any]:
+        kwargs = self._init_kwargs.copy()
+        for field in self._get_fields():
+            if field.default == kwargs[field.name]:
+                del kwargs[field.name]
+        return kwargs
+
+    def _make_json_dict(self, *, include_defaulted: bool = True) -> dict:
+        if include_defaulted:
+            init_kwargs = self._init_kwargs.copy()
+        else:
+            init_kwargs = self._init_kwargs_nondefaulted.copy()
+        return init_kwargs
+
+    def _make_repr(self, *, include_defaulted: bool = True) -> str:
+        if include_defaulted:
+            init_kwargs = self._init_kwargs
+        else:
+            init_kwargs = self._init_kwargs_nondefaulted
+        arg_strs = []
+        for kwarg_name, kwarg_val in init_kwargs.items():
+            match kwarg_val:
+                case bool():
+                    val_str = repr(kwarg_val)
+                case int() | float():
+                    val_str = f"{kwarg_val:_}"
+                case _:
+                    val_str = repr(kwarg_val)
+            arg_strs.append(f"{kwarg_name}={val_str}")
+        repr_str = f"{self.__class__.__name__}({', '.join(arg_strs)})"
+        return repr_str
+
+
+# endregion
+###############################################################################
 # region> UTILITIES: OTHER
 ###############################################################################
 def _as_str(str_or_none: str | None) -> str:
@@ -284,7 +356,7 @@ def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
 # region> CONSTRAINTS
 ###############################################################################
 @_dataclasses.dataclass(frozen=True, kw_only=True)
-class Constraints(metaclass=_caching._MetaMultiton):
+class Constraints(_EasyFields, metaclass=_caching._MetaMultiton):
     """
     Create a set of constraints for coordinates and their transforms.
 
@@ -364,13 +436,7 @@ class Constraints(metaclass=_caching._MetaMultiton):
             )
 
     def __repr__(self) -> str:
-        enabled_arg_strs = []
-        for field in _dataclasses.fields(self):
-            val = getattr(self, field.name)
-            if val in (False, None):
-                continue
-            enabled_arg_strs.append(f"{field.name}={val!r}")
-        return f"{self.__class__.__name__}({', '.join(enabled_arg_strs)})"
+        return self._make_repr(include_defaulted=False)
 
     _max_geod_length_of_25km_box_diag = _values.calculate_diagonal_length(
         25_000, safe_up=True
@@ -615,8 +681,15 @@ class _AbstractBaseCoordinate(_abc.ABC):
 # hidden subclasses are useful for defining all other behavior (without
 # accidentally implying dataclass fields).
 @_dataclasses.dataclass(frozen=True, kw_only=True)
-class _BaseCoordinate(_AbstractBaseCoordinate):
+class _BaseCoordinate(_AbstractBaseCoordinate, _EasyFields):
     _fields_cached: _typing.ClassVar[tuple[_dataclasses.Field, ...]]
+
+    # * BASIC BEHAVIOR. ───────────────────────────────────────────────
+    def __iter__(self) -> _collections.abc.Iterator[_typing.Any]:
+        for key, value in self._init_kwargs.items():
+            if key == "constraints":
+                continue
+            yield value
 
     # * FIELDS AND VALIDATION. ────────────────────────────────────────
     constraints: Constraints = _dataclasses.field(
@@ -682,43 +755,6 @@ class _BaseCoordinate(_AbstractBaseCoordinate):
         if validate:
             self._validate()
 
-    @_functools.cached_property
-    def _init_kwargs(self) -> dict[str, _typing.Any]:
-        return {
-            field.name: getattr(self, field.name)
-            for field in self._get_fields()
-        }
-
-    # * FIELD SUPPORT. ────────────────────────────────────────────────
-    def __iter__(self) -> _collections.abc.Iterator[_typing.Any]:
-        for key, value in self._init_kwargs.items():
-            if key == "constraints":
-                continue
-            yield value
-
-    @classmethod
-    @_functools.cache
-    def _get_fields(cls) -> tuple[_dataclasses.Field, ...]:
-        name_to_field = {
-            field.name: field for field in _dataclasses.fields(cls)
-        }
-        name_to_field["constraints"] = name_to_field.pop("constraints")
-        return tuple(name_to_field.values())
-
-    @classmethod
-    @_functools.cache
-    def _get_field_name_to_type(cls) -> dict[str, type]:
-        field_name_to_type = {}
-        all_name_to_type = _typing.get_type_hints(cls)
-        for field in cls._get_fields():
-            typ = all_name_to_type[field.name]
-            if isinstance(typ, _types.UnionType):
-                types = list(_typing.get_args(typ))
-                types.remove(type(None))
-                (typ,) = types  # *REASSIGNMENT*
-            field_name_to_type[field.name] = typ
-        return field_name_to_type
-
 
 class BaseCoordinate(_BaseCoordinate):
     """The base class for all coordinates, both points and grid boxes."""
@@ -738,14 +774,7 @@ class BaseCoordinate(_BaseCoordinate):
         return self.copy()
 
     def __repr__(self) -> str:
-        arg_strs = []
-        for name, val in self._init_kwargs.items():
-            if isinstance(val, (int, float)):
-                val_str = f"{val:_}"
-            else:
-                val_str = repr(val)
-            arg_strs.append(f"{name}={val_str}")
-        return f"{self.__class__.__name__}({', '.join(arg_strs)})"
+        return self._make_repr()
 
     def __str__(self) -> str:
         return self.string
@@ -1455,6 +1484,36 @@ class BaseCoordinate(_BaseCoordinate):
         if not copy and has_no_true_overrides:
             self._register_cousin(replaced)
         return replaced
+
+    def to_json_dict(
+        self,
+        include_constraints: bool = False,
+        include_defaulted: bool = False,
+    ) -> dict:
+        """
+        Create a JSON-like `dict` representing this coordinate.
+
+        Parameters
+        ----------
+        include_constraints : bool, default=False
+            Whether to include a `"constraints"` key.
+        include_defaulted : bool, default=False
+            Whether to include constraint keys that are defaulted. Ignored if
+            `include_constraints` is `False`.
+
+        Returns
+        -------
+        json_dict : dict[str, typing.Any]
+            A JSON-like mapping, suitable for passing to ``json.dumps()``.
+        """
+        json_dict = self._make_json_dict()
+        if include_constraints:
+            json_dict["constraints"] = self.constraints._make_json_dict(
+                include_defaulted=include_defaulted
+            )
+        else:
+            del json_dict["constraints"]
+        return json_dict
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     def _force_type_or_error(
