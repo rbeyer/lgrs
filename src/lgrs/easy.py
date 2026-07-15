@@ -465,6 +465,64 @@ class GeoRelatives:
         return json_dict
 
     # * METHODS. ──────────────────────────────────────────────────────
+    def get(self, address: str) -> _typing.Any:
+        """
+        Safely get any attribute chain from `self`.
+
+        When an attribute chain first encounters `None`, the remaining
+        chained attributes are ignored and `None` is returned. This makes
+        it a little easier to work with attribute chains in which the final
+        attribute, or one of its ancestors, does not exist. See Examples.
+
+        Parameters
+        ----------
+        address : string
+            The dot-delimited attribute name to get, such as
+            `"ltm_2.point"`.
+
+        Returns
+        -------
+        value : typing.Any
+            The value at `address` or `None`, if `None` was encountered.
+
+        Examples
+        --------
+        Consider an instance for which `.ltm_1` is populated but neither
+        `.ltm_2` nor `.lps`.
+
+        >>> from lgrs.coords import LatLonPoint
+        >>> geo_point = LatLonPoint(0, 0)
+        >>> relatives = GeoRelatives(geo_point, precision=1)
+        >>> relatives.ltm_1 is not None
+        True
+        >>> relatives.ltm_2 is not None
+        False
+        >>> relatives.lps is not None
+        False
+
+        Now imagine that you wanted to compile the `CRS` of all LGRS members
+        without knowing which families were populated. With the current
+        method, this is much less cumbersome.
+
+        >>> crs_list = [
+        ...     crs for address in
+        ...     ("ltm_1.lgrs.crs", "ltm_2.lgrs.crs", "lps.lgrs.crs")
+        ...     if (crs := relatives.get(address)) is not None
+        ... ]
+        >>> len(crs_list)
+        1
+        """
+        result = self  # Initialize.
+        for attr_name in address.split("."):
+            result = getattr(result, attr_name)
+            if result is None:
+                return None
+        return result
+
+    # TODO: Fix example to check for `None` but do so efficiently, without
+    # calling `get()` twice each loop. Will require assigning a variable
+    # within the loop.
+
     def to_json(
         self,
         *,
