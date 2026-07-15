@@ -71,21 +71,21 @@ class Type(_enum.StrEnum):
 ###############################################################################
 @_dataclasses.dataclass(frozen=True, kw_only=True)
 class _BaseFamily:
-    """A group of coordinates derived from `input_point`."""
+    """A group of coordinates derived from `latlon`."""
 
 
 class _BaseFullFamily:
     """
-    A family of related coordinates derived from `input_point`.
+    A family of related coordinates derived from `latlon`.
 
     Attributes
     ----------
     point: lgrs.coords.LpsPoint | lgrs.coords.LtmPoint
-        A point at the same location as `input_point`.
+        A point at the same location as `latlon`.
     lgrs: lgrs.coords.LpsLgrsBox | lgrs.coords.LtmLgrsBox
-        An LGRS box that contains `input_point`.
+        An LGRS box that contains `latlon`.
     acc: lgrs.coords.LpsAccBox | lgrs.coords.LtmAccBox
-        An ACC box that contains `input_point`.
+        An ACC box that contains `latlon`.
     corner: lgrs.coords.LpsPoint | lgrs.coords.LtmPoint
         The reference (lower-left) corner of `lgrs` and `acc`.
     center: lgrs.coords.LpsPoint | lgrs.coords.LtmPoint
@@ -210,32 +210,41 @@ class GeoRelatives:
     """
     Create an organized structure of related coordinates.
 
-    Most coordinates are grouped into "families", but not all families may
-    be relevant for a given `input_point`. Each coordinate within a family
-    is called a "member".
+    Given an `input_coordinate` (point or box), extracts a geographic point
+    coordinate (`.latlon`) and from that point coordinate derives many
+    related coordinates. Derived coordinates are logically grouped into
+    "families", but not all families may be relevant for a given
+    `input_coordinate`. Each coordinate within a family is called a
+    "member".
 
     Parameters
     ----------
-    input_point : lgrs.coords.PointCoordinate
-        The point from which all relatives are derived.
+    input_coordinate : lgrs.coords.BaseCoordinate
+        The coordinate from which `latlon` is derived.
     precision : float
-        The maximum allowed nominal side length of each box coordinate. If
-        not a supported precision, the actual precision is rounded down to a
+        The maximum allowed nominal side length of each box member. If not a
+        supported precision, the actual precision is rounded down to a
         better precision.
     extended_ltm : bool, default=False
         Whether to use the extended LTM region, which extends to 82° N/S
         instead of 80° N/S.
-    center_proximity : bool, default=True
+    use_center : bool, default=False
+        When `input_coordinate` is a `BoxCoordinate`, specifies whether to
+        use its center instead of its reference (lower-left) corner to
+        derive `latlon` and hence all members. If `input_coordinate` is
+        instead a `PointCoordinate`, this argument is ignored.
+    sort_by_center : bool, default=True
         If `.ltm_2` is populated, it will represent the box whose center
         (if `True`) or reference (lower-left) corner (if `False`) is closest
-        to `input_point`.
-    note : str, optional
+        to `latlon`.
+    note : string, optional
         A custom note.
 
     Attributes
     ----------
     latlon : lgrs.coords.LatLonPoint
-        `input_point` as a geographic coordinate.
+        `input_coordinate` as a geographic point coordinate. Honors
+        `use_center`, if applicable.
     nominal : NominalFamily
         The family of nominal coordinates. Each member is derived from
         `latlon` using default constraints only, except that `extended_ltm`
@@ -254,11 +263,13 @@ class GeoRelatives:
         `center_proximity`.
     forced : ForcedFamily
         A pair of LPS and LTM coordinates representing the same location as
-        `input_point`. Each of these is populated regardless of the location
-        of `latlon` (hence "forced").
+        `latlon`. Each of these is populated regardless of the location of
+        `latlon` (hence "forced").
     json_dict : dict
-        A mapping representation that includes input parameters and all
-        attributes except for `json` and `json_dict`.
+        A mapping representation that includes `GeoRelatives` initialization
+        parameters and all `GeoRelatives` attributes except for `json` and
+        `json_dict`, as well as initialization parameters and some salient
+        attributes (such as `.string`) for coordinate members.
     json : string
         A JSON-compatible pretty string representation of `json_dict` whose
         values are all JSON objects, strings, numbers (int or real),
@@ -273,47 +284,48 @@ class GeoRelatives:
     brackets::
 
         GeoRelatives
-        ├── input_point
+        ├── input_coordinate
         ├── precision
         ├── extended_ltm
         ├── center_proximity
         ├── latlon
         ├── note
         ├── [nominal]
-        │   ├── point: LpsPoint | LtmPoint <same location as `input_point`>
-        │   ├── lgrs: LpsLgrsBox | LtmLgrsBox <contains `input_point`>
-        │   ├── acc: LpsAccBox | LtmAccBox <contains `input_point`>
+        │   ├── point: LpsPoint | LtmPoint <same location as `latlon`>
+        │   ├── lgrs: LpsLgrsBox | LtmLgrsBox <contains `latlon`>
+        │   ├── acc: LpsAccBox | LtmAccBox <contains `latlon`>
         │   ├── corner: LpsPoint | LtmPoint <`lgrs`/`acc` lower-left corner>
         │   └── center: LpsPoint | LtmPoint <`lgrs`/`acc` center>
         ├── [lps]
-        │   ├── point: LpsPoint <same location as `input_point`>
-        │   ├── lgrs: LpsLgrsBox <contains `input_point`>
-        │   ├── acc: LpsAccBox <contains `input_point`>
+        │   ├── point: LpsPoint <same location as `latlon`>
+        │   ├── lgrs: LpsLgrsBox <contains `latlon`>
+        │   ├── acc: LpsAccBox <contains `latlon`>
         │   ├── corner: LpsPoint <`lgrs`/`acc` lower-left corner>
         │   └── center: LpsPoint <`lgrs`/`acc` center>
         ├── [ltm_1]
-        │   ├── point: LtmPoint <same location as `input_point`>
-        │   ├── lgrs: LtmLgrsBox <contains `input_point`>
-        │   ├── acc: LtmAccBox <contains `input_point`>
+        │   ├── point: LtmPoint <same location as `latlon`>
+        │   ├── lgrs: LtmLgrsBox <contains `latlon`>
+        │   ├── acc: LtmAccBox <contains `latlon`>
         │   ├── corner: LtmPoint <`lgrs`/`acc` lower-left corner>
         │   └── center: LtmPoint <`lgrs`/`acc` center>
         ├── [ltm_2]
-        │   ├── point: LtmPoint <same location as `input_point`>
-        │   ├── lgrs: LtmLgrsBox <contains `input_point`>
-        │   ├── acc: LtmAccBox <contains `input_point`>
+        │   ├── point: LtmPoint <same location as `latlon`>
+        │   ├── lgrs: LtmLgrsBox <contains `latlon`>
+        │   ├── acc: LtmAccBox <contains `latlon`>
         │   ├── corner: LtmPoint <`lgrs`/`acc` lower-left corner>
         │   └── center: LtmPoint <`lgrs`/`acc` center>
         ├── [forced]
-        │   ├── lps: LpsPoint <same location as `input_point`>
-        │   └── ltm: LtmPoint <same location as `input_point`>
+        │   ├── lps: LpsPoint <same location as `latlon`>
+        │   └── ltm: LtmPoint <same location as `latlon`>
         ├── json_dict
         └── json
 
     It is guaranteed that `nominal.point`, `nominal.lgrs`, and `nominal.acc`
-    are identical to their counterparts in exactly one of `lps`, `ltm_1`, or
-    `ltm_2`. Typically, all members of `nominal` are identical to their
-    counterparts in one of those other families, but this is not guaranteed
-    generally due to complications near zone boundaries.
+    have identical coordinate values (but not necessarily constraints) to
+    their counterparts in exactly one of `lps`, `ltm_1`, or `ltm_2`.
+    Typically, all members of `nominal` are (non-constraint) identical to
+    their counterparts in one of those other families, but this is not
+    guaranteed generally due to complications near zone boundaries.
 
     All `lgrs` members come from ``latlon.to_all_lgrs(...)``. Better
     performance and more precise control can be achieved using coordinate
@@ -321,11 +333,12 @@ class GeoRelatives:
     `lgrs.coords.Constraints()` to target non-nominal coordinates.
     """
 
-    input_point: _coords.PointCoordinate
+    input_coordinate: _coords.PointCoordinate
     _: _dataclasses.KW_ONLY
     precision: float
     extended_ltm: bool = False
-    center_proximity: bool = True
+    use_center: bool = False
+    sort_by_center: bool = True
     note: str | None = None
 
     # * UTILITIES. ────────────────────────────────────────────────────
@@ -349,7 +362,7 @@ class GeoRelatives:
         # Sort LTM boxes, if necessary.
         ltm_boxes = region_to_boxes["LTM"]
         if len(ltm_boxes) > 1:
-            if self.center_proximity:
+            if self.sort_by_center:
                 sorter = self._sort_by_center
             else:
                 sorter = self._sort_by_corner
@@ -388,13 +401,20 @@ class GeoRelatives:
     @_functools.cached_property
     def forced(self) -> ForcedFamily:
         return ForcedFamily(
-            lps=self.input_point.to_lps(search=True),
-            ltm=self.input_point.to_ltm(search=True),
+            lps=self.latlon.to_lps(search=True),
+            ltm=self.latlon.to_ltm(search=True),
         )
 
     @_functools.cached_property
     def latlon(self) -> _coords.LatLonPoint:
-        return self.input_point.to_latlon()
+        if (
+            isinstance(self.input_coordinate, _coords.BoxCoordinate)
+            and self.use_center
+        ):
+            latlon = self.input_coordinate.center_latlon
+        else:
+            latlon = self.input_coordinate.to_latlon()
+        return latlon
 
     @_functools.cached_property
     def lps(self) -> LpsFamily | None:
@@ -666,6 +686,8 @@ def _test_mode(path: _pathlib.Path, mode: str) -> str:
 
 
 # endregion
+
+
 ###############################################################################
 # region> CONVENIENCE FUNCTIONS
 ###############################################################################
