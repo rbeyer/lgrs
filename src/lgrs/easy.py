@@ -821,11 +821,13 @@ def convert_coordinate(
     interrupted by `None` simply returns `None` (rather than, say, raising
     an `AttributeError`).
 
-    >>> lps_2 = convert_coordinate(example, precision=1, target="lps_2")
-    >>> lps_2 is None
+    >>> ltm_2 = convert_coordinate(example, precision=1, target="ltm_2")
+    >>> ltm_2 is None
     True
-    >>> convert_coordinate(example, precision=1, target="lps_2.lgrs.string")
-    None
+    >>> convert_coordinate(
+    ...     example, precision=1, target="ltm_2.lgrs.string"
+    ... ) is None
+    True
     """  # noqa: E501
     # Create `GeoRelatives` instance.
     if isinstance(input_coordinate, str):
