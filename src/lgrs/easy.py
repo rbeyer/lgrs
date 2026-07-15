@@ -295,11 +295,11 @@ class GeoRelatives:
         └── json
 
     It is guaranteed that `nominal.point`, `nominal.lgrs`, and `nominal.acc`
-    have identical coordinate values (but not necessarily constraints) to
-    their counterparts in exactly one of `lps`, `ltm_1`, or `ltm_2`.
-    Typically, all members of `nominal` are (non-constraint) identical to
-    their counterparts in one of those other families, but this is not
-    guaranteed generally due to complications near zone boundaries.
+    compare equal (ignoring constraints) to their counterparts in exactly
+    one of `lps`, `ltm_1`, or `ltm_2`. Typically, all members of `nominal`
+    are (constraint-agnostic) equal to their counterparts in one of those
+    other families, but this is not guaranteed generally due to
+    complications near zone boundaries.
 
     All `lgrs` members come from ``latlon.to_all_lgrs(...)``. Better
     performance and more precise control can be achieved using coordinate
