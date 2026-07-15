@@ -519,10 +519,6 @@ class GeoRelatives:
                 return None
         return result
 
-    # TODO: Fix example to check for `None` but do so efficiently, without
-    # calling `get()` twice each loop. Will require assigning a variable
-    # within the loop.
-
     def to_json(
         self,
         *,
