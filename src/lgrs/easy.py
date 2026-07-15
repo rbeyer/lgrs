@@ -749,6 +749,129 @@ def _test_mode(path: _pathlib.Path, mode: str) -> str:
 ###############################################################################
 # region> CONVENIENCE FUNCTIONS
 ###############################################################################
+# TODO: Decide what `maxsize` should be.
+@_functools.lru_cache(maxsize=1000)
+def _make_georelatives_instance(*args, **kwargs):
+    return GeoRelatives(*args, **kwargs)
+
+
+def convert_coordinate(
+    input_coordinate: _coords.BaseCoordinate | str,
+    *,
+    precision: float,
+    extended_ltm: bool = False,
+    use_center: bool = False,
+    sort_by_center: bool = True,
+    note: str | None = None,
+    target: str | None = None,
+) -> GeoRelatives | _typing.Any:
+    """
+    Convert an input coordinate to all relevant coordinates.
+
+    Internally, a `GeoRelatives` instance is generated. Recent
+    `GeoRelatives` instances are cached when created by the present
+    function, so there is trivial cost to making subsequent calls with a
+    different `target` each time (but all other arguments the same). See the
+    `GeoRelatives` documentation for other relevant information.
+
+    Parameters
+    ----------
+    input_coordinate : a point or box coordinate, or equivalent string
+        The input coordinate to convert. If a string, it is converted to a
+        coordinate instance (by `lgrs.coords.BaseCoordinate.from_string()`)
+        before being passed to `GeoRelatives()`.
+    precision : float
+        See `GeoRelatives` documentation.
+    extended_ltm : bool, default=False
+        See `GeoRelatives` documentation.
+    use_center : bool, default=False
+        See `GeoRelatives` documentation.
+    sort_by_center : bool, default=True
+        See `GeoRelatives` documentation.
+    note : string, optional
+        See `GeoRelatives` documentation.
+    target : string, optional
+        Specifies the address (attribute reference, possibly chained) on the
+        `GeoRelatives` instance whose value should be returned, such as
+        `"json"`, `"nominal.lgrs"`, or `"forced.lps.northing"`. Internally,
+        uses ``GeoRelatives.get(target)``, so that chains that may be
+        interrupted by `None` can be safely used. See Examples.
+
+    Returns
+    -------
+    relatives_or_value : GeoRelatives or typing.Any
+        The `GeoRelatives` instance (if `target` is not specified) or
+        whatever object is targeted by `target`.
+
+    Examples
+    --------
+    Consider an example point.
+
+    >>> example = "80 N, 0 E"
+
+    First, let's confirm that parsing works.
+
+    >>> convert_coordinate(example, precision=1, target="latlon")
+    LatLonPoint(latitude=80, longitude=0, constraints=Constraints())
+
+    To get the 1-m LGRS box as a coordinate:
+
+    >>> convert_coordinate(example, precision=1, target="nominal.lgrs") # doctest: +NORMALIZE_WHITESPACE
+    LpsLgrsBox(longitudinal_band='Z', easting_area='A', northing_area='-',
+    easting='00000', northing='22818', constraints=Constraints())
+
+    To get that same box as a string reference:
+
+    >>> convert_coordinate(
+    ...     example, precision=1, target="nominal.lgrs.string"
+    ... )
+    'ZA-0000022818'
+
+    To get the (pretty-formatted) geographic coordinate at the center of
+    that box:
+
+    >>> convert_coordinate(
+    ...     example, precision=1, target="nominal.lgrs.center_latlon.string"
+    ... )
+    '80.00000244867157° N, 9.480358578044988e-05° E'
+
+    To determine whether the example point lies in both valid LPS and LTM
+    ACC boxes:
+
+    >>> in_lps = convert_coordinate(
+    ...     example, precision=1, target="lps.acc"
+    ... ) is not None
+    >>> in_ltm = convert_coordinate(
+    ...     example, precision=1, target="ltm_1.acc"
+    ... ) is not None
+    >>> in_lps and in_ltm
+    True
+
+    To make it easier to work with deep targets, any target that is
+    interrupted by `None` simply returns `None` (rather than, say, raising
+    an `AttributeError`).
+
+    >>> lps_2 = convert_coordinate(example, precision=1, target="lps_2")
+    >>> lps_2 is None
+    True
+    >>> convert_coordinate(example, precision=1, target="lps_2.lgrs.string")
+    None
+    """  # noqa: E501
+    # Create `GeoRelatives` instance.
+    if isinstance(input_coordinate, str):
+        # *REASSIGNMENT*
+        input_coordinate = _coords.BaseCoordinate.from_string(input_coordinate)
+    georel_kwargs = locals().copy()
+    del georel_kwargs["target"]
+    georel = _make_georelatives_instance(**georel_kwargs)
+
+    # Extract and return targeted value.
+    if target is None:
+        return georel
+    else:
+        return georel.get(target)
+
+
 # def from_gridded(
 #     string: str,
 #     *,
