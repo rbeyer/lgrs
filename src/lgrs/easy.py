@@ -242,48 +242,51 @@ class GeoRelatives:
 
     Notes
     -----
-    When all families are relevant, the overall structure is as shown below.
-    For easy reference, each attribute name representing a family is shown
-    in square brackets (for example, ``[nominal]``, even though the
-    attribute name is ``nominal``) and comments are shown in angle
-    brackets::
+    For most locations, only one family among `lps`, `ltm_1`, and `ltm_2` is
+    populated. However, near zone boundaries, two or all three may be
+    populated. When all families are relevant, the overall structure is as
+    shown below. For easy reference, each attribute name representing a
+    family is shown in square brackets (for example, ``[nominal]``, even
+    though the attribute name is ``nominal``) and comments are shown in
+    angle brackets::
 
         GeoRelatives
-        ├── input_coordinate
-        ├── precision
-        ├── extended_ltm
-        ├── center_proximity
-        ├── latlon
-        ├── note
+        ├── input_coordinate                   <same as input>
+        ├── precision                          <same as input>
+        ├── extended_ltm                       <same as input>
+        ├── use_center                         <same as input>
+        ├── latlon                             <derived from input>
+        ├── note                               <same as input>
         ├── [nominal]
-        │   ├── point: LpsPoint | LtmPoint <same location as `latlon`>
-        │   ├── lgrs: LpsLgrsBox | LtmLgrsBox <contains `latlon`>
-        │   ├── acc: LpsAccBox | LtmAccBox <contains `latlon`>
-        │   ├── corner: LpsPoint | LtmPoint <`lgrs`/`acc` lower-left corner>
-        │   └── center: LpsPoint | LtmPoint <`lgrs`/`acc` center>
+        │   ├── point: LpsPoint | LtmPoint     <same location as `latlon`>
+        │   ├── lgrs: LpsLgrsBox | LtmLgrsBox  <contains `latlon`>
+        │   ├── acc: LpsAccBox | LtmAccBox     <contains `latlon`>
+        │   ├── corner: LpsPoint | LtmPoint    <`lgrs`/`acc` lower-left corner>
+        │   └── center: LpsPoint | LtmPoint    <`lgrs`/`acc` center>
         ├── [lps]
-        │   ├── point: LpsPoint <same location as `latlon`>
-        │   ├── lgrs: LpsLgrsBox <contains `latlon`>
-        │   ├── acc: LpsAccBox <contains `latlon`>
-        │   ├── corner: LpsPoint <`lgrs`/`acc` lower-left corner>
-        │   └── center: LpsPoint <`lgrs`/`acc` center>
+        │   ├── point: LpsPoint                <same location as `latlon`>
+        │   ├── lgrs: LpsLgrsBox               <contains `latlon`>
+        │   ├── acc: LpsAccBox                 <contains `latlon`>
+        │   ├── corner: LpsPoint               <`lgrs`/`acc` lower-left corner>
+        │   └── center: LpsPoint               <`lgrs`/`acc` center>
         ├── [ltm_1]
-        │   ├── point: LtmPoint <same location as `latlon`>
-        │   ├── lgrs: LtmLgrsBox <contains `latlon`>
-        │   ├── acc: LtmAccBox <contains `latlon`>
-        │   ├── corner: LtmPoint <`lgrs`/`acc` lower-left corner>
-        │   └── center: LtmPoint <`lgrs`/`acc` center>
+        │   ├── point: LtmPoint                <same location as `latlon`>
+        │   ├── lgrs: LtmLgrsBox               <contains `latlon`>
+        │   ├── acc: LtmAccBox                 <contains `latlon`>
+        │   ├── corner: LtmPoint               <`lgrs`/`acc` lower-left corner>
+        │   └── center: LtmPoint               <`lgrs`/`acc` center>
         ├── [ltm_2]
-        │   ├── point: LtmPoint <same location as `latlon`>
-        │   ├── lgrs: LtmLgrsBox <contains `latlon`>
-        │   ├── acc: LtmAccBox <contains `latlon`>
-        │   ├── corner: LtmPoint <`lgrs`/`acc` lower-left corner>
-        │   └── center: LtmPoint <`lgrs`/`acc` center>
+        │   ├── point: LtmPoint                <same location as `latlon`>
+        │   ├── lgrs: LtmLgrsBox               <contains `latlon`>
+        │   ├── acc: LtmAccBox                 <contains `latlon`>
+        │   ├── corner: LtmPoint               <`lgrs`/`acc` lower-left corner>
+        │   └── center: LtmPoint               <`lgrs`/`acc` center>
         ├── [forced]
-        │   ├── lps: LpsPoint <same location as `latlon`>
-        │   └── ltm: LtmPoint <same location as `latlon`>
-        ├── json_dict
-        └── json
+        │   ├── lps: LpsPoint                  <same location as `latlon`>
+        │   └── ltm: LtmPoint                  <same location as `latlon`>
+        ├── json_dict                          <`dict` mapping>
+        ├── json                               <JSON string>
+        └── json_full                          <deeper JSON string>
 
     It is guaranteed that `nominal.point`, `nominal.lgrs`, and `nominal.acc`
     compare equal (ignoring constraints) to their counterparts in exactly
