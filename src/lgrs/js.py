@@ -18,9 +18,8 @@
 # region> IMPORT
 ###############################################################################
 # Standard.
-import builtins as _builtins
 import collections as _collections
-import functools as _functools
+import json as _json
 import pathlib as _pathlib
 import shutil as _shutil
 
@@ -28,7 +27,6 @@ import shutil as _shutil
 # fatal error when grid generation is executed under Pyodide.
 import sqlite3 as _sqlite3  # noqa: F401
 import tempfile as _tempfile
-import types as _types
 import typing as _typing
 
 # External.
@@ -47,11 +45,58 @@ import lgrs.easy as _easy
 import lgrs.grid as _grid
 import lgrs.values as _values
 
-
 # endregion
 ###############################################################################
 # region> UTILITIES
 ###############################################################################
+_bounds_numeric_name_to_type = {
+    name: float for name in ("left", "bottom", "right", "top")
+}
+
+
+def _coerce_kwargs(
+    kwargs: dict[str, _typing.Any],
+    /,
+    *funcs: _collections.abc.Callable,
+    seed: dict | None = None,
+    call: bool = False,
+) -> _typing.Any:
+    # Get name-to-type mapping.
+    name_to_type = _get_type_hints(*funcs, seed=seed)
+
+    # Flatten `kwargs`, if necessary.
+    nested_kwargs = kwargs.pop("kwargs", None)
+    if nested_kwargs is not None:
+        nested_kwargs.update(kwargs)
+        kwargs = nested_kwargs  # *REASSIGNMENT*
+
+    # Update `kwargs` with coerced values.
+    new_kwargs = {}
+    for name, val in tuple(kwargs.items()):
+        targ_type = name_to_type.get(name, None)
+        if isinstance(val, _pyodide.ffi.JsProxy):
+            coerced_val = val.to_py()
+        elif isinstance(val, str) and val == "":
+            coerced_val = None
+        else:
+            if targ_type not in (int, float):
+                continue
+            coerced_val = _coerce_to_type(
+                raw_val=val, name=name, typ=targ_type
+            )
+        if not isinstance(coerced_val, targ_type):
+            raise TypeError(f"`{name}` does not support: {coerced_val!r}")
+        new_kwargs[name] = coerced_val
+    kwargs.update(new_kwargs)
+
+    # Optionally call.
+    if call:
+        result = funcs[0](**kwargs)
+        return _pyodide.ffi.to_js(result)
+    else:
+        return kwargs
+
+
 def _coerce_to_type[T](
     *, raw_val: str | _typing.Any, name: str, typ: type[T]
 ) -> T:
@@ -63,44 +108,167 @@ def _coerce_to_type[T](
         ) from None
 
 
-def _prep_for_js(
-    func: _types.FunctionType, notes: str, *, prepend: bool = False
-) -> _types.FunctionType:
-    adapter = _easy._Adapter(func)
-    adapter.add_to_notes(notes, prepend=prepend)
-    new = adapter.make_new_func()
-    return new
+def _get_type_hints(
+    *funcs: _collections.abc.Callable, seed: dict | None = None
+) -> dict[str, _typing.Any]:
+    if seed is None:
+        cum_name_to_type = {}
+    else:
+        cum_name_to_type = seed.copy()
+    for func in funcs:
+        name_to_type = _typing.get_type_hints(func)
+        for name, typ in name_to_type.items():
+            if name in cum_name_to_type:
+                continue
+            cum_name_to_type[name] = typ
+    return cum_name_to_type
+
+
+def _read_form_to_kwargs(
+    form_id: str, *, ok_arg_names: _collections.abc.Collection[str]
+) -> dict[str, _typing.Any]:
+    form = _js.document.getElementById(form_id)
+    form_kwargs = {}
+    for elem in form:
+        if elem.name not in ok_arg_names:
+            continue
+        match elem.type:
+            case "checkbox":
+                value = elem.checked
+            case "radio":
+                if not elem.checked:
+                    continue
+                value = elem.value
+            case _:
+                value = elem.value
+        form_kwargs[elem.name] = value
+    return form_kwargs
 
 
 # endregion
 ###############################################################################
 # region> FUNCTIONS
 ###############################################################################
-@_functools.cache
-def _get_grid_type_hints(
-    *, bounds_numerics_only: bool = False
-) -> dict[str, _typing.Any]:
-    if bounds_numerics_only:
-        name_to_type = {
-            name: float for name in ("left", "bottom", "right", "top")
-        }
-    else:
-        name_to_type = _typing.get_type_hints(_easy.write_grid)
-        del name_to_type["out_path"]
-        name_to_type["out_name"] = str
-        name_to_type.update(_get_grid_type_hints(bounds_numerics_only=True))
-        name_to_type["crs"] = _typing.Any
-    return name_to_type
+def convert_coordinate(
+    input_coordinate: _coords.BaseCoordinate | str,
+    *,
+    deserialize: bool = False,
+    **kwargs: _typing.Any,
+) -> _typing.Any:
+    """
+    Convert an input coordinate to all relevant coordinates.
+
+    This function wraps, and is identical to,
+    `lgrs.easy.convert_coordinate()` except as noted herein. See that
+    function's documentation for more details.
+
+    Arguments representing a single numeric value may be passed as strings
+    (such as `"0.0"`) and will be coerced. Empty strings are replaced with
+    `None`.
+
+    Parameters
+    ----------
+    input_coordinate : a point or box coordinate, or equivalent string
+        The input coordinate to convert.
+    deserialize : bool, default=False
+        When `target` is ``"json"`` or ``"json_full"``, specifies whether
+        the generated string should be deserialized so that a JavaScript
+        ``Object`` is instead returned. For any other `target` value, this
+        argument is ignored.
+    **kwargs
+        Remaining arguments are passed to `lgrs.easy.convert_coordinate()`.
+
+    Returns
+    -------
+    relatives_or_value : pyodide.ffi.JsProxy or typing.Any
+        A JavaScript proxy of the `GeoRelatives` instance (if `target` is not
+        specified) or whatever object is targeted by `target`. In the latter
+        case, a JavaScript-native counterpart, rather than a proxy, is returned
+        if possible.
+
+    See Also
+    --------
+    convert_coordinate_from_form :  Similar but accepts an HTML form name
+
+    Warnings
+    --------
+    Wherever possible, `target` should be specified to avoid the generation
+    of JavaScript proxies and the resulting memory leak, as such proxies are
+    never garbage collected. For broad use, consider specifying `target` as
+    `"json"` or `"json_full"` (rather than `"json_dict"`), in which case the
+    `deserialize` option may be helpful.
+    """
+    full_kwargs = _coerce_kwargs(locals(), _easy.convert_coordinate)
+    del full_kwargs["deserialize"]
+    result = _easy.convert_coordinate(**full_kwargs)
+    if deserialize and full_kwargs["target"] in ("json", "json_full"):
+        result = _json.loads(result)  # *REASSIGNMENT*
+    return _pyodide.ffi.to_js(result)
+
+
+def convert_coordinate_from_form(
+    form_id: str, **kwargs: _typing.Any
+) -> _typing.Any:
+    """
+    Convert an input coordinate, as specified by an HTML form.
+
+    Note:
+        (1) Any element with the same name as an argument supported by
+            `convert_coordinate()` will have its value used for that
+            argument. For example, ``<input name="precision">``.
+        (2) Checkboxes are processed as booleans: `True` if checked and
+            `False` if unchecked.
+        (3) For radio buttons with the same name, the value of the
+            checked button (if any) is used.
+        (4) Any element whose name is not that of an argument supported by
+            `convert_coordinate()` is silently ignored.
+        (5) `convert_coordinate()` also performs some coercion to numeric
+            values and `None`, as described in its documentation.
+
+    Parameters
+    ----------
+    form_id : string
+        The ID of the form, that is, ``<form id=form_id>``. The elements of
+        the form are extracted and their values (as described above) are
+        passed to `convert_coordinate()`.
+    **kwargs
+        Extra arguments are passed `convert_coordinate()`. In the event of
+        collision, these arguments override those set by the form.
+
+    Returns
+    -------
+    relatives_or_value : pyodide.ffi.JsProxy or typing.Any
+        See `convert_coordinate()`.
+
+    See Also
+    --------
+    convert_coordinate :  Similar but accepts direct arguments.
+    """
+    # Compile list of supported argument names.
+    ok_arg_names = set(
+        _get_type_hints(convert_coordinate, _easy.convert_coordinate)
+    )
+
+    # Read form.
+    form_kwargs = _read_form_to_kwargs(form_id, ok_arg_names=ok_arg_names)
+
+    # Pass to `convert_coordinate()`.
+    form_kwargs.update(kwargs)
+    return convert_coordinate(**form_kwargs)
 
 
 def make_box_grid(
-    bounds: _typing.Any, precision: float, **kwargs
+    bounds: _typing.Any, precision: float, **kwargs: _typing.Any
 ) -> _JsProxyHint:
     """
     Generate grid as an array of LGRS/ACC boxes spanning specified bounds.
 
     This function wraps, and is identical to, `lgrs.grid.make_box_grid()`
-    except as noted below. See that function's documentation.
+    except as noted herein. See that function's documentation for more details.
+
+    Arguments representing a single numeric value may be passed as strings
+    (such as `"0.0"`) and will be coerced. Empty strings are replaced with
+    `None`.
 
     Parameters
     ----------
@@ -133,20 +301,23 @@ def make_box_grid(
         // Print LGRS reference for first box.
         console.log(boxes[0].string);
     """
-    if isinstance(bounds, _pyodide.ffi.JsProxy):
-        bounds = bounds.to_py()  # *REASSIGNMENT*
-    boxes = _grid.make_box_grid(bounds, precision, **kwargs)
-    return _pyodide.ffi.to_js(boxes)
+    boxes = _coerce_kwargs(locals(), _grid.make_box_grid, call=True)
+    return boxes
 
 
 def make_gdfs(
     boxes: _collections.abc.Sequence[_coords.BoxCoordinate] | _JsProxyHint,
+    **kwargs: _typing.Any,
 ) -> _JsProxyHint:
     """
     Create one or more `GeoDataFrame` instances from a sequence of boxes.
 
-    This function wraps, and is identical to, `lgrs.grid.make_gdfs()`
-    except as noted below. See that function's documentation.
+    This function wraps, and is identical to, `lgrs.grid.make_gdfs()` except
+    as noted herein. See that function's documentation for more details.
+
+    Arguments representing a single numeric value may be passed as strings
+    (such as `"0.0"`) and will be coerced. Empty strings are replaced with
+    `None`.
 
     Parameters
     ----------
@@ -161,6 +332,10 @@ def make_gdfs(
         A JavaScript array of `pyodide.ffi.JsProxy` instances, each
         representing a `geopandas.GeoDataFrame` instance.
 
+    See Also
+    --------
+    package_grid : High-level grid packaging.
+
     Examples
     --------
     In JavaScript::
@@ -174,27 +349,29 @@ def make_gdfs(
         const gdf = gdfs[0];
         console.log(gdf.iloc[0]["string"]);
     """
-    if isinstance(boxes, _pyodide.ffi.JsProxy):
-        boxes = boxes.to_py()  # *REASSIGNMENT*
-    gdfs = _grid.make_gdfs(boxes)
-    return _pyodide.ffi.to_js(gdfs)
+    gdfs = _coerce_kwargs(locals(), _grid.make_gdfs, call=True)
+    return gdfs
 
 
 def package_grid(
     bounds: _typing.Any = _values.DEFAULT,
     precision: int | str | None = None,
     out_name: str | None = None,
-    **kwargs,
+    **kwargs: _typing.Any,
 ) -> _JsProxyHint | None:
     """
     Package an LGRS grid to a standard format and optionally download it.
 
     This function wraps `lgrs.easy.write_grid()` and is intended to make
-    grid packaging easier from a JavaScript environment. In addition to
-    argument accommodations (described in the Parmaters section), the
-    function optionally handles compression of all outputs to a single .zip
-    file and triggers downloading of that file. All outputs, including the
-    .zip file, are also cleared on exit.
+    grid packaging easier from a JavaScript environment. The function
+    optionally handles compression of all outputs to a single .zip file and
+    triggers downloading of that file. All outputs, including the .zip file,
+    are also cleared on exit.
+
+    Arguments representing a single numeric value may be passed as strings
+    (such as `"0.0"`) and will be coerced. Empty strings are replaced with
+    `None`. Additional argument accommodations are described in the Parameters
+    section.
 
     Parameters
     ----------
@@ -214,16 +391,15 @@ def package_grid(
     out_name : string or None, default=None
         The output name, equivalent to the final path component of
         `out_path` in `lgrs.easy.write_grid()`.
-    left, bottom, right, top : float, optional
+    left, bottom, right, top : float or string, optional
         Components of `bounds`. Should only be specified if `bounds` is not
         specified directly, but then required.
-    crs : string, CRS, or None, optional
+    crs : string, CRS, or None, default=None
         Final component of `bounds`. Should only be specified if `bounds` is
         not specified directly, in which case it defaults to `None`.
     **kwargs
         Extra arguments are passed to `lgrs.easy.write_grid()`, but
-        `out_path` is not supported. Arguments that should be numeric are
-        coerced if necessary, for convenience.
+        `out_path` is not supported.
 
     Returns
     -------
@@ -239,7 +415,7 @@ def package_grid(
 
     See Also
     --------
-    package_grid_from_form :  Similar but accepts an HTML form name
+    package_grid_from_form :  Similar but accepts an HTML form name.
 
     Examples
     --------
@@ -260,22 +436,12 @@ def package_grid(
     # Standardize argument values.
     if precision is None:
         raise TypeError("Must specify `precision`.")
-    kwargs["precision"] = precision
-    for arg_name, type_hint in _get_grid_type_hints().items():
-        raw_val = kwargs.get(arg_name)
-        if raw_val is None:
-            continue
-        match type_hint:
-            case _builtins.int:
-                typ = int
-            case _builtins.float:
-                typ = float
-            case _:
-                continue
-        coerced_val = _coerce_to_type(raw_val=raw_val, name=arg_name, typ=typ)
-        kwargs[arg_name] = coerced_val
+    full_kwargs = _coerce_kwargs(
+        locals(), _easy.write_grid, seed=_bounds_numeric_name_to_type
+    )
+    bounds = full_kwargs.pop("bounds")  # *REASSIGNMENT*
     if isinstance(bounds, _pyodide.ffi.JsProxy):
-        temp_bounds = bounds.to_py()
+        temp_bounds = bounds
         # *REASSIGNMENT*
         bounds = [
             _coerce_to_type(
@@ -287,18 +453,19 @@ def package_grid(
             bounds.append(temp_bounds[4])
     elif bounds is _values.DEFAULT:
         bounds = []  # *REASSIGNMENT*
-        for arg_name in _get_grid_type_hints(bounds_numerics_only=True):
+        for arg_name in _bounds_numeric_name_to_type:
             val = kwargs.pop(arg_name, None)
             if val is None:
                 raise TypeError(
                     f"Neither `bounds` nor `{arg_name}` are specified."
                 )
             bounds.append(val)
-        bounds.append(kwargs.pop("crs", None))
+        bounds.append(full_kwargs.pop("crs", None))
 
     # Return (proxied) JavaScript `Object`, if applicable.
+    out_name = full_kwargs.pop("out_name")  # *REASSIGNMENT*
     if out_name is None:
-        name_to_json = _easy.write_grid(bounds, out_path=None, **kwargs)
+        name_to_json = _easy.write_grid(bounds, out_path=None, **full_kwargs)
         obj = _pyodide.ffi.to_js(name_to_json)
         return obj
 
@@ -309,7 +476,7 @@ def package_grid(
         temp_dir_path = _pathlib.Path(temp_dir_name)
         grid_files_out_dir_path = temp_dir_path / "output_files"
         grid_nom_out_path = grid_files_out_dir_path / out_name
-        _easy.write_grid(bounds, out_path=grid_nom_out_path, **kwargs)
+        _easy.write_grid(bounds, out_path=grid_nom_out_path, **full_kwargs)
 
         # Zip grid outputs.
         out_zip_path = temp_dir_path / "grid.zip"
@@ -328,7 +495,9 @@ def package_grid(
         _js.URL.revokeObjectURL(url)
 
 
-def package_grid_from_form(form_id: str, **kwargs) -> _JsProxyHint | None:
+def package_grid_from_form(
+    form_id: str, **kwargs: _typing.Any
+) -> _JsProxyHint | None:
     """
     Generate and download an LGRS grid that is specified by an HTML form.
 
@@ -342,8 +511,8 @@ def package_grid_from_form(form_id: str, **kwargs) -> _JsProxyHint | None:
             checked button (if any) is used.
         (4) Any element whose name is not that of an argument supported by
             `package_grid()` is silently ignored.
-        (5) `package_grid()` coerces strings to numeric values, where
-            appropriate.
+        (5) `package_grid()` also performs some coercion to numeric values
+            and `None`, as described in its documentation.
 
     Parameters
     ----------
@@ -359,26 +528,26 @@ def package_grid_from_form(form_id: str, **kwargs) -> _JsProxyHint | None:
     -------
     geojson_object : pyodide.ffi.JsProxy or None
         See `package_grid()`.
-    """
-    # Read form.
-    form = _js.document.getElementById(form_id)
-    ok_arg_names = _get_grid_type_hints()
-    form_kwargs = {}
-    for elem in form:
-        if elem.name not in ok_arg_names:
-            continue
-        match elem.type:
-            case "checkbox":
-                value = elem.checked
-            case "radio":
-                if not elem.checked:
-                    continue
-                value = elem.value
-            case _:
-                value = elem.value
-        form_kwargs[elem.name] = value
 
-    # Pass to `grid_generation()`.
+    See Also
+    --------
+    package_grid :  Similar but accepts direct arguments.
+    """
+    # Compile list of supported argument names.
+    ok_arg_names = set(
+        _get_type_hints(
+            _easy.write_grid,
+            package_grid,
+            seed=_bounds_numeric_name_to_type,
+        )
+    )
+    ok_arg_names.remove("out_path")  # Replaced by `out_name`.
+    ok_arg_names.add("crs")
+
+    # Read form.
+    form_kwargs = _read_form_to_kwargs(form_id, ok_arg_names=ok_arg_names)
+
+    # Pass to `package_grid()`.
     form_kwargs.update(kwargs)
     return package_grid(**form_kwargs)
 
