@@ -893,19 +893,23 @@ class BaseCoordinate(_BaseCoordinate):
         Notes
         -----
         Because there is no universal standard for representing point
-        coordinates in a string, a wide variety of formats are supported,
+        coordinates in a string, a wide variety of formats is supported,
         including (but not limited to) the examples below. However, note that
         only decimal degrees are supported for `LatLonPoint`.
             ``"45 120"`` -> ``LatLonPoint(45, 120)``
             ``"45.0° 120.0°"`` -> ``LatLonPoint(45.0, 120.0)``
-            ``"-45.0°, +120.0°"`` -> ``LatLonPoint(-45.0, 120.0)``
+            ``"-45.0° +120.0°"`` -> ``LatLonPoint(-45.0, 120.0)``
             ``"45.0°S, 120.0°W"`` -> ``LatLonPoint(-45.0, -120.0)``
             ``"N 500000 197819"`` -> ``LpsPoint("N", 500000, 197819)``
             ``"N 500000E 197819N"`` -> ``LpsPoint("N", 500000, 197819)``
             ``"N500000E197819N"`` -> ``LpsPoint("N", 500000, 197819)``
             ``"23 N 250000.0 0.0"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)``
             ``"23 N 250000.0 E 0.0 N"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)``
-            ``"23N250000.0E0.0N"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)``
+            ``"23N250000.0E0.0N"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)`
+
+        When, and only when, cardinal directions are included, longitude-first
+        is also supported.
+            ``"120 W 45 S"`` -> ``LatLonPoint(-45.0, -120.0)``
 
         Conversely, the only deviation from the LGRS standard that is
         accommodated for box coordinates is the inclusion of space delimiters.
@@ -931,20 +935,23 @@ class BaseCoordinate(_BaseCoordinate):
         >>> geo_1 = BaseCoordinate.from_string("45.0 -120.0")
         >>> isinstance(geo_1, LatLonPoint)
         True
-        >>> box_1 = BoxCoordinate.from_string("42SAM2468910101")
-        >>> isinstance(box_1, LtmLgrsBox)
+        >>> geo_2 = PointCoordinate.from_string("45.0 -120.0")
+        >>> isinstance(geo_2, LatLonPoint)
         True
-        >>> PointCoordinate.from_string("42SAM2468910101")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> BoxCoordinate.from_string("45.0 -120.0")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
           ...
         lgrs.exceptions.MalformedCoordinate:
           ...
+        >>> box_1 = BoxCoordinate.from_string("42SAM2468910101")
+        >>> isinstance(box_1, LtmLgrsBox)
+        True
 
         When called from any other class (or instance), an instance of the same
         type is returned, if possible, or an error is raised.
 
-        >>> geo_2 = LatLonPoint.from_string("45.0°N, 120.0°W")
-        >>> geo_1 == geo_2
+        >>> geo_3 = LatLonPoint.from_string("45.0°N, 120.0°W")
+        >>> geo_1 == geo_3
         True
         >>> LtmPoint.from_string("45.0°N, 120.0°W")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
@@ -2444,6 +2451,25 @@ class PointCoordinate(BaseCoordinate):
                     break
             else:
                 parts.append(clean_str_part)
+
+        # If there are exactly two parts, assume they collectively
+        # represent latitude and longitude and attempt to determine the
+        # order.
+        if len(parts) == 2:
+            card_idxs = []
+            for card_1_str, card_2_str in (("N", "S"), ("E", "W")):
+                match = _regex.search(
+                    f"(?i){card_1_str}|{card_2_str}", xy_coords_suffix
+                )
+                if match is None:
+                    break
+                card_idxs.append(match.start())
+            else:
+                lat_idx, lon_idx = card_idxs
+                if lon_idx < lat_idx:
+                    parts.reverse()
+
+        # Return.
         return parts
 
     # * TRANSFORMATION CACHING. ───────────────────────────────────────
