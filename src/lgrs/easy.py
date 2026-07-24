@@ -228,13 +228,17 @@ class GeoRelatives:
         `latlon` (hence "forced").
     json_dict : dict
         A mapping representation that includes `GeoRelatives` initialization
-        parameters and all `GeoRelatives` attributes except for `json` and
-        `json_dict`, as well as initialization parameters and some salient
-        attributes (such as `.string`) for coordinate members.
+        parameters and all `GeoRelatives` attributes except for `json`,
+        `json_full`, and `json_dict`, as well as initialization parameters
+        and some salient attributes (such as `.string`) for each coordinate
+        member.
     json : string
         A JSON-compatible pretty string representation of `json_dict` whose
         values are all JSON objects, strings, numbers (int or real),
         booleans, or null. Created by calling `.to_json()`.
+    json_full : string
+        Similar to `json` but created by calling
+        `.to_json(use_objects=True)`.
 
     Notes
     -----
@@ -436,6 +440,10 @@ class GeoRelatives:
                 }
             json_dict[top_key] = val
         return json_dict
+
+    @_functools.cached_property
+    def json_full(self) -> str:
+        return self.to_json(use_objects=True)
 
     # * METHODS. ──────────────────────────────────────────────────────
     def get(self, address: str) -> _typing.Any:
