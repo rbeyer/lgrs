@@ -522,9 +522,9 @@ class GeoRelatives:
             `lgrs.coords.BaseCoordinate.to_json` if `True`. If ``default``
             is specified explicitly, that argument overrides `use_objects`.
         ensure_ascii : bool, default=False
-            Passed to ``json.dumps()``. Note default.
+            Passed to ``json.dumps()``. Note default used in present method.
         indent : int or str or None, default=4
-            Passed to ``json.dumps()``. Note default.
+            Passed to ``json.dumps()``. Note default used in present method.
         **kwargs
             Additional keyword arguments, including ``default``, are passed
             to ``json.dumps()``.
@@ -533,6 +533,29 @@ class GeoRelatives:
         -------
         string : str
             The JSON representation.
+
+        Examples
+        --------
+        Create relatives instance.
+
+        >>> from lgrs.coords import LatLonPoint
+        >>> geo_point = LatLonPoint(0, 0)
+        >>> relatives = GeoRelatives(geo_point, precision=1)
+
+        Encode to JSON then decode, with both `use_objects` options.
+
+        >>> import json
+        >>> as_strings = json.loads(relatives.to_json(use_objects=False))
+        >>> as_objects = json.loads(relatives.to_json(use_objects=True))
+
+        Note that `as_strings` encodes coordinates as strings whereas
+        `as_objects` encodes as JSON objects, which decode to nested
+        `dict`s.
+
+        >>> as_strings["latlon"]
+        '0° N, 0° E'
+        >>> as_objects["latlon"]
+        {'latitude': 0, 'longitude': 0, 'string': '0° N, 0° E'}
         """
         # Collect `json.dumps()` kwargs.
         dumps_kwargs = locals().copy()
