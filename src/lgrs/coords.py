@@ -2404,27 +2404,36 @@ class PointCoordinate(BaseCoordinate):
         # Replace likely delimiters with a " ".
         spaced_str = _regex.sub(r"([,°/;|]|\s)+", " ", string)
 
-        # Split into `xy_coords` (suffix starting from penultimate
-        # number) and `prefix` (everything before `xy_coords`).
-        last_two_num_regex = _regex.compile(
-            "([-0-9.]+)(?:[^-0-9.]+)([-0-9.]+)(?:[^-0-9.]*)$"
+        # Split into `xy_coords_suffix` (starting from penultimate
+        # number) and `prefix` (everything before `xy_coords_suffix`).
+        # Note: For latitude-first geographic coordinates,
+        # `xy_coords_suffix` is a convenient misnomer.
+        xy_coords_match = _regex.search(
+            "([-0-9.]+)(?:[^-0-9.]+)([-0-9.]+)(?:[^-0-9.]*)$", spaced_str
         )
-        xy_coords_match = last_two_num_regex.search(spaced_str)
         if xy_coords_match is None:
             raise TypeError(f"Could not parse: {string!r}")
-        xy_coords = xy_coords_match.group()
-        prefix = spaced_str.removesuffix(xy_coords)
+        xy_coords_suffix = xy_coords_match.group()
+        prefix = spaced_str.removesuffix(xy_coords_suffix)
 
-        # Within `xy_coords`, treat a trailing "S" or "W" as a leading
+        # Within `xy_coords_suffix`, treat a trailing "S" or "W" as a leading
         # "-", but simply discard any "N" or "E".
-        signed_xy_coords = _regex.sub(
-            "(?P<num>[0-9.]+) *(W|S)", r"-\g<num> ", xy_coords
+        signed_xy_coords_suffix = _regex.sub(
+            "(?i)(?P<num>[0-9.]+) *(W|S)", r"-\g<num> ", xy_coords_suffix
         )
-        cleaner_signed_xy_coords = _regex.sub("[EN]", " ", signed_xy_coords)
+        cleaner_signed_xy_coords_suffix = _regex.sub(
+            "(?i)[EN]", " ", signed_xy_coords_suffix
+        )
 
-        # Within `xy_coords`, treat double negatives ("--") as a
+        # Within `xy_coords_suffix`, treat double negatives ("--") as a
         # positive.
-        cleanest_signed_xy_coords = cleaner_signed_xy_coords.replace("--", "")
+        cleanest_signed_xy_coords_suffix = (
+            cleaner_signed_xy_coords_suffix.replace("--", "")
+        )
+        # Note: If there are any characters remaining in
+        # `cleanest_signed_xy_coords_suffix` that would invalidate it as
+        # a space-delimited concatenation of two integer strings, its
+        # components will fail to coerve to integers further below.
 
         # Coerce each component.
         # Note: Split `prefix` wherever there is a space or a letter
@@ -2433,9 +2442,7 @@ class PointCoordinate(BaseCoordinate):
             "(?: +)|(?:(?<=[A-Za-z])(?=[-0-9.]))|(?:(?<=[-0-9.])(?=[A-Za-z]))",
             prefix,
         )
-        str_parts.extend(
-            last_two_num_regex.search(cleanest_signed_xy_coords).groups()
-        )
+        str_parts.extend(cleanest_signed_xy_coords_suffix.split())
         parts = []
         for str_part in str_parts:
             clean_str_part = str_part.strip()
