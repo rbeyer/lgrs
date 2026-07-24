@@ -47,109 +47,97 @@ import lgrs.grid as _grid
 class _BaseFamily:
     """A group of coordinates derived from `latlon`."""
 
+    _input_latlon: _coords.LatLonPoint
+    _input_lgrs: _coords.LpsLgrsBox | _coords.LtmLgrsBox | None = None
+    _extended_ltm: bool | None = None  # Aligned with `_input_lgrs`.
+    _precision: float | None = None  # Aligned with `_input_lgrs`.
 
-class _BaseFullFamily:
-    """
-    A family of related coordinates derived from `latlon`.
+    _aligned_name_to_get = {
+        "extended_ltm": lambda b: b.constraints.extended_ltm,
+        "precision": lambda b: b.precision,
+    }
 
-    Attributes
-    ----------
-    point: lgrs.coords.LpsPoint | lgrs.coords.LtmPoint
-        A point at the same location as `latlon`.
-    lgrs: lgrs.coords.LpsLgrsBox | lgrs.coords.LtmLgrsBox
-        An LGRS box that contains `latlon`.
-    acc: lgrs.coords.LpsAccBox | lgrs.coords.LtmAccBox
-        An ACC box that contains `latlon`.
-    corner: lgrs.coords.LpsPoint | lgrs.coords.LtmPoint
-        The reference (lower-left) corner of `lgrs` and `acc`.
-    center: lgrs.coords.LpsPoint | lgrs.coords.LtmPoint
-        The center point of `lgrs` and `acc`.
-    """
+    def __post_init__(self) -> None:
+        if self._input_lgrs is None:
+            for attr_name in self._aligned_name_to_get:
+                if getattr(self, f"_{attr_name}") is None:
+                    raise TypeError(
+                        "If `_input_lgrs` is not specified, "
+                        f"must specify: `_{attr_name}`"
+                    )
+        else:
+            for attr_name, get in self._aligned_name_to_get.items():
+                object.__setattr__(
+                    self,
+                    f"_{attr_name}",
+                    get(self._input_lgrs),
+                )
+
+    @_functools.cached_property
+    def _constraints(self) -> _coords.Constraints:
+        if self._input_lgrs is None:
+            constraints = _coords.Constraints(extended_ltm=self._extended_ltm)
+        else:
+            constraints = _coords.Constraints(global_crs=self._input_lgrs.crs)
+        return constraints
 
 
 @_dataclasses.dataclass(frozen=True, kw_only=True)
-class _FamilyTemplate:
-    input_latlon: _coords.LatLonPoint
-    input_lgrs: _coords.LpsLgrsBox | _coords.LtmLgrsBox | None = None
-    precision: float = 1  # Aligned with `input_lgrs`.
-    extended_ltm: bool = False  # Aligned with `input_lgrs`.
+class _BaseFullFamily(_BaseFamily):
+    """A family of related coordinates derived from `latlon`."""
 
-    def __post_init__(self):
-        if self.input_lgrs is not None:
-            object.__setattr__(self, "precision", self.input_lgrs.precision)
-            object.__setattr__(
-                self, "extended_ltm", self.input_lgrs.constraints.extended_ltm
-            )
-
-    # * DATA ATTRIBUTES. ──────────────────────────────────────────────
     @_functools.cached_property
     def acc(self) -> _coords.LpsAccBox | _coords.LtmAccBox:
+        """An ACC box that contains `latlon`."""
         return self.lgrs.to_acc()
 
     @_functools.cached_property
     def center(self) -> _coords.LpsPoint | _coords.LtmPoint:
+        """The center point of `lgrs` and `acc`."""
         return self.lgrs.center_latlon.to_lps_or_ltm(
-            constraints=self.constraints
+            constraints=self._constraints
         )
-
-    @_functools.cached_property
-    def constraints(self) -> _coords.Constraints:
-        if self.input_lgrs is None:
-            constraints = _coords.Constraints(extended_ltm=self.extended_ltm)
-        else:
-            constraints = _coords.Constraints(global_crs=self.input_lgrs.crs)
-        return constraints
 
     @_functools.cached_property
     def corner(self) -> _coords.LpsPoint | _coords.LtmPoint:
-        return self.lgrs.to_lps_or_ltm(constraints=self.constraints)
+        """The reference (lower-left) corner of `lgrs` and `acc`."""
+        return self.lgrs.to_lps_or_ltm(constraints=self._constraints)
 
     @_functools.cached_property
     def lgrs(self) -> _coords.LpsLgrsBox | _coords.LtmLgrsBox:
-        if self.input_lgrs is None:
-            return self.input_latlon.to_lgrs(
-                precision=self.precision, constraints=self.constraints
+        """An LGRS box that contains `latlon`."""
+        if self._input_lgrs is None:
+            return self._input_latlon.to_lgrs(
+                precision=self._precision, constraints=self._constraints
             )
         else:
-            return self.input_lgrs
+            return self._input_lgrs
 
     @_functools.cached_property
     def point(self) -> _coords.LpsPoint | _coords.LtmPoint:
-        return self.input_latlon.to_lps_or_ltm(constraints=self.constraints)
-
-    # * METHODS. ──────────────────────────────────────────────────────
-    def make_family(self) -> LpsFamily | LtmFamily:
-        if self.input_lgrs is None:
-            fam_typ = NominalFamily
-        else:
-            match self.lgrs:
-                case _coords.LpsLgrsBox():
-                    fam_typ = LpsFamily
-                case _coords.LtmLgrsBox():
-                    fam_typ = LtmFamily
-                case _:
-                    raise TypeError(
-                        "`.lgrs` does not have an expected type: "
-                        f"{self.lgrs!r}"
-                    )
-        fam = fam_typ(
-            point=self.point,
-            lgrs=self.lgrs,
-            acc=self.acc,
-            corner=self.corner,
-            center=self.center,
-        )
-        return fam
+        """A point at the same location as `latlon`."""
+        return self._input_latlon.to_lps_or_ltm(constraints=self._constraints)
 
 
-@_dataclasses.dataclass(frozen=True, kw_only=True)
 class ForcedFamily(_BaseFamily):
+    # Note: Annotations are used to populate JSON structures.
     lps: _coords.LpsPoint
     ltm: _coords.LtmPoint
 
+    @_functools.cached_property
+    def lps(self) -> _coords.LpsPoint:
+        return self._input_latlon.to_lps(
+            constraints=self._constraints, search=True
+        )
 
-@_dataclasses.dataclass(frozen=True, kw_only=True)
-class LpsFamily(_BaseFamily):
+    @_functools.cached_property
+    def ltm(self) -> _coords.LtmPoint:
+        return self._input_latlon.to_ltm(
+            constraints=self._constraints, search=True
+        )
+
+
+class LpsFamily(_BaseFullFamily):
     point: _coords.LpsPoint
     lgrs: _coords.LpsLgrsBox
     acc: _coords.LpsAccBox
@@ -157,8 +145,7 @@ class LpsFamily(_BaseFamily):
     center: _coords.LpsPoint
 
 
-@_dataclasses.dataclass(frozen=True, kw_only=True)
-class LtmFamily(_BaseFamily):
+class LtmFamily(_BaseFullFamily):
     point: _coords.LtmPoint
     lgrs: _coords.LtmLgrsBox
     acc: _coords.LtmAccBox
@@ -166,8 +153,8 @@ class LtmFamily(_BaseFamily):
     center: _coords.LtmPoint
 
 
-@_dataclasses.dataclass(frozen=True, kw_only=True)
-class NominalFamily(_BaseFamily):
+class NominalFamily(_BaseFullFamily):
+    # Note: Annotations are used to populate JSON structures.
     point: _coords.LpsPoint | _coords.LtmPoint
     lgrs: _coords.LpsLgrsBox | _coords.LtmLgrsBox
     acc: _coords.LpsAccBox | _coords.LtmAccBox
@@ -352,17 +339,25 @@ class GeoRelatives:
                 if box is None:
                     fam = None
                 elif attr_name is None:
-                    region = attr_name.split("_")[0].upper()
                     max_count = len(attr_names)
                     box_count = len(boxes)
                     raise TypeError(
-                        f"{region} region expected to have {max_count} "
-                        f"boxes at most, but has: {box_count}"
+                        f"Expected to have {max_count} "
+                        f"{type(box).__name__}'s at most, but found: "
+                        f"{box_count}"
                     )
                 else:
-                    fam = _FamilyTemplate(
-                        input_latlon=self.latlon, input_lgrs=box
-                    ).make_family()
+                    region = attr_name.split("_")[0].upper()
+                    match region:
+                        case "LPS":
+                            fam_type = LpsFamily
+                        case "LTM":
+                            fam_type = LtmFamily
+                        case _:
+                            raise TypeError(
+                                f"Unexpected `attr_name`: {attr_name!r}"
+                            )
+                    fam = fam_type(_input_latlon=self.latlon, _input_lgrs=box)
                 object.__setattr__(self, attr_name, fam)
 
     def _sort_by_center(self, box: _coords.LtmLgrsBox) -> float:
@@ -375,8 +370,9 @@ class GeoRelatives:
     @_functools.cached_property
     def forced(self) -> ForcedFamily:
         return ForcedFamily(
-            lps=self.latlon.to_lps(search=True),
-            ltm=self.latlon.to_ltm(search=True),
+            _input_latlon=self.latlon,
+            _extended_ltm=self.extended_ltm,
+            _precision=self.precision,
         )
 
     @_functools.cached_property
@@ -406,10 +402,13 @@ class GeoRelatives:
         return self.ltm_2
 
     @_functools.cached_property
-    def nominal(self) -> LpsFamily | LtmFamily:
-        return _FamilyTemplate(
-            input_latlon=self.latlon, precision=self.precision
-        ).make_family()
+    def nominal(self) -> NominalFamily:
+        nom_fam = NominalFamily(
+            _input_latlon=self.latlon,
+            _extended_ltm=self.extended_ltm,
+            _precision=self.precision,
+        )
+        return nom_fam
 
     # * DERIVED ATTRIBUTES. ───────────────────────────────────────────
     @_functools.cached_property
@@ -432,8 +431,8 @@ class GeoRelatives:
             if isinstance(val, _BaseFamily):
                 # *REASSIGNMENT*
                 val = {
-                    field.name: getattr(val, field.name)
-                    for field in _dataclasses.fields(val)
+                    attr_name: getattr(val, attr_name)
+                    for attr_name in type(val).__annotations__
                 }
             json_dict[top_key] = val
         return json_dict
