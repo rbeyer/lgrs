@@ -325,12 +325,21 @@ class _EasyFields:
                 del kwargs[field.name]
         return kwargs
 
-    def _make_json_dict(self, *, include_defaulted: bool = True) -> dict:
+    def _make_json_dict(
+        self,
+        *,
+        include_defaulted: bool = True,
+        include_constraints: bool = False,
+    ) -> dict:
         if include_defaulted:
-            init_kwargs = self._init_kwargs.copy()
+            json_dict = self._init_kwargs.copy()
         else:
-            init_kwargs = self._init_kwargs_nondefaulted.copy()
-        return init_kwargs
+            json_dict = self._init_kwargs_nondefaulted.copy()
+        for attr_name in getattr(self, "_salient_attr_names", ()):
+            json_dict[attr_name] = getattr(self, attr_name)
+        if not include_constraints:
+            json_dict.pop("constraints", None)
+        return json_dict
 
     def _make_repr(
         self, *, include_defaulted: bool = True, **overrides: str
@@ -1292,6 +1301,8 @@ class BaseCoordinate(_BaseCoordinate):
         return self._get_crs(set_area_of_use=False)
 
     # * PUBLIC DATA. ──────────────────────────────────────────────────
+    _salient_attr_names: tuple[str, ...] = ("string",)
+
     @_functools.cached_property
     def string(self) -> str:
         """
@@ -1646,6 +1657,9 @@ class BaseCoordinate(_BaseCoordinate):
         """
         Create a JSON-like `dict` representing this coordinate.
 
+        The items in `json_dict` represent all initialization arguments and
+        some salient attributes, such as `.string`.
+
         Parameters
         ----------
         include_constraints : bool, default=False
@@ -1664,8 +1678,6 @@ class BaseCoordinate(_BaseCoordinate):
             json_dict["constraints"] = self.constraints._make_json_dict(
                 include_defaulted=include_defaulted
             )
-        else:
-            del json_dict["constraints"]
         return json_dict
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
@@ -3491,18 +3503,16 @@ class BoxCoordinate(BaseCoordinate):
         )
 
     # * OUTPUT SUPPORT. ───────────────────────────────────────────────
-    _extra_field_names: tuple[str, ...]
     _field_data: FieldData
 
     @_functools.cached_property
     def default_field_data(self) -> FieldData:
         """
         The default (read-only) mapping for `.field_data`.
+
+        Populated by calling `self.to_json_dict()`.
         """
-        field_data = self._init_kwargs.copy()
-        del field_data["constraints"]
-        for field_name in self._extra_field_names:
-            field_data[field_name] = getattr(self, field_name)
+        field_data = self._make_json_dict()
         return _types.MappingProxyType(field_data)
 
     @property
@@ -3768,7 +3778,7 @@ class BoxCoordinate(BaseCoordinate):
 
 class _BaseAccBox(BoxCoordinate):
     _condensed_prefix_template: str
-    _extra_field_names = (
+    _salient_attr_names = (
         "precision",
         "string",
         "condensed",
@@ -3821,7 +3831,7 @@ class _BaseAccBox(BoxCoordinate):
 
 
 class _BaseLgrsBox(BoxCoordinate):
-    _extra_field_names = ("precision", "string")
+    _salient_attr_names = ("precision", "string")
 
     @_functools.cached_property
     def _easting_int(self) -> int:
