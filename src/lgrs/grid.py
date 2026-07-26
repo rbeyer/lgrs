@@ -268,24 +268,24 @@ def make_box_grid(
         Whether to use the extended LTM region, which extends to 82° N/S
         instead of 80° N/S.
     min_overlap : bool, default=True
-        Whether to reduce box overlap. If `True`, boxes only overlap near LPS
-        and LTM zone boundaries, where overlap is necessary to ensure coverage.
-        If `False`, all valid boxes in the targeted area are generated, which
-        may include inter-zone overlaps of up to ~35.4 km, that is, the
-        diagonal of a 25-km box. In the special case that `bounds` is specified
-        by an LGRS CRS string, `min_overlap` is instead interpreted to relate
-        to the overlap of that region with its neighbors. Then, `True`
-        generates only boxes that are within the nominal bounds of the zone
-        whereas `False` generates all valid boxes from the maximally expanded
-        zone.
+        Whether to reduce box overlap. If `True`, boxes only overlap near
+        LPS and LTM zone boundaries, where overlap is necessary to ensure
+        coverage. If `False`, all valid boxes in the targeted area are
+        generated, which may include inter-zone overlaps of up to ~35.4 km,
+        that is, the diagonal of a 25-km box. In the special case that
+        `bounds` is specified by an LGRS CRS string, `min_overlap` is
+        instead interpreted to relate to the overlap of that region with its
+        neighbors. Then, `True` generates only boxes that are within the
+        nominal bounds of the zone whereas `False` generates all valid boxes
+        from the maximally expanded zone.
     min_zones : bool, default=False
-        Whether to minimize the number of zones (and therefore, CRSs) that are
-        used. If `True`, boxes from non-nominal (expanded) areas of zones may
-        be generated if doing so enables fewer zones to be used overall. For
-        example, when working near the nominal longitudinal boundary between
-        two LTM zones, you may prefer all boxes to come from one zone, if
-        possible, instead of nearly all boxes from that zone and a few from a
-        neighboring zone.
+        Whether to minimize the number of zones (and therefore, CRSs) that
+        are used. If `True`, boxes from non-nominal (expanded) areas of
+        zones may be generated if doing so enables fewer zones to be used
+        overall. For example, when working near the nominal longitudinal
+        boundary between two LTM zones, you may prefer all boxes to come
+        from one zone, if possible, instead of nearly all boxes from that
+        zone and a few from a neighboring zone.
     fallback_to_geo: bool, default=False
         Specifies the behavior when the CRS of a path-like `bounds` cannot
         be transformed to the geographic CRS IAU_2015:30100. If `True` and
@@ -295,10 +295,11 @@ def make_box_grid(
         already be in IAU_2015:30100, with order (lat, lon). In all other
         cases, an exception is raised.
     densify_count : int, default=21
-        Whenever a bounding box must be transformed between CRSs, this number
-        of samples will be added to each edge prior to transformation. Having
-        more samples helps ensure that the transformation of the bounding box
-        is more precise, but higher values will decrease performance.
+        Whenever a bounding box must be transformed between CRSs, this
+        number of samples will be added to each edge prior to
+        transformation. Having more samples helps ensure that the
+        transformation of the bounding box is more precise, but higher
+        values will decrease performance.
 
     Returns
     -------
