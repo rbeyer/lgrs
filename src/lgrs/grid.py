@@ -135,6 +135,8 @@ def _resolve_bounds(
             std_bounds = _srs.make_lunar_crs(bounds, extended_ltm=extended_ltm)
         except TypeError:
             std_bounds = _pathlib.Path(bounds)
+            if std_bounds.parts[0] == "~":
+                std_bounds = std_bounds.expanduser()  # *REASSIGNMENT*
     elif isinstance(bounds, _collections.abc.Sequence):
         match len(bounds):
             case 4:
