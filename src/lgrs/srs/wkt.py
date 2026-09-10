@@ -98,6 +98,9 @@ LPS_LONGITUDE_OF_PROJECTION_ORIGIN: float = (
 ###############################################################################
 # region> TEMPLATES
 ###############################################################################
+# TODO: Add user-facing option to generate WKT directly.
+# TODO: Add `MERIDIAN`, `ANGLEUNIT`, "Northing (Y)", "Easting (X)",
+#  normalize to straight quotes.
 # Below: Format taken from p. 36 of M2025. Only deviation from M2025 is
 # the addition of USAGE, which parallels that for the LTM WKT in the
 # current module.
