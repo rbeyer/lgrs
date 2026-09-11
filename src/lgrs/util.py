@@ -984,9 +984,9 @@ def partially_wraps(
     ...     pass
 
     >>> help(test2)
-    Help on function test2 in module util:
+    Help on function test2 in module lgrs.util:
     <BLANKLINE>
-    test2(a: 'int', *, b: 'list', c: 'str', d: 'str') -> 'None'
+    test2(a: int, *, b: list, c: str, d: str) -> None
         This is another test.
     <BLANKLINE>
         This is the `test()` extended summary.
@@ -1090,7 +1090,7 @@ def sync_param_docs_with(
     ...     pass
 
     >>> help(derived_func)
-    Help on function derived_func in module util:
+    Help on function derived_func in module lgrs.util:
     <BLANKLINE>
     derived_func(a: 'int', eh: 'float', b: 'int') -> 'None'
         This is another test.
