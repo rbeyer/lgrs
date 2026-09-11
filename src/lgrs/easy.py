@@ -870,6 +870,7 @@ def convert_coordinate(
         return georel.get(target)
 
 
+@_util.partially_wraps(_grid.make_box_grid)
 def write_grid(
     bounds: _typing.Any,
     precision: float,
@@ -891,38 +892,6 @@ def write_grid(
 
     Parameters
     ----------
-    bounds : a resolvable bounds hint
-        Resolved to define the footprint of the box grid. Supported inputs:
-            (1) 4-sequence of `float`s
-                Order of `float`s is (min_lon, min_lat, max_lon, max_lat).
-                Values are in degrees in IAU_2015:30100.
-            (2) 5-sequence of 4 `float`s followed by a CRS hint
-                Order is (min_x, min_y, max_x, max_y, crs_hint). If the
-                final element is not a `CRS`, it is coerced by
-                `lgrs.bounds.resolve_crs()`. For example, "S" indicates the
-                south LPS CRS, "23N" indicates the Northern Hemisphere LTM
-                zone 23 CRS, and `None` indicates the underlying geographic
-                CRS, IAU_2015:30100. Arguments compatible with
-                `pyproj.CRS.from_user_input()` are also supported, such as
-                "IAU_2015:30100" or "ESRI:104903".
-            (3) path (`str` or `pathlib.Path`) to vector or raster data
-                The target's bounds, in its CRS, are used. You may specify a
-                layer or table by the convention:
-                ``"path/to/my.gpkg|layer=my_layer_name"`` or
-                ``"path/to/my.gpkg|table=my_table_name"``, as appropriate.
-            (4) short name (`str`) for an LGRS CRS
-                This option generates all boxes for the indicated CRS, which
-                is resolved by `lgrs.bounds.resolve_crs()`.
-            (5) `None`
-                Interpreted as global bounds.
-            (6) `bounds.GeographicBounds` or `bounds.ProjectedBounds`
-                Used directly.
-            (7) `pyproj.AreaOfInterest` or `pyproj.AreaOfUse`
-                Converted by ``GeographicBounds.from_area(bounds)``.
-    precision : float
-        The maximum allowed precision, which is the nominal side length of
-        each grid box. If not a supported precision, the actual precision is
-        rounded down to a better precision. All boxes have the same precision.
     out_path : string, pathlib.Path, or None
         The output file path, or `None` to return a GeoJSON-like `dict`. You
         may specify a layer name by the convention:
@@ -933,13 +902,6 @@ def write_grid(
         the parent directory of `out_path` does not exist, it will be
         created. If `out_path` is a GeoPackage, each output layer will be
         appended to it; the GeoPackage will also be created, if necessary.
-    acc : bool, default=False
-        Whether to use Artemis Condensed Coordinates (ACC) rather than the
-        standard Lunar Grid Reference System (LGRS). The geometry of the
-        boxes in each case are identical but the field data differ.
-    extended_ltm : bool, default=False
-        Whether to use the extended LTM region, which extends to 82° N/S
-        instead of 80° N/S.
     mode : "x", "w", or "a", default="x"
         The file write mode. ``"x"`` requires that the file to which
         `out_path` points (after resolution of any ``"{}"``) not preexist
@@ -947,39 +909,6 @@ def write_grid(
         preexists. ``"a"`` requires that the file preexist and appends to
         that file; if the layer also preexists, it is likewise appended to.
         Ignored if `out_path` is `None`.
-    min_overlap : bool, default=True
-        Whether to reduce box overlap. If `True`, boxes only overlap near
-        LPS and LTM zone boundaries, where overlap is necessary to ensure
-        coverage. If `False`, all valid boxes in the targeted area are
-        generated, which may include inter-zone overlaps of up to ~35.4 km,
-        that is, the diagonal of a 25-km box. In the special case that
-        `bounds` is specified by an LGRS CRS string, `min_overlap` is
-        instead interpreted to relate to the overlap of that region with its
-        neighbors. Then, `True` generates only boxes that are within the
-        nominal bounds of the zone whereas `False` generates all valid boxes
-        from the maximally expanded zone.
-    min_zones : bool, default=False
-        Whether to minimize the number of zones (and therefore, CRSs) that
-        are used. If `True`, boxes from non-nominal (expanded) areas of
-        zones may be generated if doing so enables fewer zones to be used
-        overall. For example, when working near the nominal longitudinal
-        boundary between two LTM zones, you may prefer all boxes to come
-        from one zone, if possible, instead of nearly all boxes from that
-        zone and a few from a neighboring zone.
-    fallback_to_geo : bool, default=False
-        Specifies the behavior when the CRS of a path-like `bounds` cannot
-        be transformed to the geographic CRS IAU_2015:30100. If `True` and
-        that CRS can be transformed to some geographic CRS, that geographic
-        CRS is assumed equivalent to IAU_2015:30100. If `True` but no CRS
-        can be identified for `path`, the coordinates are assumed to
-        already be in IAU_2015:30100, with order (lat, lon). In all other
-        cases, an exception is raised.
-    densify_count : int, default=21
-        Whenever a bounding box must be transformed between CRSs, this
-        number of samples will be added to each edge prior to
-        transformation. Having more samples helps ensure that the
-        transformation of the bounding box is more precise, but higher
-        values will decrease performance.
     json_extras : bool, optional
         Whether to add the following top-level foreign members to GeoJSON
         output:
@@ -1028,9 +957,6 @@ def write_grid(
 
     Warnings
     --------
-    In the current implementation, the `True` option for `min_zones` has no
-    effect unless `bounds` can be spanned by boxes from a single CRS.
-
     When writing out to a GeoJSON file or using the GeoJSON-like
     `hint_to_dict` values, bear in mind that the CRS foreign members added
     by `json_extras` will be the only CRS reference available, since the
