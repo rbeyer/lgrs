@@ -259,9 +259,9 @@ def make_box_grid(
             (7) `pyproj.AreaOfInterest` or `pyproj.AreaOfUse`
                 Converted by ``GeographicBounds.from_area(bounds)``.
     precision : float
-        The required precision of the grid. If not a supported precision,
-        the actual precision is rounded down to a better precision. All
-        boxes have the same precision.
+        The maximum allowed precision, which is the nominal side length of
+        each grid box. If not a supported precision, the actual precision is
+        rounded down to a better precision. All boxes have the same precision.
     acc : bool, default=False
         Whether to use Artemis Condensed Coordinates (ACC) rather than the
         standard Lunar Grid Reference System (LGRS). The geometry of the
@@ -288,7 +288,7 @@ def make_box_grid(
         boundary between two LTM zones, you may prefer all boxes to come
         from one zone, if possible, instead of nearly all boxes from that
         zone and a few from a neighboring zone.
-    fallback_to_geo: bool, default=False
+    fallback_to_geo : bool, default=False
         Specifies the behavior when the CRS of a path-like `bounds` cannot
         be transformed to the geographic CRS IAU_2015:30100. If `True` and
         that CRS can be transformed to some geographic CRS, that geographic
