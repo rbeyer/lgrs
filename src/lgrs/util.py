@@ -827,6 +827,10 @@ def _sync_param_docs_to(
     check: bool,
 ) -> _collections.abc.Callable:
     numdoc = NumpyDoc(target)
+    # Note: Ensure that argument type hints are resolved. Otherwise,
+    # this resolution varies between Python versions (3.14 vs. before),
+    # confounding doctests (e.g., `"int`" vs. `int`).
+    numdoc._set_signature(numdoc._get_signature())
     for source in reversed(sources):
         numdoc.copy_param_docs_from(source)
     if check:
@@ -1092,7 +1096,7 @@ def sync_param_docs_with(
     >>> help(derived_func)
     Help on function derived_func in module lgrs.util:
     <BLANKLINE>
-    derived_func(a: 'int', eh: 'float', b: 'int') -> 'None'
+    derived_func(a: int, eh: float, b: int) -> None
         This is another test.
     <BLANKLINE>
         Parameters
