@@ -889,7 +889,7 @@ def write_grid(
     min_zones: bool = False,
     fallback_to_geo: bool = False,
     densify_count: int = 21,
-    json_extras: bool = True,
+    json_extras: bool | None = None,
     driver: str | None = None,
     **kwargs,
 ) -> dict[str, dict] | None:
@@ -987,7 +987,7 @@ def write_grid(
         transformation. Having more samples helps ensure that the
         transformation of the bounding box is more precise, but higher
         values will decrease performance.
-    json_extras : bool, default=True
+    json_extras : bool, optional
         Whether to add the following top-level foreign members to GeoJSON
         output:
             "name":
@@ -1003,7 +1003,7 @@ def write_grid(
         `out_path` points to a GeoJSON file and no other argument implies
         driver-dependent behavior. (See Warnings section for more
         information.) In the latter case, ``json.dumps()`` is called for
-        formatting.
+        formatting. Defaults `True` for supported calls.
     driver : string, optional
         Passed to ``geopandas.GeoDataFrame.to_file()``. Ignored if
         `out_path` is `None`.
@@ -1091,6 +1091,19 @@ def write_grid(
             if exclusive_crs is None:
                 raise TypeError("`out_path.name` must contain '{}'")
 
+    # Determine whether to generate a GeoJSON-like mapping.
+    make_geo_dict = return_mapping or (
+        driver is None
+        and mode != "a"
+        and layer_kw is None
+        and out_file_path_template.suffix.lower() in (".json", ".geojson")
+    )
+    if json_extras and not make_geo_dict:
+        raise TypeError(
+            "`json_extras` is `True` but bypassing is not "
+            "supported for this call"
+        )
+
     # Generate grid `GeoDataFrame`(s).
     boxes = _grid.make_box_grid(
         bounds,
@@ -1105,15 +1118,11 @@ def write_grid(
     gdfs = _grid.make_gdfs(boxes)
 
     # Optionally generate a GeoJSON-like mapping.
-    make_geo_dict = return_mapping or (
-        driver is None
-        and mode != "a"
-        and layer_kw is None
-        and out_file_path_template.suffix.lower() in (".json", ".geojson")
-    )
     used_kwarg_set = set()
     if make_geo_dict:
         key_to_dict = {}
+        if json_extras is None:
+            json_extras = True  # *REASSIGNMENT*
         for gdf in gdfs:
             crs_info: _database.LunarCrsInfo = _database.LunarCrsInfo.from_crs(
                 gdf.crs
