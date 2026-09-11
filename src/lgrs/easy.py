@@ -196,9 +196,9 @@ class GeoRelatives:
         derive `latlon` and hence all members. If `input_coordinate` is
         instead a `PointCoordinate`, this argument is ignored.
     sort_by_center : bool, default=True
-        If `.ltm_2` is populated, it will represent the box whose center
-        (if `True`) or reference (lower-left) corner (if `False`) is closest
-        to `latlon`.
+        Only applies if `.ltm_2` is populated. Then, between `.ltm_1` and
+        `.ltm_2`, `.ltm_2` represent the box whose center (if `True`) or
+        reference (lower-left) corner (if `False`) is further from `latlon`.
     note : string, optional
         A custom note.
 
@@ -222,7 +222,7 @@ class GeoRelatives:
         CRS. Only populated when `latlon` is near the boundary between two
         LTM zones, so that a valid box in each zone contains `latlon`. Then,
         the CRS of `ltm_2` differs from that of `ltm_1`. See
-        `center_proximity`.
+        `sort_by_center`.
     forced : ForcedFamily
         A pair of LPS and LTM coordinates representing the same location as
         `latlon`. Each of these is populated regardless of the location of
@@ -776,25 +776,16 @@ def convert_coordinate(
     Internally, a `GeoRelatives` instance is generated. Recent
     `GeoRelatives` instances are cached when created by the present
     function, so there is trivial cost to making subsequent calls with a
-    different `target` each time (but all other arguments the same). See the
-    `GeoRelatives` documentation for other relevant information.
+    different `target` each time (but all other arguments the same). The
+    documentation for `GeoRelatives` is integrated below, but you might find
+    it easiest to skip to Examples.
 
     Parameters
     ----------
     input_coordinate : a point or box coordinate, or equivalent string
-        The input coordinate to convert. If a string, it is converted to a
-        coordinate instance (by `lgrs.coords.BaseCoordinate.from_string()`)
-        before being passed to `GeoRelatives()`.
-    precision : float
-        See `GeoRelatives` documentation.
-    extended_ltm : bool, default=False
-        See `GeoRelatives` documentation.
-    use_center : bool, default=False
-        See `GeoRelatives` documentation.
-    sort_by_center : bool, default=True
-        See `GeoRelatives` documentation.
-    note : string, optional
-        See `GeoRelatives` documentation.
+        If a string, it is converted to a coordinate instance (by
+        `lgrs.coords.BaseCoordinate.from_string()`) before being passed to
+        `GeoRelatives()`. See Notes for supported formats.
     target : string, optional
         Specifies the address (attribute reference, possibly chained) on the
         `GeoRelatives` instance whose value should be returned, such as
@@ -938,10 +929,10 @@ def write_grid(
         ``"path/to/my.gpkg|layer=layer_name"``. May contain `"{}"` as a
         placeholder (in file path and/or layer name portions), which will be
         replaced with an automatically generated descriptive name that
-        ensures uniqueness among the outputs of this call. If the parent
-        directory of `out_path` does not exist, it will be created. If
-        `out_path` is a GeoPackage, each output layer will be appended to
-        it; the GeoPackage will also be created, if necessary.
+        ensures uniqueness among the outputs (one per CRS) of this call. If
+        the parent directory of `out_path` does not exist, it will be
+        created. If `out_path` is a GeoPackage, each output layer will be
+        appended to it; the GeoPackage will also be created, if necessary.
     acc : bool, default=False
         Whether to use Artemis Condensed Coordinates (ACC) rather than the
         standard Lunar Grid Reference System (LGRS). The geometry of the
@@ -975,7 +966,7 @@ def write_grid(
         boundary between two LTM zones, you may prefer all boxes to come
         from one zone, if possible, instead of nearly all boxes from that
         zone and a few from a neighboring zone.
-    fallback_to_geo: bool, default=False
+    fallback_to_geo : bool, default=False
         Specifies the behavior when the CRS of a path-like `bounds` cannot
         be transformed to the geographic CRS IAU_2015:30100. If `True` and
         that CRS can be transformed to some geographic CRS, that geographic
@@ -1031,7 +1022,9 @@ def write_grid(
         `out_path` does not preexist. Also if `out_path` does not contain
         the ``"{}"`` placeholder and `bounds` is not an LGRS CRS short name.
         In that case, a name collision is risked if multiple CRSs generate
-        multiple outputs. Finally, if arguments in `**kwargs` are unused.
+        multiple outputs. Also if `json_extras` is `True` but bypassing is
+        not supported (see Warnings). Finally, if arguments in `**kwargs`
+        are unused.
 
     Warnings
     --------
@@ -1041,15 +1034,16 @@ def write_grid(
     When writing out to a GeoJSON file or using the GeoJSON-like
     `hint_to_dict` values, bear in mind that the CRS foreign members added
     by `json_extras` will be the only CRS reference available, since the
-    `"crs"` member does not support any LGRS CRS (at the time of writing).
+    `"crs"` member does not support any LGRS CRS (currently).
 
-    When writing out to a GeoJSON file, the default behavior is to bypass
+    When writing out to a GeoJSON file, it is often possible to bypass
     ``geopandas.GeoDataFrame.to_file()``. This bypassing makes `json_extras`
     behavior available at no cost to performance and is likely what you
     want. Conversely, to ensure that ``geopandas.GeoDataFrame.to_file()`` is
-    called, specify ``driver="GeoJSON"`` (which will disable `json_extras`).
-    Otherwise, heuristics will attempt to determine whether or not to bypass
-    that call, which may cause unexpected behavior.
+    called, specify ``driver="GeoJSON"``. Otherwise, bypassing is preferred
+    and heuristics determine whether to use it on a given call. If
+    `json_extras` is `True` but bypassing is not supported, an error is
+    raised.
 
     Examples
     --------
