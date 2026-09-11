@@ -37,6 +37,7 @@ import lgrs.bounds as _bounds
 import lgrs.coords as _coords
 import lgrs.database as _database
 import lgrs.grid as _grid
+import lgrs.util as _util
 
 
 # endregion
@@ -758,15 +759,16 @@ def _make_georelatives_instance(*args, **kwargs):
     return GeoRelatives(*args, **kwargs)
 
 
+@_util.partially_wraps(
+    _coords.BaseCoordinate.from_string, prepend=("Notes",), strict=True
+)
+@_util.partially_wraps(GeoRelatives, extend=(1,))
 def convert_coordinate(
     input_coordinate: _coords.BaseCoordinate | str,
     *,
     precision: float,
-    extended_ltm: bool = False,
-    use_center: bool = False,
-    sort_by_center: bool = True,
-    note: str | None = None,
     target: str | None = None,
+    **kwargs,
 ) -> GeoRelatives | _typing.Any:
     """
     Convert an input coordinate to all relevant coordinates.
@@ -866,9 +868,9 @@ def convert_coordinate(
     if isinstance(input_coordinate, str):
         # *REASSIGNMENT*
         input_coordinate = _coords.BaseCoordinate.from_string(input_coordinate)
-    georel_kwargs = locals().copy()
-    del georel_kwargs["target"]
-    georel = _make_georelatives_instance(**georel_kwargs)
+    georel = _make_georelatives_instance(
+        input_coordinate, precision=precision, **kwargs
+    )
 
     # Extract and return targeted value.
     if target is None:
