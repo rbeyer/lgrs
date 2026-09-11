@@ -1,4 +1,4 @@
-"""Support for JavaScript interface."""
+"""Numpy-style docstring manipulation and other utilities."""
 
 # Copyright © 2026, Ethan I. Schaefer (eschaefer@seti.org)
 #
