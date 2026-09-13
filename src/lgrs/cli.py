@@ -176,6 +176,7 @@ def write_grid(
     bounds: str,
     precision: float,
     out_path: _pathlib.Path,
+    mode: _typing.Literal["x", "w", "a"] = "x",
     **kwargs,
 ) -> None:
     """
@@ -232,7 +233,7 @@ def write_grid(
     {cmd} 'None' 25_000 '~/grids/global.gpkg|layer={}'
     """  # noqa: E501
     coerced_bounds = _parse_for_write_grid(bounds)
-    _easy.write_grid(coerced_bounds, precision, out_path, **kwargs)
+    _easy.write_grid(coerced_bounds, precision, out_path, mode, **kwargs)
 
 
 # endregion
