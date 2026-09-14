@@ -973,12 +973,31 @@ def write_grid(
 
     Examples
     --------
+    Target 3-5 degrees longitude, 4-6 degrees latitude in IAU_2015:30100.
+    Geenerate an ACC grid with cell side length 1000 m. Output to auto-
+    named layers (one per CRS) in `grid_1.gpkg`.
     >>> write_grid(  # doctest: +SKIP
-    ...     (3, 3, 5, 5), 1_000, "~/grids/grid_1.gpkg|layer={}",  # doctest: +SKIP
+    ...     (3, 4, 5, 6), 1_000, "~/grids/grid_1.gpkg|layer={}",  # doctest: +SKIP
     ...     acc=True  # doctest: +SKIP
     ... )  # doctest: +SKIP
+
+    For the entire LPS North region, generate an LGRS grid with cell side
+    length 25,000 m. Incorporate an automatically generated name into the
+    name of the output shapefile.
     >>> write_grid("N", 25_000, r"C:\\my_grids\final_{}_Moon.shp")  # doctest: +SKIP
-    >>> json_dict = write_grid("path/to/craters.tif", 100, None)  # doctest: +SKIP
+
+    The above is a special case in which the output is known beforehand to
+    be confined to a single CRS. In such cases, the "{}" placeholder is
+    optional:
+    >>> write_grid("N", 25_000, r"C:\\my_grids\final_LPS_N_Moon.shp")  # doctest: +SKIP
+
+    For the footprint of `craters.tif`, generate an ACC grid with cell side
+    length 100 m. Return as a mapping to GeoJSON-like `dict` instances.
+    >>> json_dict = write_grid("path/to/craters.tif", 100, None, acc=True)  # doctest: +SKIP
+
+    Generate a global LGRS grid with cell side length 25 km. Split grid
+    between GeoPackage layers, one per CRS, each named automatically.
+    >>> write_grid(None, 25_000 "~/grids/global.gpkg|layer={}")  # doctest: +SKIP
     """  # noqa: E501
     # Process `out_*` arguments.
     return_mapping = out_path is None
