@@ -227,8 +227,8 @@ def write_grid(
 
     {cmd} 'craters.tif' 100 '~/craters/{}.gpkg' --acc
 
-    Generate an LGRS grid with cell side length 25 km. Split grid between
-    GeoPackage layers, one per CRS, each named automatically.
+    Generate a global LGRS grid with cell side length 25 km. Split grid
+    between GeoPackage layers, one per CRS, each named automatically.
 
     {cmd} 'None' 25_000 '~/grids/global.gpkg|layer={}'
     """  # noqa: E501
