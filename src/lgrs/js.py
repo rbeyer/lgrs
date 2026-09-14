@@ -43,6 +43,7 @@ else:
 import lgrs.coords as _coords
 import lgrs.easy as _easy
 import lgrs.grid as _grid
+import lgrs.util as _util
 import lgrs.values as _values
 
 # endregion
@@ -149,6 +150,9 @@ def _read_form_to_kwargs(
 ###############################################################################
 # region> FUNCTIONS
 ###############################################################################
+# TODO: Once JavaScript example code is added to the package, reference
+#  it from each function's docstring under the Examples section.
+@_util.partially_wraps(_easy.convert_coordinate)
 def convert_coordinate(
     input_coordinate: _coords.BaseCoordinate | str,
     *,
@@ -159,8 +163,7 @@ def convert_coordinate(
     Convert an input coordinate to all relevant coordinates.
 
     This function wraps, and is identical to,
-    `lgrs.easy.convert_coordinate()` except as noted herein. See that
-    function's documentation for more details.
+    `lgrs.easy.convert_coordinate()` except as noted herein.
 
     Arguments representing a single numeric value may be passed as strings
     (such as `"0.0"`) and will be coerced. Empty strings are replaced with
@@ -168,15 +171,11 @@ def convert_coordinate(
 
     Parameters
     ----------
-    input_coordinate : a point or box coordinate, or equivalent string
-        The input coordinate to convert.
     deserialize : bool, default=False
         When `target` is ``"json"`` or ``"json_full"``, specifies whether
         the generated string should be deserialized so that a JavaScript
         ``Object`` is instead returned. For any other `target` value, this
         argument is ignored.
-    **kwargs
-        Remaining arguments are passed to `lgrs.easy.convert_coordinate()`.
 
     Returns
     -------
@@ -186,10 +185,6 @@ def convert_coordinate(
         case, a JavaScript-native counterpart, rather than a proxy, is returned
         if possible.
 
-    See Also
-    --------
-    convert_coordinate_from_form :  Similar but accepts an HTML form name
-
     Warnings
     --------
     Wherever possible, `target` should be specified to avoid the generation
@@ -197,6 +192,19 @@ def convert_coordinate(
     never garbage collected. For broad use, consider specifying `target` as
     `"json"` or `"json_full"` (rather than `"json_dict"`), in which case the
     `deserialize` option may be helpful.
+
+    See Also
+    --------
+    convert_coordinate_from_form :  Similar but accepts an HTML form name
+
+    Examples
+    --------
+    In JavaScript::
+
+        // Convert a geographic coordinate to its LGRS string.
+        const in_coord = "80 N, 0 E";
+        const kwargs = { precision: 1, target: "nominal.lgrs.string" };
+        const lgrs_string = convert_coordinate.callKwargs(in_coord, kwargs);
     """
     full_kwargs = _coerce_kwargs(locals(), _easy.convert_coordinate)
     del full_kwargs["deserialize"]
@@ -257,6 +265,7 @@ def convert_coordinate_from_form(
     return convert_coordinate(**form_kwargs)
 
 
+@_util.partially_wraps(_grid.make_box_grid)
 def make_box_grid(
     bounds: _typing.Any, precision: float, **kwargs: _typing.Any
 ) -> _JsProxyHint:
@@ -264,7 +273,7 @@ def make_box_grid(
     Generate grid as an array of LGRS/ACC boxes spanning specified bounds.
 
     This function wraps, and is identical to, `lgrs.grid.make_box_grid()`
-    except as noted herein. See that function's documentation for more details.
+    except as noted herein.
 
     Arguments representing a single numeric value may be passed as strings
     (such as `"0.0"`) and will be coerced. Empty strings are replaced with
@@ -273,11 +282,7 @@ def make_box_grid(
     Parameters
     ----------
     bounds : a resolvable bounds hint
-        In addition to the forms accepted by the `bounds` argument of
-        `lgrs.grid.make_box_grid()`, may be specified by a 4- or 5-element
-        JavaScript array.
-    **kwargs
-        Remaining arguments are passed to `lgrs.grid.make_box_grid()`.
+        In addition, may be specified by a 4- or 5-element JavaScript array.
 
     Returns
     -------
@@ -305,15 +310,15 @@ def make_box_grid(
     return boxes
 
 
+@_util.partially_wraps(_grid.make_gdfs)
 def make_gdfs(
     boxes: _collections.abc.Sequence[_coords.BoxCoordinate] | _JsProxyHint,
-    **kwargs: _typing.Any,
 ) -> _JsProxyHint:
     """
     Create one or more `GeoDataFrame` instances from a sequence of boxes.
 
     This function wraps, and is identical to, `lgrs.grid.make_gdfs()` except
-    as noted herein. See that function's documentation for more details.
+    as noted herein.
 
     Arguments representing a single numeric value may be passed as strings
     (such as `"0.0"`) and will be coerced. Empty strings are replaced with
@@ -323,8 +328,6 @@ def make_gdfs(
     ----------
     boxes : sequence of lgrs.coords.BoxCoordinates instances
         Sequence may be a JavaScript array.
-    **kwargs
-        Remaining arguments are passed to `lgrs.grid.make_gdfs()`.
 
     Returns
     -------
@@ -353,10 +356,12 @@ def make_gdfs(
     return gdfs
 
 
+@_util.partially_wraps(_easy.write_grid, exclude=("out_path",))
 def package_grid(
     bounds: _typing.Any = _values.DEFAULT,
     precision: int | str | None = None,
     out_name: str | None = None,
+    mode: _typing.Literal["x", "w", "a"] = "x",
     **kwargs: _typing.Any,
 ) -> _JsProxyHint | None:
     """
@@ -376,13 +381,12 @@ def package_grid(
     Parameters
     ----------
     bounds : a resolvable bounds hint
-        In addition to the forms accepted by the `bounds` argument of
-        `lgrs.easy.write_grid()`, the following are also supported:
-            (1) a 4- or 5-element JavaScript array
+        In addition, the following are also supported:
+            (8) a 4- or 5-element JavaScript array
                 This is converted to a Python list of the same length, and
                 the first four elements are coerced from strings
                 to numbers, if necessary.
-            (2) component keywords
+            (9) component keywords
                 If `bounds` is not specified directly, it is populated by
                 other expected keyword arguments thusly:
                     ``[left, botton, right, top, crs]``
@@ -397,9 +401,6 @@ def package_grid(
     crs : string, CRS, or None, default=None
         Final component of `bounds`. Should only be specified if `bounds` is
         not specified directly, in which case it defaults to `None`.
-    **kwargs
-        Extra arguments are passed to `lgrs.easy.write_grid()`, but
-        `out_path` is not supported.
 
     Returns
     -------
