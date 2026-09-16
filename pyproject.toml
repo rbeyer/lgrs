@@ -82,7 +82,7 @@ replace = '__version__ = "{new_version}"'
 [tool.black]
 line-length = 79
 force-exclude = "LGRS"
-
+target-version = ["py313"]
 
 [tool.flake8]
 exclude = "src/lgrs/reference/LGRS_Coordinate_Conversion.py,src/lgrs/reference/LGRS_Grid_Generation.py"
