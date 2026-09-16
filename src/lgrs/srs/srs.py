@@ -163,6 +163,17 @@ class _CrsParameters:
     def make_crs(self) -> CRS:
         if not self._spec_count:
             return CRS(_wkt.DATUM_NAME)
+        wkt = self.make_wkt()
+        crs = CRS(wkt)
+        return crs
+
+    # Note: Caching this method ensures that equivalent `_CrsParameters`
+    # instances return the same WKT string instance.
+    @_caching._optionally_cache
+    def make_wkt(self) -> str:
+        if not self._spec_count:
+            crs = self.make_crs()
+            return crs.to_wkt(pretty=True)
         match self.proj:
             case "LPS":
                 type_ = _wkt.LpsZone
@@ -179,8 +190,7 @@ class _CrsParameters:
             global_ltm=self.global_ltm,
             datum_name=self.ellps,
         )
-        crs = CRS(zone_instance.wkt)
-        return crs
+        return zone_instance.wkt
 
 
 class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
@@ -325,6 +335,32 @@ def make_lunar_crs(
     params = _CrsParameters(**locals())
     crs = params.make_crs()
     return crs
+
+
+# Note: Only identical calls are cached here. Compare:
+# `_CrsParameters.make_crs()`.
+@_caching._optionally_cache
+def make_lunar_wkt(name: str | None = None, **kwargs) -> str:
+    """
+    Return LPS or LTM zone WKT using UTM-like `pyproj.CRS()` arguments.
+
+    All arguments are identical to those of `make_lunar_crs()`. See that
+    function's documentation.
+
+    Returns
+    -------
+    wkt : str
+        The LPS/LTM zone or geographic WKT.
+
+    Raises
+    ------
+    TypeError
+        If WKT cannot be interpreted, or if `proj` is `"LPS"`/`"LTM"`
+        but `global_ltm`/`global_lps` is `True`.
+    """
+    params = _CrsParameters(name=name, **kwargs)
+    wkt = params.make_wkt()
+    return wkt
 
 
 # endregion
