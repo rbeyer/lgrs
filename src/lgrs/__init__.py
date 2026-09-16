@@ -31,7 +31,7 @@ from lgrs.easy import write_grid
 # from lgrs.easy import from_geographic, from_gridded, from_lps_or_ltm
 
 # Note: Analogous to `pyproj`:
-from lgrs.srs.srs import CRS, make_lunar_crs
+from lgrs.srs.srs import CRS, make_lunar_crs, make_lunar_wkt
 
 # * ENABLE TYPE-CHECKING AT PACKAGE LEVEL. ───────────────────────────
 # Note: Types and execution in `lgrs.js` are not available outside a
