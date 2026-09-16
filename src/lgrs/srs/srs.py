@@ -214,21 +214,21 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     False
     """
 
-    def _remove_aou_name_prefix(self, prefix: str) -> str | None:
-        if self.area_of_use is None:
+    def _extract(self, regex: _re.Pattern) -> str | None:
+        if self.coordinate_operation is None:
             return None
-        if not self.area_of_use.name.startswith(prefix):
+        match = regex.search(self.coordinate_operation.name)
+        if match is None:
             return None
-        # Note: `-1` truncates trailing period.
-        return self.area_of_use.name[len(prefix) : -1]
+        return match.group(1)
 
     @_functools.cached_property
     def lps_hemisphere(self) -> _typing.Literal["N", "S", None]:
-        return self._remove_aou_name_prefix(_wkt._lps_usage_area_prefix)
+        return self._extract(_wkt._lps_regex)
 
     @_functools.cached_property
     def ltm_zone(self) -> str | None:
-        return self._remove_aou_name_prefix(_wkt._ltm_usage_area_prefix)
+        return self._extract(_wkt._ltm_regex)
 
 
 # Note: Only identical calls are cached here. Compare:
