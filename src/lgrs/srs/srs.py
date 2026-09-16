@@ -246,7 +246,7 @@ def make_lunar_crs(
     global_ltm: bool = False,
 ) -> CRS:
     """
-    Return LPS or LTM zone `CRS` using UTM-like `proj.CRS()` arguments.
+    Return LPS or LTM zone `CRS` using UTM-like `pyproj.CRS()` arguments.
 
     As a convenience, `make_lunar_crs()` returns the underlying geographic
     `CRS`. See Examples section below.
@@ -280,7 +280,7 @@ def make_lunar_crs(
     Returns
     -------
     crs : CRS
-        The LPS or LTM zone `CRS` instance.
+        The LPS/LTM zone or geographic `CRS` instance.
 
     Raises
     ------
