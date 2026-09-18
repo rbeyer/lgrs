@@ -79,13 +79,13 @@ def _coerce_kwargs(
             coerced_val = val.to_py()
         elif isinstance(val, str) and val == "":
             coerced_val = None
-        else:
-            if targ_type not in (int, float):
-                continue
+        elif targ_type in (int, float):
             coerced_val = _coerce_to_type(
                 raw_val=val, name=name, typ=targ_type
             )
-        if not isinstance(coerced_val, targ_type):
+        else:
+            continue
+        if targ_type is not None and not isinstance(coerced_val, targ_type):
             raise TypeError(f"`{name}` does not support: {coerced_val!r}")
         new_kwargs[name] = coerced_val
     kwargs.update(new_kwargs)
