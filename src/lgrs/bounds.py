@@ -287,7 +287,7 @@ class _BaseBounds(_Base):
             gdf = _geopandas.read_file(file_path, **open_kwargs)
         except Exception:
             try:
-                with _rasterio.open(path, **open_kwargs) as src:
+                with _rasterio.open(file_path, **open_kwargs) as src:
                     native_bounds = src.bounds
                     native_crs = src.crs
             except Exception:
