@@ -188,8 +188,6 @@ def _return_none(self: BaseCoordinate) -> None:
 # region> UTILITIES: REGEX
 ###############################################################################
 def _calc_na_letterset(zone_number: int) -> int:
-    # TODO: Determine if the "- 1" (which appears in the reference
-    #  code but not in Eq. 83) is correct.
     na_letterset = (zone_number - 1) % 3  # Eq. 83
     return na_letterset
 
