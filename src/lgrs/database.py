@@ -36,6 +36,7 @@ from __future__ import annotations
 import collections as _collections
 import functools as _functools
 import itertools as _itertools
+import numbers as _numbers
 import re as _re
 import typing as _typing
 
@@ -104,7 +105,7 @@ def _conform_longitude(longitude: float) -> float:
 def _ensure_float_iterable(
     obj: float | _FloatIterable, *, convert_np: bool = True
 ) -> tuple[bool, _FloatIterable]:
-    if isinstance(obj, float | int):
+    if isinstance(obj, float | int | _numbers.Number):
         if convert_np and isinstance(obj, _np.number):
             converted = float(obj)
             return (True, (converted,))
