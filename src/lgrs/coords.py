@@ -1776,8 +1776,14 @@ class BaseCoordinate(_BaseCoordinate):
                 else:
                     src = self.to_latlon()
                 # *REASSIGNMENT*
-                func = getattr(src, func.__name__.lstrip("_"))
-            final = func(constraints=constraints, validate=validate, **kwargs)
+                public_func = getattr(src, func.__name__.lstrip("_"))
+                # Note: Public `.to_*()` requires `constraints`.
+                final = public_func(
+                    constraints=constraints, validate=validate, **kwargs
+                )
+            else:
+                # Note: Private `._to_*()` uses `self.constraints`.
+                final = func(validate=validate, **kwargs)
         else:
             final = cached
 
@@ -3007,14 +3013,12 @@ class LatLonPoint(PointCoordinate):
         self,
         *,
         proj_crs: _srs.CRS | None = None,
-        constraints: Constraints | None = None,
         validate: bool | None,
     ) -> LpsPoint | LtmPoint:
         # Find projected CRS, which depends on constraints.
         if proj_crs is None:
-            assert constraints is not None
-            proj_crs, new_cousins = constraints._get_proj_crs_and_new_cousins(
-                self
+            proj_crs, new_cousins = (
+                self.constraints._get_proj_crs_and_new_cousins(self)
             )
             if new_cousins:
                 for cousin in new_cousins:
@@ -3105,7 +3109,6 @@ class LpsPoint(PointCoordinate):
     def _to_latlon(
         self,
         *,
-        constraints: Constraints | None = None,
         validate: bool | None,
     ) -> LatLonPoint:
         transformer = self._get_transformer(to_geographic=True)
@@ -3122,12 +3125,13 @@ class LpsPoint(PointCoordinate):
     def _to_lgrs(
         self,
         *,
-        constraints: Constraints | None = None,
         precision: int,
         validate: bool | None,
     ) -> LpsLgrsBox:
         if validate or validate is None:
-            LpsLgrsBox._validate_that_constraints_are_nonglobal(constraints)
+            LpsLgrsBox._validate_that_constraints_are_nonglobal(
+                self.constraints
+            )
         is_in_west_half = self.easting < _wkt.LPS_FALSE_EASTING
         match (self.hemisphere, is_in_west_half):
             case ("S", True):  # Eq. 100
@@ -3230,12 +3234,13 @@ class LtmPoint(PointCoordinate):
     def _to_lgrs(
         self,
         *,
-        constraints: Constraints | None = None,
         precision: int,
         validate: bool | None,
     ) -> LtmLgrsBox:
         if validate or validate is None:
-            LtmLgrsBox._validate_that_constraints_are_nonglobal(constraints)
+            LtmLgrsBox._validate_that_constraints_are_nonglobal(
+                self.constraints
+            )
         lon_band = self.zone_number
         latlon_point = self.to_latlon()
         lat_band_idx = _floor(latlon_point.latitude // 8)  # Eq. 81
@@ -4021,7 +4026,6 @@ class LpsAccBox(_BaseAccBox):
     def _to_lgrs(
         self,
         *,
-        constraints: Constraints | None = None,
         precision: int,
         validate: bool | None,
     ) -> LpsLgrsBox | LtmLgrsBox:
@@ -4130,7 +4134,6 @@ class LpsLgrsBox(_BaseLgrsBox):
     def _to_acc(
         self,
         *,
-        constraints: Constraints | None = None,
         precision: int,
         validate: bool | None,
     ) -> LpsAccBox | LtmAccBox:
@@ -4166,7 +4169,6 @@ class LpsLgrsBox(_BaseLgrsBox):
     def _to_lps_or_ltm(
         self,
         *,
-        constraints: Constraints | None = None,
         validate: bool | None,
     ) -> LpsPoint:
         # Determine hemisphere and whether in the western half.
@@ -4435,7 +4437,6 @@ class LtmLgrsBox(_BaseLgrsBox):
     def _to_lps_or_ltm(
         self,
         *,
-        constraints: Constraints | None = None,
         validate: bool | None,
     ) -> LtmPoint:
         # Determine hemisphere.
@@ -4485,6 +4486,7 @@ class LtmLgrsBox(_BaseLgrsBox):
             hemisphere=hemi,
             easting=easting,
             northing=northing,
+            constraints=self.constraints,
             validate=False,
         )
         return ltm
