@@ -55,13 +55,41 @@ type CrsHint = _pyproj.CRS | str | None
 ###############################################################################
 def _make_crit_array(
     num_or_iter: float | _collections.abc.Iterable,
+    *,
+    nudge_leftward: bool = False,
+    nudge_zeroward: bool = False,
 ) -> _np.ndarray:
+    # Validate.
+    if nudge_leftward and nudge_zeroward:
+        raise TypeError("At most, only one `nudge_*` option may be `True`.")
+
+    # Construct base array.
     if isinstance(num_or_iter, _collections.abc.Iterable):
         iterable = num_or_iter
     else:
         iterable = (-num_or_iter, num_or_iter)
-    a = _np.fromiter(iterable, dtype=_np.float64)
-    return a
+    base = _np.fromiter(iterable, dtype=_np.float64)
+
+    # Optionally extend by nudged values.
+    if not nudge_leftward and not nudge_zeroward:
+        final = base
+    else:
+        arrays = [base]
+        if nudge_leftward:
+            nudged = base.copy()
+            nudged -= _values.DEGREE_EPSILON
+            arrays.append(nudged)
+        elif nudge_zeroward:
+            nudged = base.copy()
+            nudged[base < 0] += _values.DEGREE_EPSILON
+            nudged[base > 0] -= _values.DEGREE_EPSILON
+            arrays.append(nudged)
+        final = _np.concatenate(arrays)
+
+    # Mark read-only and return sorted array.
+    final.sort()
+    final.flags.writeable = False
+    return final
 
 
 def _resolve_file_path_and_open_kwargs(
@@ -549,13 +577,21 @@ class GeographicBounds(_BaseBounds):
     # * CRITICAL LATITUDES & LONGITUDES. ──────────────────────────────
     # Note: The equator is not "critical" for these purposes, because
     # LTM boxes mate there precisely, without overlap.
+    # Note: Nudge equatorward to ensure that locations near the LTM/LPS
+    # boundary sample the LTM side (where appropriate), since LPS wins
+    # exactly at the boundary.
     _crit_lats_extended_ltm_array = _make_crit_array(
-        _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
+        _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE, nudge_zeroward=True
     )
     _crit_lats_unextended_ltm_array = _make_crit_array(
-        _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+        _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE, nudge_zeroward=True
     )
-    _crit_ltm_lons_array = _make_crit_array(range(-356, 361, 8))
+    # Note: Nudge leftward to ensure that locations near a longitudinal
+    # LTM boundary sample the left side (where appropriate), since the
+    # right side wins exactly at the boundary.
+    _crit_ltm_lons_array = _make_crit_array(
+        range(-356, 361, 8), nudge_leftward=True
+    )
 
     # Note: Type-hinting `coords.Constraints` would cause circular
     # import in Python <= 3.13.
@@ -575,14 +611,6 @@ class GeographicBounds(_BaseBounds):
         if sliced_array is None:
             return None
         final = sliced_array.tolist()
-        sliced_array[sliced_array < 0] += _values.DEGREE_EPSILON
-        sliced_array[sliced_array > 0] -= _values.DEGREE_EPSILON
-        final.extend(sliced_array.tolist())
-        final.sort()
-        if final[0] < self.logical.bottom:
-            del final[0]
-        if final[-1] > self.logical.top:
-            del final[-1]
         return final
 
     # Note: Type-hinting `coords.Constraints` would cause circular
@@ -605,12 +633,6 @@ class GeographicBounds(_BaseBounds):
         if sliced_array is None:
             return None
         final = sliced_array.tolist()
-        sliced_array -= _values.DEGREE_EPSILON
-        # Note: Reverse slice so that smallest value is at the end of
-        # the list, for more performant removal, if necessary.
-        final.extend(sliced_array[::-1].tolist())
-        if final[-1] < self.logical.left:
-            del final[-1]
         return final
 
     @staticmethod
@@ -741,3 +763,7 @@ class ProjectedBounds(_BaseBounds):
     @_functools.cached_property
     def crs(self) -> _srs.CRS | _pyproj.CRS:
         return resolve_crs(self.crs_hint)
+
+
+# endregion
+
