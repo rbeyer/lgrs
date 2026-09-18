@@ -703,7 +703,7 @@ class GeographicBounds(_BaseBounds):
         self,
     ) -> tuple[BoundsTuple, ...]:
         if self.brackets_antimeridian:
-            c_left, c_bottom, c_top, c_right = self.conformed
+            c_left, c_bottom, c_right, c_top = self.conformed
             return (
                 BoundsTuple(c_left, c_bottom, +180, c_top),
                 BoundsTuple(-180, c_bottom, c_right, c_top),
