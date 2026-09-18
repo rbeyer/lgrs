@@ -207,6 +207,7 @@ def _spatially_filter_boxes(
 class LunarGeoDataFrame(_geopandas.GeoDataFrame):
     """Subclass of `geopandas.GeoDataFrame`."""
 
+    _metadata = ["name_hint"]
     name_hint: str
 
 
