@@ -4029,7 +4029,7 @@ class LpsAccBox(_BaseAccBox):
     ) -> LpsLgrsBox | LtmLgrsBox:
         if precision < self.precision:
             # Note: Raise error.
-            self.with_precision(precision)
+            self.with_precision(precision, error=True)
         if self.easting_1k is None:
             easting = None
             northing = None
@@ -4137,7 +4137,7 @@ class LpsLgrsBox(_BaseLgrsBox):
     ) -> LpsAccBox | LtmAccBox:
         if precision < self.precision:
             # Note: Raise error.
-            self.with_precision(precision)
+            self.with_precision(precision, error=True)
         init_kwargs = {
             "longitudinal_band": self.longitudinal_band,
             "easting_area": self.easting_area,
