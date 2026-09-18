@@ -2997,7 +2997,7 @@ class LatLonPoint(PointCoordinate):
         )
 
     def _validate(self) -> None:
-        if not (0 <= self.latitude <= 90):
+        if not (-90 <= self.latitude <= 90):
             conformed_lat = _database._conform_latitude(self.latitude)
             object.__setattr__(self, "latitude", conformed_lat)
         if not (-180 <= self.longitude < 180):
