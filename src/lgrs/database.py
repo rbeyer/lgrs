@@ -838,8 +838,9 @@ def query_lunar_crs_info(
                 # *REASSIGNMENT*
                 inner_crs_internal_names = (common_crs_internal_names,)
             else:
-                assert len(inner_crs_internal_names) == 1
-                these_unique_crs_internal_names = set(crs_internal_names)
+                these_unique_crs_internal_names = set(
+                    _itertools.chain.from_iterable(inner_crs_internal_names)
+                )
                 try:
                     (common_crs_internal_name,) = (
                         these_unique_crs_internal_names
