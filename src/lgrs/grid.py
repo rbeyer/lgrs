@@ -423,6 +423,7 @@ def make_box_grid(
         if min_zones:
             crs_set = {box.crs_nominal for box in box_list}
             if len(crs_set) > 1:
+                # Note: For each sample point, map each CRS to its box.
                 full_crs_to_box_list = [
                     {
                         box.crs_nominal: box
@@ -436,7 +437,7 @@ def make_box_grid(
                 ]
                 remaining_crs_to_box_list = full_crs_to_box_list
                 required_crses = []
-                while remaining_crs_to_box_list:
+                if remaining_crs_to_box_list:
                     crs_counter = _collections.Counter(
                         crs
                         for crs_to_box in remaining_crs_to_box_list
@@ -450,10 +451,9 @@ def make_box_grid(
                         for crs_to_box in remaining_crs_to_box_list
                         if max_crs not in crs_to_box
                     ]
-                    break  # See note on next line.
                 # Note: Commented-out code below should work (after
-                # removal of `break` on line above) but would suffer
-                # from inter-zone edge effects.
+                # `if` -> `while` above) but would suffer from inter-
+                # zone edge effects.
                 # box_set = set()  # *REASSIGNMENT*
                 # for crs_to_box in full_crs_to_box_list:
                 #     for crs in required_crses:
