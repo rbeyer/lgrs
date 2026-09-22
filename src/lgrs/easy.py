@@ -215,7 +215,7 @@ class GeoRelatives:
     ltm_1 : LtmFamily | None
         A family of LTM-based coordinates, which all share the same CRS.
         `None` if no LTM-based box is compatible with `latlon`.
-    ltm_2 : LpsFamily | None
+    ltm_2 : LtmFamily | None
         A second family of LTM-based coordinates, which all share the same
         CRS. Only populated when `latlon` is near the boundary between two
         LTM zones, so that a valid box in each zone contains `latlon`. Then,
@@ -853,7 +853,7 @@ def write_grid(
     Examples
     --------
     Target 3-5 degrees longitude, 4-6 degrees latitude in IAU_2015:30100.
-    Geenerate an ACC grid with cell side length 1000 m. Output to auto-
+    Generate an ACC grid with cell side length 1000 m. Output to auto-
     named layers (one per CRS) in `grid_1.gpkg`.
     >>> write_grid(  # doctest: +SKIP
     ...     (3, 4, 5, 6), 1_000, "~/grids/grid_1.gpkg|layer={}",  # doctest: +SKIP
@@ -876,7 +876,7 @@ def write_grid(
 
     Generate a global LGRS grid with cell side length 25 km. Split grid
     between GeoPackage layers, one per CRS, each named automatically.
-    >>> write_grid(None, 25_000 "~/grids/global.gpkg|layer={}")  # doctest: +SKIP
+    >>> write_grid(None, 25_000, "~/grids/global.gpkg|layer={}")  # doctest: +SKIP
     """  # noqa: E501
     # Process `out_*` arguments.
     return_mapping = out_path is None
