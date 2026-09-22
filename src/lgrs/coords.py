@@ -740,10 +740,16 @@ class _BaseCoordinate(_AbstractBaseCoordinate, _EasyFields):
     )
     validate: _dataclasses.InitVar[bool] = True
 
-    def _raise_fallback_exception(self) -> _typing.NoReturn:
-        raise _exceptions.MalformedCoordinate(
+    def _raise_fallback_exception(
+        self, cause: Exception | None = None
+    ) -> _typing.NoReturn:
+        err = _exceptions.MalformedCoordinate(
             f"Coordinate is not valid: {self!r}"
         )
+        if cause is None:
+            raise err
+        else:
+            raise err from cause
 
     def _register_validation(self) -> None:
         object.__setattr__(self, "_was_validated", True)
@@ -768,10 +774,12 @@ class _BaseCoordinate(_AbstractBaseCoordinate, _EasyFields):
             self._validate_each_field()
         except _exceptions.MalformedCoordinate:
             raise
-        except Exception:
-            pass
+        except Exception as e:
+            cause = e
+        else:
+            cause = None
         if raise_fallback:
-            self._raise_fallback_exception()
+            self._raise_fallback_exception(cause)
         return False
 
     @_abc.abstractmethod
@@ -2994,7 +3002,7 @@ class LatLonPoint(PointCoordinate):
             f"{abs(self.longitude)!r}° {e_or_w}"
         )
 
-    def _validate(self) -> None:
+    def _validate(self, *, raise_fallback: bool = True) -> bool:
         if not (-90 <= self.latitude <= 90):
             conformed_lat = _database._conform_latitude(self.latitude)
             object.__setattr__(self, "latitude", conformed_lat)
@@ -3002,6 +3010,7 @@ class LatLonPoint(PointCoordinate):
             conformed_lon = _database._conform_longitude(self.longitude)
             object.__setattr__(self, "longitude", conformed_lon)
         self._register_validation()
+        return True
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     _get_crs_name = _return_none
@@ -3282,7 +3291,7 @@ class BoxCoordinate(BaseCoordinate):
     easting: str | None
     northing: str | None
 
-    def _validate(self) -> bool:
+    def _validate(self, *, raise_fallback: bool = True) -> bool:
         # First, attempt inherited validation.
         if super()._validate(raise_fallback=False):
             return True
@@ -3294,7 +3303,10 @@ class BoxCoordinate(BaseCoordinate):
             raise
         except Exception:
             pass
-        self._raise_fallback_exception()
+        if raise_fallback:
+            super()._validate(raise_fallback=True)
+        else:
+            return False
 
     @classmethod
     def _validate_against_pattern(cls, string: str) -> _regex.Match:
