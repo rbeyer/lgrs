@@ -98,30 +98,6 @@ def calculate_m_per_degree_longitude(latitude: float) -> float:
     return m_per_deg_lon
 
 
-# TODO: Delete unused parts of this module when code is mature.
-#  Everything geodesic?
-def projected_length_to_min_max_geodesic(
-    proj_length: float, *, safe: bool
-) -> tuple[float, float]:
-    min_geod_length = proj_length / MAX_LINEAR_DISTORTION
-    max_geod_length = proj_length / MIN_LINEAR_DISTORTION
-    if safe:
-        min_geod_length /= SAFETY_FACTOR
-        max_geod_length *= SAFETY_FACTOR
-    return (min_geod_length, max_geod_length)
-
-
-def geodesic_length_to_min_max_projected(
-    geod_length: float, *, safe: bool
-) -> tuple[float, float]:
-    min_proj_length = MIN_LINEAR_DISTORTION * geod_length
-    max_proj_length = MAX_LINEAR_DISTORTION * geod_length
-    if safe:
-        min_proj_length /= SAFETY_FACTOR
-        max_proj_length *= SAFETY_FACTOR
-    return (min_proj_length, max_proj_length)
-
-
 # endregion
 ###############################################################################
 # region> REFERENCE VALUES
