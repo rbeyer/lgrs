@@ -3329,7 +3329,7 @@ class BoxCoordinate(BaseCoordinate):
                 )
             else:
                 # Note: This line should never be seen but is included
-                # for compleness.
+                # for completeness.
                 failed_pattern = cls._pattern
         else:
             failed_pattern = simple_pattern
