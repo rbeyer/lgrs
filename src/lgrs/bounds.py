@@ -285,15 +285,18 @@ class _BaseBounds(_Base):
             raise TypeError(f"Path could not be found: {file_path}")
         try:
             gdf = _geopandas.read_file(file_path, **open_kwargs)
-        except Exception:
+        except Exception as vec_err:
             try:
                 with _rasterio.open(file_path, **open_kwargs) as src:
                     native_bounds = src.bounds
                     native_crs = src.crs
-            except Exception:
+            except Exception as ras_err:
                 raise TypeError(
                     f"Path could not be read either as vector or raster data: "
                     f"{path}."
+                ) from ExceptionGroup(
+                    "attempted vector and raster reads both failed",
+                    (vec_err, ras_err),
                 )
         else:
             native_bounds = gdf.total_bounds
