@@ -395,17 +395,17 @@ class GeoRelatives:
     @_functools.cached_property
     def lps(self) -> LpsFamily | None:
         self._assign_nonnominal()
-        return self.lps
+        return self.__dict__["lps"]
 
     @_functools.cached_property
     def ltm_1(self) -> LtmFamily | None:
         self._assign_nonnominal()
-        return self.ltm_1
+        return self.__dict__["ltm_1"]
 
     @_functools.cached_property
     def ltm_2(self) -> LtmFamily | None:
         self._assign_nonnominal()
-        return self.ltm_2
+        return self.__dict__["ltm_2"]
 
     @_functools.cached_property
     def nominal(self) -> NominalFamily:
