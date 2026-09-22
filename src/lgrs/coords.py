@@ -996,6 +996,13 @@ class BaseCoordinate(_BaseCoordinate):
 
     # Note: See `._get_cached_or_create()` for a description of what a
     # "cousin" is.
+    # Note: Cousins cannot be a simple `caching._optionally_cache` case,
+    # because each cousin's lifetime should be determined by its cousin
+    # group as a whole (see `._register_cousin()`). Note also that
+    # `self` serves as the anchor for the group because it's available
+    # and avoids unnecessary (and potentially costly) abstraction to
+    # some anchor common to the cousin group, while safely tying a
+    # cousin group to derivation lineage.
     @_functools.cached_property
     def _cache_key_to_cousins(
         self,
