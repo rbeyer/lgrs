@@ -369,7 +369,7 @@ def _get_geod() -> _pyproj.Geod:
 def _smart_truncate(f: float, *, tolerance: float = 0.001) -> int:
     # TODO: Code originally rounded to nearest int when that int was
     #  within `tolerance`, mimicking `check_decimal_round()` of
-    #  reference code and presumably designed to mitigates undesirable
+    #  reference code and presumably designed to mitigate undesirable
     #  results that arise due to floating-point precision. However, in
     #  testing, rounding thusly could push a point barely on one side
     #  of a zone to another zone, resulting in an invalid coordinate.
@@ -672,7 +672,7 @@ class Constraints(_EasyFields, metaclass=_caching._MetaMultiton):
         # Note: When building a grid, for example, an equivalent
         # `test_box` may be generated many times by different box
         # instances. To improve performance, cache the result of this
-        # block futher below, and immediately below, check that cache.
+        # block further below, and immediately below, check that cache.
         if test_box in self._known_valid_boxes:
             return result_on_success
         elif test_box in self._known_invalid_boxes:
@@ -2451,8 +2451,8 @@ class PointCoordinate(BaseCoordinate):
         xy_coords_suffix = xy_coords_match.group()
         prefix = spaced_str.removesuffix(xy_coords_suffix)
 
-        # Within `xy_coords_suffix`, treat a trailing "S" or "W" as a leading
-        # "-", but simply discard any "N" or "E".
+        # Within `xy_coords_suffix`, treat a trailing "S" or "W" as a
+        # leading "-", but simply discard any "N" or "E".
         signed_xy_coords_suffix = _regex.sub(
             "(?i)(?P<num>[0-9.]+) *(W|S)", r"-\g<num> ", xy_coords_suffix
         )
@@ -2989,7 +2989,7 @@ class LatLonPoint(PointCoordinate):
       ...
 
     You always have the option to override the constraints, and any override
-    is likewise remembered and honored by all derived coordinte instances.
+    is likewise remembered and honored by all derived coordinate instances.
 
     >>> default_constraints = Constraints()
     >>> lps_point = geo_point.to_lps(constraints=Constraints())
@@ -3672,7 +3672,7 @@ class BoxCoordinate(BaseCoordinate):
             value may be negative, which makes tests more restrictive.
             `tolerance` is ignored in logical tests.
         error : bool, default=True
-            Whether to raise a description exception rather than return `False`
+            Whether to raise a descriptive exception rather than return `False`
             when `logical_only=True` or `same_crs_only=True` and that
             requirement is violated, aborting containment testing.
 
@@ -3774,7 +3774,7 @@ class BoxCoordinate(BaseCoordinate):
             reference (lower-left, grid-southwest) corner. This is rarely what
             you want.
         validate : bool, default=False
-            Whether to validate the `our`. The default is `False` because it's
+            Whether to validate the `out`. The default is `False` because it's
             assumed that either `self` was validated or intentionally not
             validated, because its values are known to be valid.
 
