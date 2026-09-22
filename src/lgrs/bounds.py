@@ -420,7 +420,7 @@ class GeographicBounds(_BaseBounds):
     right : float
         The right longitude, in degrees.
     top : float
-        That top latitude, in degrees.
+        The top latitude, in degrees.
 
     Attributes
     ----------
@@ -431,7 +431,7 @@ class GeographicBounds(_BaseBounds):
     brackets_antimeridian : bool
         Whether bounds bracket the antimeridian (±180°). Note that bounds
         that wrap to span all longitudes are not considered to bracket the
-         antimeridian.
+        antimeridian.
     conformed : 4-float BoundsTuple
         Similar to ``tuple(self)`` but a `BoundsTuple` (named tuple) whose
         longitudes are conformed to the interval [-180, +180).
@@ -440,8 +440,8 @@ class GeographicBounds(_BaseBounds):
     logical : 4-float BoundsTuple
         For bounds bracketing the antimeridian, `logical.left` and
         `logical.right` are conformed to the interval [-360, +360] so that
-         `logical.right > logical.left`. Otherwise, equivalent to
-         `.conformed`.
+        `logical.right > logical.left`. Otherwise, equivalent to
+        `.conformed`.
     median_xy : tuple[float, float]
         The median longitude and latitude, respectively, calculated from
         `.logical`. The longitude is then conformed to the interval [-180,
