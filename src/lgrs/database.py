@@ -636,13 +636,6 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         return info._sort_tuple
 
 
-# Note: Unfortunately, if we want to replicate
-# `pyproj.query_utm_crs_info()` as closely as possible, we'd need to
-# implement something like `pyproj.database.CRSInfo` (stub below) and
-# `pyproj.database.PJType`, possibly more.
-class SRSInfo(_pyproj_database.CRSInfo): ...
-
-
 # endregion
 ###############################################################################
 # region> QUERY FUNCTIONS
