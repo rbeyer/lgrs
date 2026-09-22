@@ -187,9 +187,7 @@ def enable_caching(enable: bool = True, *, clear: bool = False) -> None:
     if clear:
         _cache.clear()
         for coord in _coord_weak_set:
-            record = coord.__dict__.get("_cache_key_to_cousins", None)
-            if record is not None:
-                record.clear()
+            coord.uncache_cousin_group()
 
 
 # endregion
