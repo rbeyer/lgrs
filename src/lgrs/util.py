@@ -572,7 +572,7 @@ class NumpyDoc:
 
     def copy_param_docs_from(self, source: _collections.abc.Callable) -> None:
         """
-        Prepend parameter docstrings from a souce.
+        Prepend parameter docstrings from a source.
 
         Each parameter of `.func` that is documented by `source` will have its
         docstring prepended to the corresponding parameter docstring of
@@ -914,14 +914,14 @@ def partially_wraps(
 
     Returns
     -------
-    deocrated
+    decorated
         The decorated function.
 
     Raises
     ------
     TypeError
         If `check` is `True` and any parameter lacks documentation after
-        `deocrated` and `wrapped` have been read.
+        `decorated` and `wrapped` have been read.
 
     See Also
     --------
@@ -1028,7 +1028,7 @@ def sync_param_docs_with(
     """
     Decorator to backfill parameter documentation from other functions.
 
-    The argument order of the deocrated function is preserved.
+    The argument order of the decorated function is preserved.
 
     Parameters
     ----------
@@ -1043,14 +1043,14 @@ def sync_param_docs_with(
 
     Returns
     -------
-    deocrated
+    decorated
         The decorated function.
 
     Raises
     ------
     TypeError
         If `check` is `True` and any parameter lacks documentation after
-        `deocrated` and all `sources` have been read.
+        `decorated` and all `sources` have been read.
 
     See Also
     --------
