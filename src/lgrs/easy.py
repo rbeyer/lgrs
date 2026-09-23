@@ -890,8 +890,8 @@ def write_grid(
             ((layer_kw, layer_name),) = open_kwargs.items()
         else:
             layer_kw = None
-        # Note: Satisfaction of `mode` expectations can only be evaluated
-        # once the output file path is resolved.
+        # Note: Satisfaction of `mode` expectations can only be
+        # evaluated once the output file path is resolved.
         file_path_is_dynamic = "{}" in out_file_path_template.name
         if not file_path_is_dynamic:
             # *REASSIGNMENT*
