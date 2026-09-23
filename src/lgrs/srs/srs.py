@@ -30,6 +30,7 @@ import pyproj as _pyproj
 # Internal.
 import lgrs.caching as _caching
 import lgrs.srs.wkt as _wkt
+import lgrs.util as _util
 
 
 # endregion
@@ -254,7 +255,7 @@ def make_lunar_crs(
     Parameters
     ----------
     name : str, optional
-        String name of `crs`. If specified, all remaining arguments, except
+        String name of CRS. If specified, all remaining arguments, except
         for `extended_ltm`, `global_lps`, and `global_ltm`, are interpreted
         from `name` and cannot be independently specified.
     proj : str, optional
@@ -263,10 +264,10 @@ def make_lunar_crs(
     zone : int, optional
         The LTM zone. Should not be specified for LPS.
     south : bool, optional
-        Whether `crs` is in the Southern Hemisphere. Must be specified,
+        Whether CRS is in the Southern Hemisphere. Must be specified,
         unless `name` is specified or all arguments are defaulted.
     ellps : str, default="IAU_2015:30100"
-        The name of the `crs` ellipsoid. Only "IAU_2015:30100" is supported.
+        The name of the CRS ellipsoid. Only "IAU_2015:30100" is supported.
     extended_ltm : bool, default=False
         Whether to use the extended LTM region. If `True`, the nominal
         poleward extent of the LTM region is 82° N/S instead of 80° N/S.
@@ -340,12 +341,10 @@ def make_lunar_crs(
 # Note: Only identical calls are cached here. Compare:
 # `_CrsParameters.make_crs()`.
 @_caching._optionally_cache
+@_util.partially_wraps(make_lunar_crs, exclude=(1, "Raises"))
 def make_lunar_wkt(name: str | None = None, **kwargs) -> str:
     """
     Return LPS or LTM zone WKT using UTM-like `pyproj.CRS()` arguments.
-
-    All arguments are identical to those of `make_lunar_crs()`. See that
-    function's documentation.
 
     Returns
     -------
