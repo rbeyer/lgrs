@@ -183,6 +183,9 @@ def enable_caching(enable: bool = True, *, clear: bool = False) -> None:
     """
     Enable or disable caching, and optionally clear the cache.
 
+    This function affects all optional caching library wide, including the
+    caching of coordinate cousin groups.
+
     Parameters
     ----------
     enable : bool, default=True
