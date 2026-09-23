@@ -30,7 +30,8 @@ import weakref as _weakref
 _CACHING_IS_ENABLED: bool = True
 _NOT_FOUND = object()
 
-_cache: dict = {}
+_MAX_CACHE_SIZE = float("inf")
+_cache: _collections.OrderedDict = _collections.OrderedDict()
 _coord_weak_set = _weakref.WeakSet()
 
 
@@ -60,6 +61,9 @@ def _query_cache(
             return default_result
         else:
             raise e
+    if cached is not _NOT_FOUND:
+        # Note: Mark `key` as most-recently-used for LRU eviction.
+        _cache.move_to_end(key)
     return (key, cached)
 
 
@@ -68,6 +72,11 @@ def _store_to_cache(
 ) -> None:
     if key is not None:
         _cache[key] = value
+        if len(_cache) > _MAX_CACHE_SIZE:
+            # Note: Evict the least-recently-used entry (the front of
+            # `_cache`, given `_query_cache()`'s `move_to_end()` on
+            # every hit).
+            _cache.popitem(last=False)
 
 
 # endregion
