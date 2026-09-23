@@ -829,7 +829,7 @@ def _sync_param_docs_to(
     numdoc = NumpyDoc(target)
     # Note: Ensure that argument type hints are resolved. Otherwise,
     # this resolution varies between Python versions (3.14 vs. before),
-    # confounding doctests (e.g., `"int`" vs. `int`).
+    # confounding doctests (e.g., `"int"` vs. `int`).
     numdoc._set_signature(numdoc._get_signature())
     for source in reversed(sources):
         numdoc.copy_param_docs_from(source)
