@@ -192,7 +192,7 @@ def write_grid(
     Examples
     --------
     Target 3-5 degrees longitude, 4-6 degrees latitude in IAU_2015:30100.
-    Geenerate an ACC grid with cell side length 1000 m. Output to auto-
+    Generate an ACC grid with cell side length 1000 m. Output to auto-
     named layers (one per CRS) in `grid_1.gpkg`.
 
     {cmd} '(3, 4, 5, 6)' 1000 '~/grids/grid_1.gpkg|layer={}' --acc
