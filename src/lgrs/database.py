@@ -59,7 +59,7 @@ import lgrs.srs.wkt as _wkt
 type _FloatIterable = _collections.abc.Iterable[float]
 
 _lunar_crs_internal_name_pattern = _re.compile(
-    "^(?P<num>[0-9]{1,2})?(?P<hemi>[NS])(?P<suffix>[*]*)$"
+    "^(?P<num>[0-9]{1,2})?(?P<hemi>[NS])(?P<suffix>[*]{0,2})$"
 )
 
 
