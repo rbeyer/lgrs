@@ -20,6 +20,7 @@
 # Standard.
 import builtins as _builtins
 import collections as _collections
+import functools as _functools
 import inspect as _inspect
 import pathlib as _pathlib
 import pprint as _pprint
@@ -52,6 +53,26 @@ _app = _typer.Typer(
 ###############################################################################
 # region> UTILITIES
 ###############################################################################
+_NONE_NOTE = 'Specify `None` by the word "None".'
+
+
+def _coerce_none_strings(func: _types.FunctionType) -> _types.FunctionType:
+    # Note: `lgrs.js` spells `None` as an empty string, because a blank
+    # HTML input yields one. At the command line an empty argument is
+    # unreliable (PowerShell discards it before the program sees it), so
+    # the word is used instead.
+    @_functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        args = tuple(None if arg == "None" else arg for arg in args)
+        kwargs = {
+            key: (None if val == "None" else val)
+            for key, val in kwargs.items()
+        }
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 def _make_metadata(param: _inspect.Parameter, desc: str) -> _typing.Any:
     if param.default is param.empty:
         typer_typ = _typer.Argument
@@ -61,21 +82,27 @@ def _make_metadata(param: _inspect.Parameter, desc: str) -> _typing.Any:
     return typer_typ(help=normalized_desc)
 
 
-def _parse_for_write_grid(string: str) -> _typing.Any:
-    if string == "None":
+def _parse_for_write_grid(string: str | None) -> _typing.Any:
+    # Note: `string` is `None` when `_coerce_none_strings()` converted
+    # the word "None".
+    if string is None:
         return None
     if not (string.startswith("(") and string.endswith(")")):
         return string
     parsed_list = []
     for raw_part in string[1:-1].split(",", maxsplit=4):
         part = raw_part.strip()
-        if part == "None":
-            parsed = None
+        # Note: If a component is quoted (perhaps to follow Python
+        # string syntax), strip the quotation marks to expose the
+        # intended string literal.
+        if len(part) > 1 and part[0] == part[-1] and part[0] in ("'", '"'):
+            clean_part = part[1:-1]
         else:
-            try:
-                parsed = float(part)
-            except ValueError:
-                parsed = part
+            clean_part = part
+        try:
+            parsed = float(clean_part)
+        except ValueError:
+            parsed = None if clean_part == "None" else clean_part
         parsed_list.append(parsed)
     return parsed_list
 
@@ -98,6 +125,14 @@ def _prep_for_cli(func: _types.FunctionType) -> _types.FunctionType:
     )
     numdoc.replace_section("Examples", populated_examples)
 
+    # Add a note about the `None` rule of `_coerce_none_strings()`.
+    extended_summary = numdoc.section_name_to_content[1]
+    if extended_summary is None:
+        extended_summary = _NONE_NOTE  # *REASSIGNMENT*
+    else:
+        extended_summary += f"\n\n{_NONE_NOTE}"  # *REASSIGNMENT*
+    numdoc.replace_section(1, extended_summary)
+
     # Escape and colorize docstring, compatible with `rich` (used by
     # `typer`).
     docstring = func.__doc__
@@ -109,8 +144,11 @@ def _prep_for_cli(func: _types.FunctionType) -> _types.FunctionType:
     )
     func.__doc__ = docstring
 
+    # Ensure that the word "None" is coerced to `None`.
+    wrapped = _coerce_none_strings(func)
+
     # Perform final preparation and return.
-    out = _app.command(no_args_is_help=True)(func)
+    out = _app.command(no_args_is_help=True)(wrapped)
     return out
 
 
@@ -159,6 +197,11 @@ def convert_coordinate(
     Get just the condensed ACC for the LPS region:
 
     {cmd} "80 N, 4 E" 10 --target lps.acc.condensed
+
+    Get every relative, rather than one target, by clearing the default
+    `target`:
+
+    {cmd} "80 N, 4 E" 10 --target "None"
     """
     result = _easy.convert_coordinate(
         input_coordinate, precision=precision, target=target, **kwargs
