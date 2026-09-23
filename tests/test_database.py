@@ -25,7 +25,7 @@ import unittest
 import lgrs.database as database
 
 # External.
-import numpy as np
+import numpy
 import pyproj.aoi
 
 
@@ -330,7 +330,7 @@ class TestQueryDatabase(unittest.TestCase):
         # `area_of_interest` is passed to results when a grid is
         # generated internally by
         # `lgrs.database.query_lunar_crs_info()`.
-        crit_lats = np.arange(-90, 90.1, step=0.25).tolist()
+        crit_lats = numpy.arange(-90, 90.1, step=0.25).tolist()
         for s_lat, n_lat in itertools.combinations(crit_lats, 2):
             aoi = pyproj.aoi.AreaOfInterest(
                 west_lon_degree=-3,

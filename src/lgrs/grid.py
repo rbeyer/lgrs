@@ -27,7 +27,7 @@ import typing as _typing
 
 # External.
 import geopandas as _geopandas
-import numpy as _np
+import numpy as _numpy
 from pyproj import aoi as _pyproj_aoi
 
 # Internal.
@@ -81,7 +81,7 @@ def _construct_latlon_grid(
     delta = precision / _math.sqrt(2)
     grid_height = lat_range * _values.M_PER_DEGREE_LATITUDE
     row_count = _calculate_safe_count(grid_height, delta)
-    lats = _np.linspace(min_lat, max_lat, row_count).tolist()
+    lats = _numpy.linspace(min_lat, max_lat, row_count).tolist()
 
     # Determine critical latitude and longitude coordinates.
     crit_lats = bounds._get_critical_latitudes(constraints)
@@ -107,7 +107,7 @@ def _construct_latlon_grid(
         # Determine longitude coordinates.
         row_width = lon_range * m_per_deg_lon
         col_count = _calculate_safe_count(row_width, delta)
-        lons = _np.linspace(min_lon, max_lon, col_count).tolist()
+        lons = _numpy.linspace(min_lon, max_lon, col_count).tolist()
         if crit_lons is not None:
             lons.extend(crit_lons)
 

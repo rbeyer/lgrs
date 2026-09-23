@@ -29,7 +29,7 @@ import typing as _typing
 
 # External.
 import geopandas as _geopandas
-import numpy as _np
+import numpy as _numpy
 import pyproj as _pyproj
 import pyproj.aoi as _pyproj_aoi
 import rasterio as _rasterio
@@ -58,7 +58,7 @@ def _make_crit_array(
     *,
     nudge_leftward: bool = False,
     nudge_zeroward: bool = False,
-) -> _np.ndarray:
+) -> _numpy.ndarray:
     # Validate.
     if nudge_leftward and nudge_zeroward:
         raise TypeError("At most, only one `nudge_*` option may be `True`.")
@@ -68,7 +68,7 @@ def _make_crit_array(
         iterable = num_or_iter
     else:
         iterable = (-num_or_iter, num_or_iter)
-    base = _np.fromiter(iterable, dtype=_np.float64)
+    base = _numpy.fromiter(iterable, dtype=_numpy.float64)
 
     # Optionally extend by nudged values.
     if not nudge_leftward and not nudge_zeroward:
@@ -84,7 +84,7 @@ def _make_crit_array(
             nudged[base < 0] += _values.DEGREE_EPSILON
             nudged[base > 0] -= _values.DEGREE_EPSILON
             arrays.append(nudged)
-        final = _np.concatenate(arrays)
+        final = _numpy.concatenate(arrays)
 
     # Mark read-only and return sorted array.
     final.sort()
@@ -640,10 +640,10 @@ class GeographicBounds(_BaseBounds):
 
     @staticmethod
     def _slice_array_by_interval_ends(
-        a: _np.ndarray,
+        a: _numpy.ndarray,
         left: float,
         right: float,
-    ) -> _np.ndarray | None:
+    ) -> _numpy.ndarray | None:
         idx_0 = a.searchsorted(left, side="left")
         idx_n = a.searchsorted(right, side="right")
         if idx_0 == idx_n:

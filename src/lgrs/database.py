@@ -42,7 +42,7 @@ import typing as _typing
 
 # External.
 import beartype as _beartype
-import numpy as _np
+import numpy as _numpy
 import pyproj as _pyproj
 from pyproj import aoi as _pyproj_aoi, database as _pyproj_database
 
@@ -106,13 +106,13 @@ def _ensure_float_iterable(
     obj: float | _FloatIterable, *, convert_np: bool = True
 ) -> tuple[bool, _FloatIterable]:
     if isinstance(obj, float | int | _numbers.Number):
-        if convert_np and isinstance(obj, _np.number):
+        if convert_np and isinstance(obj, _numpy.number):
             converted = float(obj)
             return (True, (converted,))
         else:
             return (True, (obj,))
     else:
-        if convert_np and isinstance(obj, _np.ndarray):
+        if convert_np and isinstance(obj, _numpy.ndarray):
             converted = obj.tolist()  # *REASSIGNMENT*
             return (False, converted)
         else:
