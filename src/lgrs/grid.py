@@ -128,7 +128,8 @@ def _resolve_bounds(
     _bounds.GeographicBounds | _bounds.ProjectedBounds,
     _srs.CRS | None,
 ]:
-    # Standardize `bounds`, so that each type as a single interpretation.
+    # Standardize `bounds`, so that each type as a single
+    # interpretation.
     geo_crs = _srs.make_lunar_crs()
     if isinstance(bounds, str):
         try:
