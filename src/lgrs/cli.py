@@ -34,6 +34,7 @@ import typer.rich_utils as _rich_utils
 # Internal.
 import lgrs.coords as _coords
 import lgrs.easy as _easy
+import lgrs.srs.srs as _srs
 import lgrs.util as _util
 
 # endregion
@@ -161,6 +162,60 @@ def convert_coordinate(
     """
     result = _easy.convert_coordinate(
         input_coordinate, precision=precision, target=target, **kwargs
+    )
+    _pretty_print(result)
+
+
+@_prep_for_cli
+@_util.partially_wraps(_srs.make_lunar_wkt, exclude=("Returns",))
+def make_lunar_wkt(
+    name: str | None = None,
+    *,
+    proj: str | None = None,
+    zone: int | None = None,
+    south: bool | None = None,
+    ellps: str | None = None,
+    extended_ltm: bool = False,
+    global_lps: bool = False,
+    global_ltm: bool = False,
+) -> None:
+    """
+    Write out LPS or LTM zone WKT.
+
+    Examples
+    --------
+    Get the WKT of the CRS for LTM zone 23, Northern Hemisphere:
+
+    {cmd} --name "LTM 23N"
+
+    Equivalent calls include:
+
+    {cmd} --name "IAU_2015:30100 / LTM zone 23N"
+    {cmd} --name "23N"
+    {cmd} --proj "LTM" --zone 23 --no-south
+
+    Get the WKT of the CRS for the southern LPS region:
+
+    {cmd} --name "LPS S"
+
+    Get the WKT of the CRS for that same region, but extended to the
+    non-standard global extent:
+
+    {cmd} --name "LPS S" --global-lps
+
+    Get the WKT of the underlying geographic CRS:
+
+    {cmd} --name "None"
+    """
+    result = _srs.make_lunar_wkt(
+        name,
+        proj=proj,
+        zone=zone,
+        south=south,
+        ellps=ellps,
+        extended_ltm=extended_ltm,
+        global_lps=global_lps,
+        global_ltm=global_ltm,
     )
     _pretty_print(result)
 
