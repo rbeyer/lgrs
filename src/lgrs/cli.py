@@ -1,4 +1,13 @@
-"""Support for the command-line interface."""
+"""
+Support for the command-line interface.
+
+Note that in all docstring examples, string arguments are double-quoted,
+and may use internal single quotes, whereas numeric arguments are
+unquoted. This convention has the dual benefit of being reasonably
+inferred by the user and applicable across platforms and contexts,
+including common POSIX shells and both PowerShell and `cmd.exe` on
+Windows.
+"""
 
 # Copyright © 2026, Ethan I. Schaefer (eschaefer@seti.org)
 #
@@ -74,6 +83,10 @@ def _coerce_none_strings(func: _types.FunctionType) -> _types.FunctionType:
 
 
 def _make_metadata(param: _inspect.Parameter, desc: str) -> _typing.Any:
+    # The wrapped function's signature determines the CLI form: a
+    # parameter with a default becomes an option, and a parameter
+    # without a default becomes an argument. An edit outside `cli` can
+    # therefore change the CLI even though this module is unchanged.
     if param.default is param.empty:
         typer_typ = _typer.Argument
     else:
@@ -196,7 +209,7 @@ def convert_coordinate(
 
     Get just the condensed ACC for the LPS region:
 
-    {cmd} "80 N, 4 E" 10 --target lps.acc.condensed
+    {cmd} "80 N, 4 E" 10 --target "lps.acc.condensed"
 
     Get every relative, rather than one target, by clearing the default
     `target`:
@@ -290,42 +303,42 @@ def write_grid(
     Generate an ACC grid with cell side length 1000 m. Output to auto-
     named layers (one per CRS) in `grid_1.gpkg`.
 
-    {cmd} '(3, 4, 5, 6)' 1000 '~/grids/grid_1.gpkg|layer={}' --acc
+    {cmd} "(3, 4, 5, 6)" 1000 "~/grids/grid_1.gpkg|layer={}" --acc
 
     The commands below are also equivalent to this command:
 
-    {cmd} '(3, 4, 5, 6, None)' 1_000 '~/grids/grid_1.gpkg|layer={}' --acc
-    {cmd} '(3, 4, 5, 6, "IAU_2015:30100")' 1_000 '~/grids/grid_1.gpkg|layer={}' --acc
+    {cmd} "(3, 4, 5, 6, None)" 1_000 "~/grids/grid_1.gpkg|layer={}" --acc
+    {cmd} "(3, 4, 5, 6, 'IAU_2015:30100')" 1_000 "~/grids/grid_1.gpkg|layer={}" --acc
 
     The command below, by approximating the same `bounds`, also generates
     nearly the same result (differing only due to alignment/edge effects).
     Note that even though `bounds` is specified in LTM zone 23N coordinates,
     the results span 23N and 24N.
 
-    {cmd} '(340512, 121534, 400702, 182964, "23N")' 1_000 '~/grids/grid_1.gpkg|layer={}' --acc
+    {cmd} "(340512, 121534, 400702, 182964, '23N')" 1_000 "~/grids/grid_1.gpkg|layer={}" --acc
 
     For the entire LPS North region, generate an LGRS grid with cell side
     length 25,000 m. Incorporate an automatically generated name into the
     name of the output shapefile.
 
-    {cmd} 'N' 25_000 'C:\\my_grids\\final_{}_Moon.shp'
+    {cmd} "N" 25_000 "C:\\my_grids\\final_{}_Moon.shp"
 
     The above command is a special case in which the output is known
     beforehand to be confined to a single CRS. In such cases, the "{}"
     placeholder is optional:
 
-    {cmd} 'N' 25_000 'C:\\my_grids\\final_LPS_N_Moon.shp'
+    {cmd} "N" 25_000 "C:\\my_grids\\final_LPS_N_Moon.shp"
 
     For the footprint of `craters.tif`, generate an ACC grid with cell side
     length 100 m. Split grid between multiple GeoPackages, one per CRS, each
     named automatically.
 
-    {cmd} 'craters.tif' 100 '~/craters/{}.gpkg' --acc
+    {cmd} "craters.tif" 100 "~/craters/{}.gpkg" --acc
 
     Generate a global LGRS grid with cell side length 25 km. Split grid
     between GeoPackage layers, one per CRS, each named automatically.
 
-    {cmd} 'None' 25_000 '~/grids/global.gpkg|layer={}'
+    {cmd} "None" 25_000 "~/grids/global.gpkg|layer={}"
     """  # noqa: E501
     coerced_bounds = _parse_for_write_grid(bounds)
     _easy.write_grid(coerced_bounds, precision, out_path, mode, **kwargs)
@@ -337,11 +350,10 @@ def write_grid(
 ###############################################################################
 def main() -> None:
     """
-    Enter the command-line interface.
+    Start the command-line interface.
 
-    This is the entry point named by `[project.scripts]` in
-    `pyproject.toml`, and so is also what the installed `lgrs` command
-    calls.
+    `[project.scripts]` in `pyproject.toml` names this function, so the
+    installed `lgrs` command runs it.
     """
     # Cautious monkey-patch so that negative values (e.g., latitudes) in
     # docstrings are not colored as though they represent CLI switches.
