@@ -32,8 +32,8 @@ reference = ["gdal"]
 [project.urls]
 Repository = "https://github.com/rbeyer/lgrs"
 
-# [project.scripts]
-# lgrs = "lgrs.cli:main"
+[project.scripts]
+lgrs = "lgrs.cli:main"
 
 [tools.setuptools.packages.find]
 where = ["src"]

@@ -93,10 +93,7 @@ def _prep_for_cli(func: _types.FunctionType) -> _types.FunctionType:
     indirect_escapes = ("{}",) * examples.count("{")
     populated_examples = examples.format(
         *indirect_escapes,
-        cmd=(
-            f"$ python {_pathlib.Path(__file__).name} "
-            f"{func.__name__.replace('_', '-')}"
-        ),
+        cmd=f"$ lgrs {func.__name__.replace('_', '-')}",
     )
     numdoc.replace_section("Examples", populated_examples)
 
@@ -240,7 +237,14 @@ def write_grid(
 ###############################################################################
 # region> FINALIZE CLI SUPPORT
 ###############################################################################
-if __name__ == "__main__":
+def main() -> None:
+    """
+    Enter the command-line interface.
+
+    This is the entry point named by `[project.scripts]` in
+    `pyproject.toml`, and so is also what the installed `lgrs` command
+    calls.
+    """
     # Cautious monkey-patch so that negative values (e.g., latitudes) in
     # docstrings are not colored as though they represent CLI switches.
     # (Purely cosmetic.)
@@ -257,6 +261,10 @@ if __name__ == "__main__":
 
     # Enter CLI.
     _app()
+
+
+if __name__ == "__main__":
+    main()
 
 
 # endregion
