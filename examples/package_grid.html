@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Make an LGRS grid with lgrs</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v314.0.1/full/pyodide.js"></script>
+
+    <style>
+      .form-grid {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        column-gap: 1em;
+        row-gap: 0.5em;
+        align-items: center;
+      }
+
+      .form-grid h3,
+      .form-grid p,
+      .form-grid hr {
+        grid-column: 1 / -1;
+      }
+
+      .form-grid h3 + p {
+        margin-top: 0;
+      }
+
+      .form-grid h3 {
+        margin-top: 0;
+        margin-bottom: 0;
+      }
+
+      .form-grid hr {
+        grid-column: 1 / -1;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .form-grid label {
+        justify-self: end;
+        text-align: right;
+      }
+
+      .form-grid input {
+        justify-self: start;
+      }    
+
+      button {
+        font-size: 16px;
+        padding: 12px 24px;
+      }
+
+      code {
+        white-space: pre;
+        display: block;
+      }
+
+      /* A small spinner before the status text while `#status` is busy. */
+      #status.busy::before {
+        content: "";
+        display: inline-block;
+        width: 0.9em;
+        height: 0.9em;
+        margin-right: 0.5em;
+        vertical-align: -0.1em;
+        border: 2px solid rgba(0, 0, 0, 0.2);
+        border-top-color: #333;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <form id="grid-form">
+      <div class="form-grid">
+
+        <h3>Step 1: Enter the bounds for the grid. </h3>
+        <p><i>The bounds may be expressed in degrees longitude and latitude or in meters easting and northing, depending on how you specify the CRS. The default CRS (IAU_2015:30100) uses degrees longitude and latitude. </i></p>
+
+        <label>Left:</label>
+        <input type="number" step="any" name="left">
+      
+        <label>Bottom:</label>
+        <input type="number" step="any" name="bottom">
+ 
+        <label>Right:</label>
+        <input type="number" step="any" name="right">
+
+        <label>Top:</label>
+        <input type="number" step="any" name="top">
+
+        <p><i>Specify the coordinate reference system (CRS) by a hint. For example, "S" indicates the south Lunar Polar Stereographic CRS and "23N" indicates the Northern Hemisphere Lunar Transverse Mercator zone 23 CRS. You may also specify a code like "IAU_2015:30100" or "ESRI:104903". (Do not include quotation marks in your entry.) </i></p>
+
+        <label>CRS:</label>
+        <input type="text" value="IAU_2015:30100" name="crs">
+
+        <hr>
+
+        <h3>Step 2: Enter the precision, in meters. </h3>
+        <p><i>This is the same as the side length of each grid box. Supported precisions are 25 km, 1 km, 100 m, 10 m, and 1 m. If you specify an unsupported precision >1 m, it will be rounded down to the closest (finer) precision that is supported. A value &lt;1 m produces an error. </i></p>
+
+        <label>Precision (meters):</label>
+        <input type="number" step="any" name="precision">
+
+        <hr>
+
+        <h3>Step 3: Choose the output format. </h3>
+        <p><i>All files will be combined into a single .zip file, which is automatically downloaded. </i></p>
+
+        <label>GeoPackage (1 layer per CRS)</label>
+        <input type="radio" name="out_name" value="grid.gpkg|layer={}" checked>
+
+        <label>GeoPackage (1 file per CRS)</label>
+        <input type="radio" name="out_name" value="{}.gpkg">
+
+        <label>GeoJSON (1 file per CRS)</label>
+        <input type="radio" name="out_name" value="{}.geojson">
+
+        <label>ESRI Shapefile (1 file set per CRS)</label>
+        <input type="radio" name="out_name" value="{}.shp">
+
+        <hr>
+
+        <h3>Step 4: Modify advanced options. (optional) </h3>
+        <p><i>"ACC" uses Artemis Condensed Coordinates rather than the standard LGRS; the box geometry is identical but the field data differ. "Extended LTM" extends the Lunar Transverse Mercator (LTM) zones to 82° N/S instead of 80° N/S. "Minimize overlap" (the default) limits overlap between boxes to the areas near LPS and LTM zone boundaries, where overlap is needed for coverage; unchecked, all valid boxes in the area are generated, which can overlap between zones by up to about 35 km. "Minimize zones" uses as few zones (and therefore CRSs) as possible, even if that requires boxes from the expanded area of a zone. </i></p>
+
+        <label>ACC</label>
+        <input type="checkbox" name="acc">
+
+        <label>Extended LTM</label>
+        <input type="checkbox" name="extended_ltm">
+
+        <label>Minimize overlap</label>
+        <input type="checkbox" name="min_overlap" checked>
+
+        <label>Minimize zones</label>
+        <input type="checkbox" name="min_zones">
+
+        <hr>
+
+      </div>
+
+      <button id="gen-btn" disabled>Generate</button> <br>
+      <code id="status" class="busy" style="color: red;">[Status: Loading environment. Please wait...]</code>
+      <code id="prev-result"></code>
+
+    </form>
+
+    <script>
+      // Elements that report progress and results.
+      const statusElem = document.getElementById("status");
+      const button = document.getElementById("gen-btn");
+      const prevResultElem = document.getElementById("prev-result");
+
+      let pyodide;  // The Python runtime.
+      let lgrsJs;   // The `lgrs.js` Python module.
+
+      // ===== lgrs: BEGIN (setup) ============================================
+      // Start Python (via Pyodide), then install and import lgrs.
+      async function loadLgrs() {
+        pyodide = await loadPyodide();
+        await pyodide.loadPackage("micropip");
+        const micropip = pyodide.pyimport("micropip");
+        await micropip.install("lgrs==0.4.0");
+        lgrsJs = pyodide.pyimport("lgrs.js");
+      }
+      // ===== lgrs: END (setup) ==============================================
+
+      async function generateGrid() {
+        // Update user-facing status.
+        statusElem.style.color = "red";
+        statusElem.textContent = "[Status: Generating...]";
+        statusElem.classList.add("busy");
+        button.disabled = true;
+        prevResultElem.textContent = "";
+        // Note: Python blocks the page while it runs, so pause briefly to let
+        // the browser display the status above first.
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        try {
+          // ===== lgrs: BEGIN (grid) =======================================
+          // Read the form, generate the grid, and download it as a .zip file.
+          // Every form element whose `name` matches one of the arguments of
+          // `lgrs.easy.write_grid()` supplies the argument's value. (Checkboxes
+          // are booleans; a radio group supplies its checked button's value;
+          // elements with any other name are ignored.)
+          lgrsJs.package_grid_from_form("grid-form");
+          // ===== lgrs: END (grid) =========================================
+
+          prevResultElem.style.color = "green";
+          prevResultElem.textContent = "  ⌛ Previous grid generation succeeded!";
+        }
+        catch (e) {
+          console.error(e);
+          // Note: A Python error has a `type`. Report only its message, not
+          // the full traceback.
+          let message = "<unknown, non-Python error>";
+          if (e.type !== undefined) {
+            message = await pyodide.runPython("import sys; str(sys.last_value)");
+          }
+          prevResultElem.style.color = "red";
+          prevResultElem.textContent = "  ⌛ Previous grid generation failed with error message below. Check that inputs are complete and correct, then try again.\n       ";
+          const messageElem = document.createElement("i");
+          messageElem.textContent = message;  // Text, not HTML.
+          prevResultElem.appendChild(messageElem);
+        }
+
+        // Update user-facing status.
+        statusElem.style.color = "green";
+        statusElem.textContent = "[Status: Ready to generate.]";
+        statusElem.classList.remove("busy");
+        button.disabled = false;
+      }
+
+      // Note: Handling `submit` (rather than the button's `click`) lets the
+      // Enter key generate too, and `preventDefault()` stops the page reload.
+      document.getElementById("grid-form").addEventListener("submit", event => {
+        event.preventDefault();
+        generateGrid();
+      });
+
+      loadLgrs().then(() => {
+        statusElem.style.color = "green";
+        statusElem.textContent = "[Status: Ready to generate.]";
+        statusElem.classList.remove("busy");
+        button.disabled = false;
+      }).catch(e => {
+        console.error(e);
+        statusElem.textContent = "[Status: Failed to load the environment. See the browser console for details.]";
+        statusElem.classList.remove("busy");
+      });
+    </script>
+  </body>
+</html>

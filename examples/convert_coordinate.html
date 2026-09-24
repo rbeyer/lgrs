@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Convert a coordinate with lgrs</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v314.0.1/full/pyodide.js"></script>
+
+    <style>
+      .form-grid {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        column-gap: 1em;
+        row-gap: 0.5em;
+        align-items: center;
+      }
+
+      .form-grid h3,
+      .form-grid p,
+      .form-grid details,
+      .form-grid pre,
+      .form-grid hr {
+        grid-column: 1 / -1;
+      }
+
+      .form-grid h3 {
+        margin-top: 0;
+        margin-bottom: 0;
+      }
+
+      .form-grid p,
+      .form-grid details,
+      .form-grid input {
+        margin-top: 0;
+        margin-bottom: 0.5em;
+      }
+
+      .form-grid hr {
+        grid-column: 1 / -1;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .form-grid label {
+        justify-self: end;
+        text-align: right;
+      }
+
+      .form-grid input {
+        justify-self: start;
+      }    
+
+      button {
+        font-size: 16px;
+        padding: 12px 24px;
+      }
+
+      code {
+        white-space: pre;
+        display: block;
+      }
+
+      /* A small spinner before the status text while `#status` is busy. */
+      #status.busy::before {
+        content: "";
+        display: inline-block;
+        width: 0.9em;
+        height: 0.9em;
+        margin-right: 0.5em;
+        vertical-align: -0.1em;
+        border: 2px solid rgba(0, 0, 0, 0.2);
+        border-top-color: #333;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      details {
+        background-color: #FCFBF7;
+        border: 1px solid #E8E4D8;
+      }
+
+      details pre {
+        color: #4A4A4A;
+      }
+
+      #output-box {
+        width: 100%;
+        min-height: 3em;
+        resize: none;
+        box-sizing: border-box;
+        overflow: hidden;
+
+        color: #2F4F6F;
+        background-color: #F7F9FC;
+        border: 1px solid #D6DEE8;
+        padding: 0.75em;
+      }
+    </style>
+  </head>
+  <body>
+    <form id="conversion-form">
+      <div class="form-grid">
+
+        <h3>Step 1: Enter the coordinate to be converted. </h3>
+        <details>
+            <summary><i>A wide range of formats is supported. </i></summary>
+            <pre>
+        Because there is no universal standard for representing point
+        coordinates in a string, a wide variety of formats are supported,
+        including (but not limited to) the examples below. However, note that
+        only decimal degrees are supported for `LatLonPoint`.
+            `"45 120"` -> `LatLonPoint(45, 120)`
+            `"45.0° 120.0°"` -> `LatLonPoint(45.0, 120.0)`
+            `"-45.0° +120.0°"` -> `LatLonPoint(-45.0, 120.0)`
+            `"45.0°S, 120.0°W"` -> `LatLonPoint(-45.0, -120.0)`
+            `"N 500000 197819"` -> `LpsPoint("N", 500000, 197819)`
+            `"N 500000E 197819N"` -> `LpsPoint("N", 500000, 197819)`
+            `"N500000E197819N"` -> `LpsPoint("N", 500000, 197819)`
+            `"23 N 250000.0 0.0"` -> `LtmPoint(23, "N", 250000.0, 0.0)`
+            `"23 N 250000.0 E 0.0 N"` -> `LtmPoint(23, "N", 250000.0, 0.0)`
+            `"23N250000.0E0.0N"` -> `LtmPoint(23, "N", 250000.0, 0.0)`
+
+        When, and only when, cardinal directions are included, longitude-first
+        is also supported.
+            `"120 W 45 S"` -> `LatLonPoint(-45.0, -120.0)`
+
+        Conversely, the only deviation from the LGRS standard that is
+        accommodated for box coordinates is the inclusion of space delimiters.
+            `"AZS1359008480"` ->
+                `LpsLgrsBox("A", "Z", "S", "13590", "08480")`
+            `"AZS13590848"` ->
+                `LpsLgrsBox("A", "Z", "S", "1359", "0848")`
+            `"AZSN59H48"` ->
+                `LpsAccBox("A", "Z", "S", "N", "59", "H", "48")`
+            `"42SAM2468910101"` ->
+                `LtmLgrsBox(42, "S", "A", "M", "24689", "10101")`
+            `"42 S A M 24689 10101"` ->
+                `LtmLgrsBox(42, "S", "A", "M", "24689", "10101")`
+            `"42 SAM 24689 10101"` ->
+                `LtmLgrsBox(42, "S", "A", "M", "24689", "10101")`
+            </pre>
+        </details>
+
+        <label>Input coordinate:</label>
+        <input type="text" placeholder="example: 80 N, 4 E" name="input_coordinate">
+      
+        <p><i>If your coordinate is for an LGRS or ACC box, its reference (lower-left) corner will be used by default. Optionally, you can choose to have its center point used instead. </i></p>
+
+        <label>Use box center:</label>
+        <input type="checkbox" name="use_center">
+
+        <hr>
+
+        <h3>Step 2: Enter the precision, in meters. </h3>
+        <p><i>This is the same as the side length of each LGRS or ACC box. Supported precisions are 25 km, 1 km, 100 m, 10 m, and 1 m. If you specify an unsupported precision >1 m, it will be rounded down to the closest (finer) precision that is supported. A value &lt;1 m produces an error. </i></p>
+
+        <label>Precision (meters):</label>
+        <input type="number" step="any" name="precision">
+
+        <hr>
+
+        <h3>Step 3: Enter a JSON option or the target address in the structured tree. </h3>
+        <details>
+            <summary><i>For example, "json", "json_full", or "nominal.acc.string". </i></summary>
+            <pre>
+    Both `"json"` and `"json_full"` give JSON representations of the full 
+    conversion tree (described below). The difference is that each
+    coordinate in `"json"` is represented by a coordinate string only 
+    whereas in `"json_full"`, each coordinate is a JSON object with its own
+    elements. Alternatively, you can specify a value directly by giving its
+    path in the `"json"` or `"json_full"` tree, such as 
+    `"nominal.acc"`, `"nominal.acc.condensed"`, or `"forced.lps.string"`.
+
+    If you're curious to see what elements are available for targeting, just
+    generate an example with `"json"` or `"json_full"` and use that as your 
+    reference. (For example, try the input coordinate `"80 4"` to see a 
+    fully populated tree.) Note that when an unpopulated target is 
+    specified, `undefined` is returned, but a target that does not exist
+    (for example, because of a misspelling) produces an error.
+
+    For most locations, only one family among `lps`, `ltm_1`, and `ltm_2` is
+    populated. However, near zone boundaries, two or all three may be 
+    populated. When all families are relevant, the overall structure is as 
+    shown below. For easy reference, each attribute name representing a 
+    family is shown in square brackets (for example, `[nominal]`, even 
+    though the attribute name is `nominal`) and comments are shown in 
+    angle brackets:
+
+        GeoRelatives
+        ├── input_coordinate                   &lt;parsed input>
+        ├── precision                          &lt;same as input>
+        ├── extended_ltm                       &lt;same as input>
+        ├── use_center                         &lt;same as input>
+        ├── sort_by_center                     &lt;same as input>
+        ├── note                               &lt;same as input>
+        ├── latlon                             &lt;derived from input>
+        ├── [nominal]
+        │   ├── point: LpsPoint | LtmPoint     &lt;same location as `latlon`>
+        │   ├── lgrs: LpsLgrsBox | LtmLgrsBox  &lt;contains `latlon`>
+        │   ├── acc: LpsAccBox | LtmAccBox     &lt;contains `latlon`>
+        │   ├── corner: LpsPoint | LtmPoint    &lt;`lgrs`/`acc` lower-left corner>
+        │   └── center: LpsPoint | LtmPoint    &lt;`lgrs`/`acc` center>
+        ├── [lps]
+        │   ├── point: LpsPoint                &lt;same location as `latlon`>
+        │   ├── lgrs: LpsLgrsBox               &lt;contains `latlon`>
+        │   ├── acc: LpsAccBox                 &lt;contains `latlon`>
+        │   ├── corner: LpsPoint               &lt;`lgrs`/`acc` lower-left corner>
+        │   └── center: LpsPoint               &lt;`lgrs`/`acc` center>
+        ├── [ltm_1]
+        │   ├── point: LtmPoint                &lt;same location as `latlon`>
+        │   ├── lgrs: LtmLgrsBox               &lt;contains `latlon`>
+        │   ├── acc: LtmAccBox                 &lt;contains `latlon`>
+        │   ├── corner: LtmPoint               &lt;`lgrs`/`acc` lower-left corner>
+        │   └── center: LtmPoint               &lt;`lgrs`/`acc` center>
+        ├── [ltm_2]
+        │   ├── point: LtmPoint                &lt;same location as `latlon`>
+        │   ├── lgrs: LtmLgrsBox               &lt;contains `latlon`>
+        │   ├── acc: LtmAccBox                 &lt;contains `latlon`>
+        │   ├── corner: LtmPoint               &lt;`lgrs`/`acc` lower-left corner>
+        │   └── center: LtmPoint               &lt;`lgrs`/`acc` center>
+        └── [forced]
+            ├── lps: LpsPoint                  &lt;same location as `latlon`>
+            └── ltm: LtmPoint                  &lt;same location as `latlon`>
+
+            </pre>
+        </details>
+
+        <label>Target:</label>
+        <input type="text" value="json" name="target">
+
+        <hr>
+
+        <h3>Step 4: Modify advanced options. (optional) </h3>
+        <p><i>"Extended LTM" extends the Lunar Transverse Mercator (LTM) zones to 82° N/S instead of 80° N/S. "Sort by center" matters only near a boundary between two LTM zones, where a box in each zone can contain the coordinate: the second of the two (<code style="display: inline;">ltm_2</code>) is then the box whose center (checked) or reference corner (unchecked) is farther from the coordinate. "Custom note" is passed through to the output, as <code style="display: inline;">note</code>. </i></p>
+
+        <label>Extended LTM</label>
+        <input type="checkbox" name="extended_ltm">
+
+        <label>Sort by center</label>
+        <input type="checkbox" name="sort_by_center" checked>
+
+        <label>Custom note:</label>
+        <input type="text" name="note">
+
+        <hr>
+
+      </div>
+
+      <button id="convert-btn" disabled>Convert</button> <br>
+      <code id="status" class="busy" style="color: red;">[Status: Loading environment. Please wait...]</code>
+      <code id="prev-result"></code>
+
+      <hr>
+
+      <label>Output:</label>
+      <textarea id="output-box" wrap="off" readonly></textarea>
+
+    </form>
+
+    <script>
+      // Elements that report progress and results.
+      const statusElem = document.getElementById("status");
+      const button = document.getElementById("convert-btn");
+      const prevResultElem = document.getElementById("prev-result");
+      const outputBox = document.getElementById("output-box");
+
+      let pyodide;  // The Python runtime.
+      let lgrsJs;   // The `lgrs.js` Python module.
+
+      // ===== lgrs: BEGIN (setup) ============================================
+      // Start Python (via Pyodide), then install and import lgrs.
+      async function loadLgrs() {
+        pyodide = await loadPyodide();
+        await pyodide.loadPackage("micropip");
+        const micropip = pyodide.pyimport("micropip");
+        await micropip.install("lgrs==0.4.0");
+        lgrsJs = pyodide.pyimport("lgrs.js");
+      }
+      // ===== lgrs: END (setup) ==============================================
+
+      async function convertCoordinate() {
+        // Update user-facing status.
+        statusElem.style.color = "red";
+        statusElem.textContent = "[Status: Converting...]";
+        statusElem.classList.add("busy");
+        button.disabled = true;
+        prevResultElem.textContent = "";
+        // Note: Python blocks the page while it runs, so pause briefly to let
+        // the browser display the status above first.
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        try {
+          // ===== lgrs: BEGIN (conversion) =================================
+          // Read the form and call `lgrs.easy.convert_coordinate()`. Every form
+          // element whose `name` matches one of that function's arguments
+          // supplies the argument's value. (Checkboxes are booleans; elements
+          // with any other name are ignored.)
+          const result = lgrsJs.convert_coordinate_from_form("conversion-form");
+          // ===== lgrs: END (conversion) ===================================
+
+          prevResultElem.style.color = "green";
+          prevResultElem.textContent = "  ⌛ Previous coordinate conversion succeeded!";
+          outputBox.value = result;
+          outputBox.style.height = "0";
+          outputBox.style.height = `${outputBox.scrollHeight}px`;
+        }
+        catch (e) {
+          console.error(e);
+          // Note: A Python error has a `type`. Report only its message, not
+          // the full traceback.
+          let message = "<unknown, non-Python error>";
+          if (e.type !== undefined) {
+            message = await pyodide.runPython("import sys; str(sys.last_value)");
+          }
+          prevResultElem.style.color = "red";
+          prevResultElem.textContent = "  ⌛ Previous coordinate conversion failed with error message below. Check that inputs are complete and correct, then try again.\n       ";
+          const messageElem = document.createElement("i");
+          messageElem.textContent = message;  // Text, not HTML.
+          prevResultElem.appendChild(messageElem);
+        }
+
+        // Update user-facing status.
+        statusElem.style.color = "green";
+        statusElem.textContent = "[Status: Ready to convert.]";
+        statusElem.classList.remove("busy");
+        button.disabled = false;
+      }
+
+      // Note: Handling `submit` (rather than the button's `click`) lets the
+      // Enter key convert too, and `preventDefault()` stops the page reload.
+      document.getElementById("conversion-form").addEventListener("submit", event => {
+        event.preventDefault();
+        convertCoordinate();
+      });
+
+      loadLgrs().then(() => {
+        statusElem.style.color = "green";
+        statusElem.textContent = "[Status: Ready to convert.]";
+        statusElem.classList.remove("busy");
+        button.disabled = false;
+      }).catch(e => {
+        console.error(e);
+        statusElem.textContent = "[Status: Failed to load the environment. See the browser console for details.]";
+        statusElem.classList.remove("busy");
+      });
+    </script>
+  </body>
+</html>
