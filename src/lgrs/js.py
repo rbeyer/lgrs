@@ -204,7 +204,8 @@ def convert_coordinate(
         A JavaScript proxy of the `GeoRelatives` instance (if `target` is not
         specified) or whatever object is targeted by `target`. In the latter
         case, a JavaScript-native counterpart, rather than a proxy, is returned
-        if possible.
+        if possible. If `target` is interrupted by `None`, JavaScript receives
+        `undefined`.
 
     Warnings
     --------
@@ -220,12 +221,14 @@ def convert_coordinate(
 
     Examples
     --------
-    In JavaScript::
+    In JavaScript, where ``lgrsJs`` is ``pyodide.pyimport("lgrs.js")``::
 
         // Convert a geographic coordinate to its LGRS string.
         const in_coord = "80 N, 0 E";
         const kwargs = { precision: 1, target: "nominal.lgrs.string" };
-        const lgrs_string = convert_coordinate.callKwargs(in_coord, kwargs);
+        const lgrs_string = lgrsJs.convert_coordinate.callKwargs(
+            in_coord, kwargs
+        );
     """
     full_kwargs = _coerce_kwargs(locals(), _easy.convert_coordinate)
     del full_kwargs["deserialize"]
@@ -318,11 +321,11 @@ def make_box_grid(
 
     Examples
     --------
-    In JavaScript::
+    In JavaScript, where ``lgrsJs`` is ``pyodide.pyimport("lgrs.js")``::
 
         // Create grid as array of boxes.
-        const bounds = {1, 1, 2, 2, "IAU_2015:30100}";
-        const boxes = make_box_grid(bounds, 25_000);
+        const bounds = [1, 1, 2, 2, "IAU_2015:30100"];
+        const boxes = lgrsJs.make_box_grid(bounds, 25_000);
 
         // Print LGRS reference for first box.
         console.log(boxes[0].string);
@@ -362,16 +365,16 @@ def make_gdfs(
 
     Examples
     --------
-    In JavaScript::
+    In JavaScript, where ``lgrsJs`` is ``pyodide.pyimport("lgrs.js")``::
 
         // Create grid as an array of `geopandas.GeoDataFrame` instances.
-        const bounds = {1, 1, 2, 2, "IAU_2015:30100}";
-        const boxes = make_box_grid(bounds, 25_000);
-        const gdfs = make_gdfs(boxes);
+        const bounds = [1, 1, 2, 2, "IAU_2015:30100"];
+        const boxes = lgrsJs.make_box_grid(bounds, 25_000);
+        const gdfs = lgrsJs.make_gdfs(boxes);
 
         // Print LGRS reference for first box of first gdf.
         const gdf = gdfs[0];
-        console.log(gdf.iloc[0]["string"]);
+        console.log(gdf.iloc.get(0).get("string"));
     """
     gdfs = _coerce_kwargs(locals(), _grid.make_gdfs, call=True)
     return gdfs
@@ -396,14 +399,14 @@ def make_lunar_wkt(name: str | None = None, **kwargs: _typing.Any) -> str:
 
     Examples
     --------
-    In JavaScript::
+    In JavaScript, where ``lgrsJs`` is ``pyodide.pyimport("lgrs.js")``::
 
         // Get the WKT of the CRS for LTM zone 23, Northern Hemisphere.
-        const wkt = make_lunar_wkt("LTM 23N");
+        const wkt = lgrsJs.make_lunar_wkt("LTM 23N");
 
         // Equivalently, by component.
         const kwargs = { proj: "LTM", zone: 23, south: false };
-        const wkt2 = make_lunar_wkt.callKwargs(kwargs);
+        const wkt2 = lgrsJs.make_lunar_wkt.callKwargs(kwargs);
     """
     wkt = _coerce_kwargs(
         locals(),
@@ -447,9 +450,9 @@ def package_grid(
             (9) component keywords
                 If `bounds` is not specified directly, it is populated by
                 other expected keyword arguments thusly:
-                    ``[left, botton, right, top, crs]``
+                    ``[left, bottom, right, top, crs]``
     precision : float or string
-        If specified as a sting, `precision` is coerced to a number.
+        If specified as a string, `precision` is coerced to a number.
     out_name : string or None, default=None
         The output name, equivalent to the final path component of
         `out_path` in `lgrs.easy.write_grid()`.
@@ -478,19 +481,19 @@ def package_grid(
 
     Examples
     --------
-    In JavaScript::
+    In JavaScript, where ``lgrsJs`` is ``pyodide.pyimport("lgrs.js")``::
 
         // Create multi-layer grid object.
-        const bounds = {1, 1, 2, 2, "IAU_2015:30100}";
-        const multiLyrObj = package_grid(bounds, "25000");
+        const bounds = [1, 1, 2, 2, "IAU_2015:30100"];
+        const multiLyrObj = lgrsJs.package_grid(bounds, "25000");
 
         // Print LGRS reference for first box of first layer.
-        const lyrObj = Object.values(gridObj)[0];
+        const lyrObj = Object.values(multiLyrObj)[0];
         const feature = lyrObj.features[0];
         console.log(feature.properties.string);
 
         // Instead package grid to multi-layer GeoPackage and download.
-        package_grid(bounds, 25_000, "out.gpkg|layer={}");
+        lgrsJs.package_grid(bounds, 25_000, "out.gpkg|layer={}");
     """
     # Standardize argument values.
     if precision is None:
