@@ -28,6 +28,57 @@ and the release date, in year-month-day format (see examples below).
 Unreleased
 ----------
 
+Added
+^^^^^
+* CLI support for critical functionality, including coordinate conversion, grid
+  generation, and WKT generation. A bare ``lgrs`` in a terminal will show
+  available commands. (Backed by the ``lgrs.cli`` module.)
+* JavaScript support for critical functionality, including coordinate
+  conversion, grid generation, WKT generation, and more. See ``lgrs.js`` module.
+* Easy coordinate conversion via ``lgrs.easy.convert_coordinate()``.
+* Support for (direct) WKT generation via ``lgrs.make_lunar_wkt()``. WKT content
+  is also improved to be fully standards compliant and consistent with community
+  practice.
+* Direct access to a useful name placeholder via ``LunarCrsInfo.hint``.
+* Granular control of coordinate caching via
+  ``BaseCoordinate.uncache_cousin_group()``.
+
+Changed
+^^^^^^^
+* ``lgrs.coords`` string parsing now accepts more forms, including
+  longitude-first geographic strings, while geographic string parsing is
+  tightened elsewhere to reduce misreads.
+* The ``mode`` argument of ``lgrs.easy.write_grid()`` and the corresponding
+  CLI command is now positional rather than keyword-only.
+* ``lgrs.grid.make_box_grid()`` and ``lgrs.easy.write_grid()`` expand ``~``
+  in path-like ``bounds``.
+* Error reporting is more informative across ``lgrs.bounds``,
+  ``lgrs.coords``, ``lgrs.easy`` and ``lgrs.js``, including chained causes
+  for failed vector/raster reads.
+* Documentation has been substantially expanded and corrected throughout the
+  library, most notably for ``lgrs.easy.write_grid()``, ``lgrs.grid``,
+  ``lgrs.coords`` ``precision`` arguments, and the ``lgrs.cli`` command help.
+
+Removed
+^^^^^^^
+* ``lgrs.transformer`` module. Transformer caching is handled within
+  ``lgrs.caching``.
+* ``lgrs.database.SRSInfo`` stub.
+* Geodesic functions in ``lgrs.values``.
+* Unused members of ``lgrs.exceptions``.
+
+Fixed
+^^^^^
+* Valid latitude bounds are now correct in ``lgrs.coords``.
+* Zone boundary nudging in ``lgrs.bounds`` is corrected, along with a
+  bounds-order typo and a wrong path.
+* ``lgrs.grid`` now preserves ``name_hint``.
+* ``lgrs.database`` accepts a broader range of numeric types.
+* ``lgrs.js`` returns the correct output type and no longer raises a confusing
+  error on unrecognized keyword arguments.
+* Doctests in ``lgrs.util`` are no longer Python-version dependent.
+
+
 0.3.0 (2026-06-25)
 ------------------
 
