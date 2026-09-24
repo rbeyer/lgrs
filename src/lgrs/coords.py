@@ -2447,7 +2447,9 @@ class PointCoordinate(BaseCoordinate):
             "([-0-9.]+)(?:[^-0-9.]+)([-0-9.]+)(?:[^-0-9.]*)$", spaced_str
         )
         if xy_coords_match is None:
-            raise TypeError(f"Could not parse: {string!r}")
+            raise _exceptions.MalformedCoordinate(
+                f"Could not parse: {string!r}"
+            )
         xy_coords_suffix = xy_coords_match.group()
         prefix = spaced_str.removesuffix(xy_coords_suffix)
 
