@@ -887,7 +887,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.Exceptions.MalformedCoordinate
+        lgrs.exceptions.MalformedCoordinate
             If `string` cannot be parsed to a valid coordinate instance.
 
         Warnings
@@ -911,7 +911,7 @@ class BaseCoordinate(_BaseCoordinate):
             ``"N500000E197819N"`` -> ``LpsPoint("N", 500000, 197819)``
             ``"23 N 250000.0 0.0"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)``
             ``"23 N 250000.0 E 0.0 N"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)``
-            ``"23N250000.0E0.0N"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)`
+            ``"23N250000.0E0.0N"`` -> ``LtmPoint(23, "N", 250000.0, 0.0)``
 
         When, and only when, cardinal directions are included, longitude-first
         is also supported.
@@ -926,11 +926,11 @@ class BaseCoordinate(_BaseCoordinate):
             ``"AZSN59H48"`` ->
                 ``LpsAccBox("A", "Z", "S", "N", "59", "H", "48")``
             ``"42SAM2468910101"`` ->
-                ``LtmLgrsBox(42, "S" "A", "M", "24689", "10101")``
+                ``LtmLgrsBox(42, "S", "A", "M", "24689", "10101")``
             ``"42 S A M 24689 10101"`` ->
-                ``LtmLgrsBox(42, "S" "A", "M", "24689", "10101")``
+                ``LtmLgrsBox(42, "S", "A", "M", "24689", "10101")``
             ``"42 SAM 24689 10101"`` ->
-                ``LtmLgrsBox(42, "S" "A", "M", "24689", "10101")``
+                ``LtmLgrsBox(42, "S", "A", "M", "24689", "10101")``
 
         Examples
         --------
@@ -1255,7 +1255,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.Exceptions.MalformedCoordinate
+        lgrs.exceptions.MalformedCoordinate
             If the instance is invalid. Unlike at-initialization validation,
             an instance is considered invalid even if its values are merely
             not conformed. See Examples.
@@ -1644,7 +1644,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.Exceptions.MalformedCoordinate
+        lgrs.exceptions.MalformedCoordinate
             If `replaced` would be invalid and `validate` is `True`.
 
         Examples
@@ -1933,7 +1933,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.Exceptions.MalformedCoordinate
+        lgrs.exceptions.MalformedCoordinate
             If `any_system=False` and the system of `typ` is incompatible with
             `self`.
 
@@ -2025,7 +2025,7 @@ class BaseCoordinate(_BaseCoordinate):
             side length of the box. If not specified, defaults to 1 if `self`
             is a point else `self.precision`. If the specified precision is not
             a supported precision, the actual precision is rounded down to a
-            better precision.
+            better precision. Must be at least 1.
         validate : bool, optional
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
@@ -2108,7 +2108,7 @@ class BaseCoordinate(_BaseCoordinate):
             side length of the box. If not specified, defaults to 1 if `self`
             is a point else `self.precision`. If the specified precision is not
             a supported precision, the actual precision is rounded down to a
-            better precision.
+            better precision. Must be at least 1.
         validate : bool, optional
             Whether to fully validate the transformed coordinate. If `False`,
             no validation is performed. If not specified (or `None`), whatever
@@ -2174,7 +2174,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.Exceptions.MalformedCoordinate
+        lgrs.exceptions.MalformedCoordinate
             If `constraints` are incompatible with `LpsPoint` for this
             location, and `search` is `False`.
 
@@ -2301,7 +2301,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.Exceptions.MalformedCoordinate
+        lgrs.exceptions.MalformedCoordinate
             If `constraints` are incompatible with `LtmPoint` for this
             location, and `search` is `False`.
 
@@ -2805,7 +2805,7 @@ class PointCoordinate(BaseCoordinate):
             specified, defaults to 1 if `self` is a point else
             `self.precision`. If the specified precision is not a supported
             precision, the actual precision is rounded down to a better
-            precision.
+            precision. Must be at least 1.
         validate : bool | None
             Whether to fully validate each box in `boxes`. If `False`, no
             validation is performed. If not specified (or `None`), whatever
@@ -2951,7 +2951,7 @@ class LatLonPoint(PointCoordinate):
 
     Raises
     ------
-    lgrs.Exceptions.MalformedCoordinate
+    lgrs.exceptions.MalformedCoordinate
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -3110,7 +3110,7 @@ class LpsPoint(PointCoordinate):
 
     Raises
     ------
-    lgrs.Exceptions.MalformedCoordinate
+    lgrs.exceptions.MalformedCoordinate
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -3231,7 +3231,7 @@ class LtmPoint(PointCoordinate):
 
     Raises
     ------
-    lgrs.Exceptions.MalformedCoordinate
+    lgrs.exceptions.MalformedCoordinate
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -3764,7 +3764,8 @@ class BoxCoordinate(BaseCoordinate):
         precision : float
             The maximum allowed value of `out.precision`, which is the nominal
             side length of the box. If not a supported precision, the actual
-            precision is rounded down to a better precision.
+            precision is rounded down to a better precision. Must be at least
+            1.
         copy : bool, default=False
             Whether to ensure that `out` is not `self`. If `False` and `self`
             is suitable, it is returned as `out`.
@@ -3980,7 +3981,7 @@ class LpsAccBox(_BaseAccBox):
 
     Raises
     ------
-    lgrs.Exceptions.MalformedCoordinate
+    lgrs.exceptions.MalformedCoordinate
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -4126,7 +4127,7 @@ class LpsLgrsBox(_BaseLgrsBox):
 
     Raises
     ------
-    lgrs.Exceptions.MalformedCoordinate
+    lgrs.exceptions.MalformedCoordinate
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -4291,7 +4292,7 @@ class LtmAccBox(_BaseAccBox):
 
     Raises
     ------
-    lgrs.Exceptions.MalformedCoordinate
+    lgrs.exceptions.MalformedCoordinate
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -4405,7 +4406,7 @@ class LtmLgrsBox(_BaseLgrsBox):
 
     Raises
     ------
-    lgrs.Exceptions.MalformedCoordinate
+    lgrs.exceptions.MalformedCoordinate
         If the instance is invalid. Both values and constraints are
         considered.
 
