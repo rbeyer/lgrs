@@ -93,7 +93,9 @@ def _coerce_kwargs(
             )
         else:
             continue
-        if targ_type is not None and not isinstance(coerced_val, targ_type):
+        # TODO: Determine whether `beartype` or other option restores
+        #  type-checking.
+        if targ_type is not None and not _is_instance(coerced_val, targ_type):
             raise TypeError(f"`{name}` does not support: {coerced_val!r}")
         new_kwargs[name] = coerced_val
     kwargs.update(new_kwargs)
@@ -131,6 +133,17 @@ def _get_type_hints(
                 continue
             cum_name_to_type[name] = typ
     return cum_name_to_type
+
+
+def _is_instance(val: _typing.Any, typ: _typing.Any) -> bool:
+    # Note: If `typ` is not a class (such as `typing.Any` or a
+    # parameterized generic like `Sequence[X]`), `isinstance()` raises
+    # `TypeError`. In that case, report `val` as valid, leaving its
+    # validation to the wrapped function.
+    try:
+        return isinstance(val, typ)
+    except TypeError:
+        return True
 
 
 def _read_form_to_kwargs(
