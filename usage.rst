@@ -22,7 +22,7 @@ The *lgrs* library provides the ability convert between multiple kinds of
 point coordinates and grid boxes. You're probably familiar with point
 coordinates like latitude/longitude or easting/northing, but the LGRS uses the
 concept of a grid of boxes, and the conversions *lgrs* provides allow a user
-a user to start with a point coordinate and find out what LGRS (or ACC) grid box
+to start with a point coordinate and find out what LGRS (or ACC) grid box
 that point falls within.
 
 Likewise, if you have the name of an LGRS or ACC grid box, and want to know the
@@ -43,7 +43,9 @@ How would you do it via *pyproj*?  Like this::
 
     # Set up the CRS objects:
     >>> lonlat_crs = CRS.from_proj4("+proj=longlat +R=1737400")
-    >>> ltm_crs = CRS.from_proj4("+proj=tmerc +R=1737400 +lon_0=0 +lat_0=0 +k_0=0.999 +x_0=250000")
+    >>> ltm_crs = CRS.from_proj4(
+    ...    "+proj=tmerc +R=1737400 +lon_0=0 +lat_0=0 +k_0=0.999 +x_0=250000"
+    ... )
     >>> lps_south_crs = CRS.from_proj4(
     ...    "+proj=stere +R=1737400 +lat_0=-90 +k_0=0.994 +x_0=500000 +y_0=500000"
     ... )
@@ -113,15 +115,72 @@ help with those kinds of conversions with *pyproj*::
     >>> from pyproj import CRS, Transformer
     >>> from lgrs import make_lunar_crs
 
-    >>> polar_stereographic_crs = CRS.from_proj4("+proj=stere +R=1737400 +lat_0=-90")
+    # The IAU_2015 authority in the PROJ database defines this polar
+    # stereographic CRS (code 30135 is south; 30130 is north).
+    >>> polar_stereographic_crs = CRS.from_user_input("IAU_2015:30135")
     >>> lps_crs = make_lunar_crs("S")
 
     >>> polar_to_lps = Transformer.from_crs(polar_stereographic_crs, lps_crs)
     >>> polar_to_lps.transform(0, 0)
     (500000.0, 500000.0)
 
+If you would rather see the projection parameters, the same CRS can be written
+as a PROJ string, and it gives the same result::
+
+    >>> proj_string_crs = CRS.from_proj4("+proj=stere +R=1737400 +lat_0=-90")
+    >>> proj_string_to_lps = Transformer.from_crs(proj_string_crs, lps_crs)
+    >>> from_proj_string = proj_string_to_lps.transform(1000, 2000)
+    >>> from_authority = polar_to_lps.transform(1000, 2000)
+    >>> from_proj_string == from_authority
+    True
+
 The ``make_lunar_crs()`` function can make *pyproj* CRSes for north and south
-LPS, as well as all the zones of LTM, and more.
+LPS, as well as all the zones of LTM, and more. To get the *WKT* definition of
+any of these CRSes (for example, to hand to software that does not use
+*pyproj*), use ``make_lunar_wkt()``, which takes the same arguments::
+
+    >>> from lgrs import make_lunar_wkt
+
+    >>> wkt = make_lunar_wkt("S")
+    >>> wkt.splitlines()[0]
+    'PROJCRS["Moon (2015) - Sphere / Ocentric / LPS South",'
+    >>> make_lunar_wkt("23N").splitlines()[0]
+    'PROJCRS["Moon (2015) - Sphere / Ocentric / LTM 23N",'
+
+
+Finding the CRS for a location
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you have a location and want to know which LPS region or LTM zone contains
+it, use ``query_lunar_crs_info()``. It returns a list of information objects,
+one per matching CRS::
+
+    >>> from lgrs import query_lunar_crs_info
+
+    >>> infos = query_lunar_crs_info(latitude=-86, longitude=30)
+    >>> [info.name for info in infos]
+    ['IAU_2015:30100 / LPS South']
+
+    # The ``hint`` is the short name that ``make_lunar_crs()`` also accepts,
+    # so it can be used to make the CRS itself.
+    >>> [info.hint for info in infos]
+    ['S']
+    >>> infos[0].get_crs().equals(make_lunar_crs(infos[0].hint))
+    True
+
+    # By default, each location matches exactly one CRS. Along the boundary
+    # between LPS and LTM (here at 80 degrees N), ``inclusive_bounds=True``
+    # returns both.
+    >>> boundary_infos = query_lunar_crs_info(
+    ...     latitude=80, longitude=0, inclusive_bounds=True
+    ... )
+    >>> [info.hint for info in boundary_infos]
+    ['N', '23N']
+
+    # Without any location, the query returns every CRS, which is a quick way
+    # to see how many LPS regions and LTM zones there are.
+    >>> len(query_lunar_crs_info())
+    92
 
 
 Conversion of points to grid boxes
@@ -157,11 +216,15 @@ grids).
 By default, this coordinate falls in the LPS zone, but if you use
 ``extended_ltm=True``, you can force an LTM zone::
 
-    >>> overlap_geo_point = LatLonPoint(latitude=-81.13048481, longitude=96.48515138)
+    >>> overlap_geo_point = LatLonPoint(
+    ...     latitude=-81.13048481, longitude=96.48515138
+    ... )
     >>> overlap_geo_point.to_lgrs()
     LpsLgrsBox(longitudinal_band='B', easting_area='L', northing_area='L', easting='16160', northing='19744', constraints=Constraints())
 
-    >>> constrained_geo_point = overlap_geo_point.replace(constraints=Constraints(extended_ltm=True))
+    >>> constrained_geo_point = overlap_geo_point.replace(
+    ...     constraints=Constraints(extended_ltm=True)
+    ... )
     >>> constrained_geo_point.to_lgrs()
     LtmLgrsBox(longitudinal_band=35, latitudinal_band='C', easting_area='F', northing_area='G', easting='02265', northing='17302', constraints=Constraints(extended_ltm=True))
 
@@ -171,7 +234,8 @@ go there directly)::
     >>> grid_converted.to_acc()
     LtmAccBox(longitudinal_band=35, latitudinal_band='J', easting_area='F', northing_area='J', easting_1k='M', easting='711', northing_1k='M', northing='229', constraints=Constraints())
 
-    >>> str(geo_point.to_acc())  # Straight from a lat/lon coordinate, but same result as above.
+    # Straight from a lat/lon coordinate, but same result as above.
+    >>> str(geo_point.to_acc())
     '35JFJM711M229'
 
     >>> polar_grid_converted.to_acc()
@@ -193,8 +257,41 @@ following::
     LatLonPoint(latitude=-86.0000149160353, longitude=29.9999496588117, constraints=Constraints())
 
 
+Converting a coordinate every way at once
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The examples above call one conversion at a time. If you would rather hand
+over any point or box (as a string, if you like) and pick out whichever
+results you need, use ``lgrs.easy.convert_coordinate()``::
+
+    >>> from lgrs.easy import convert_coordinate
+
+    # The input string is parsed for you, so no coordinate class is needed.
+    >>> convert_coordinate("80 N, 0 E", precision=1, target="latlon")
+    LatLonPoint(latitude=80, longitude=0, constraints=Constraints())
+
+    # The LGRS box (here 1 m wide) that contains the point:
+    >>> convert_coordinate("80 N, 0 E", precision=1, target="nominal.lgrs.string")
+    'ZA-0000022818'
+
+    # Each ``target`` is a chain of attributes on a ``GeoRelatives`` object,
+    # which you can also request whole (by omitting ``target``) and explore.
+    >>> relatives = convert_coordinate("80 N, 0 E", precision=1)
+    >>> relatives.nominal.acc.string
+    'ZA--000X818'
+
+    # Not every coordinate has every relative. A point at exactly 80 degrees N
+    # is valid in both LPS and LTM, but not in a second LTM zone. A chain that
+    # runs into such a gap returns ``None`` rather than raising an error.
+    >>> relatives.lps is not None and relatives.ltm_1 is not None
+    True
+    >>> relatives.get("ltm_2.lgrs.string") is None
+    True
+
+
 Working with Grid Boxes
 -----------------------
+
 The *lgrs* library also supports convenient access to information and
 operations specific to grid boxes::
 
@@ -222,19 +319,24 @@ operations specific to grid boxes::
 
 Generating LGRS and ACC grids
 -----------------------------
+
 To generate a grid of LGRS or ACC boxes::
 
     # Create a global grid of 25-km ACC boxes.
     >>> from lgrs import GeographicBounds, write_grid
     >>> global_bounds = GeographicBounds(-180, -90, 180, 90)  # doctest: +SKIP
-    >>> write_grid(global_bounds, 25_000, "~/grids/global.gpkg|layer={}", acc=True)  # doctest: +SKIP
+    >>> write_grid(
+    ...     global_bounds, 25_000, "~/grids/global.gpkg|layer={}", acc=True
+    ... )  # doctest: +SKIP
 
     # Specifically, the above example writes out a single GeoPackage (.gpkg
     # file) with 92 layers, each of which represents an LTM zone or LPS polar
     # region and has an automatically generated, unique layer name in place of
     # the "{}" placeholder. To instead write the same grids to Esri shapefiles,
     # each with the prefix "global":
-    >>> write_grid(global_bounds, 25_000, "~/grids/global_{}.shp", acc=True)  # doctest: +SKIP
+    >>> write_grid(
+    ...     global_bounds, 25_000, "~/grids/global_{}.shp", acc=True
+    ... )  # doctest: +SKIP
 
 
 For your convenience, the *lgrs* library provides several ways to define the
@@ -243,10 +345,16 @@ bounds of the grid::
     # Imagine that you want to generate 100-m LGRS boxes that cover the
     # footprint of a GeoTiff called "crater.tif" and output the grid as one or
     # more GeoJSON files (one per CRS).
-    >>> write_grid(r"C:\geotiffs\crater.tif", 100, r"C:\grids\crater_{}.json")  # doctest: +SKIP
+    >>> write_grid(
+    ...     r"C:\geotiffs\crater.tif", 100, r"C:\grids\crater_{}.json"
+    ... )  # doctest: +SKIP
 
     # The process is similar for using the footprint of vector data.
-    >>> write_grid("~/vector/sites.gpkg|layer=shackleton", 100, "~/grids/shackleton.gpkg|layer=new_{}")  # doctest: +SKIP
+    >>> write_grid(
+    ...     "~/vector/sites.gpkg|layer=shackleton",
+    ...     100,
+    ...     "~/grids/shackleton.gpkg|layer=new_{}",
+    ... )  # doctest: +SKIP
 
     # You can also generate boxes across an entire LPS region or LTM zone. For
     # example, to generate 25-km ACC boxes across the south polar region:
@@ -278,7 +386,29 @@ If you need finer control, you can use the lower-level ``grid`` module::
     ...     gdf.to_file("~/grids/aoi.gpkg")  # doctest: +SKIP
     ... else:
     ...     for gdf in gdfs:
-    ...         gdf.to_file(f"~/grids/aoi.gpkg|layer={gdf.name_hint}")  # doctest: +SKIP
+    ...         gdf.to_file(
+    ...             f"~/grids/aoi.gpkg|layer={gdf.name_hint}"
+    ...         )  # doctest: +SKIP
+
+
+Command line
+------------
+
+The most common operations are also available from a terminal, through the
+``lgrs`` program. (These commands are not automatically tested, unlike the
+Python examples above, so please report any that fail.) A bare ``lgrs`` lists
+the available commands, and ``--help`` after any command describes its
+arguments::
+
+    $ lgrs convert-coordinate "80 N, 0 E" 1 --target nominal.lgrs.string
+    ZA-0000022818
+
+    $ lgrs make-lunar-wkt --name "LTM 23N"
+
+    $ lgrs write-grid "(3, 4, 5, 6)" 1000 "~/grids/grid_1.gpkg|layer={}" --acc
+
+These correspond to ``convert_coordinate()``, ``make_lunar_wkt()``, and
+``write_grid()`` above.
 
 
 Not yet implemented
@@ -287,5 +417,3 @@ Not yet implemented
 Coming soon!
 
 - Output of LGRS and ACC grids as lines or points.
-
-- An lgrs command line program (for easy command line access).
