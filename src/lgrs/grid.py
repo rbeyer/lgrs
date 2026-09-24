@@ -311,6 +311,11 @@ def make_box_grid(
     boxes : list of lgrs.coords.BoxCoordinate instances
         A flat list of boxes. LPS and LTM boxes may be commingled.
 
+    Raises
+    ------
+    TypeError
+        If `precision` is less than 1.
+
     Warnings
     --------
     In the current implementation, the `True` option for `min_zones` has no
