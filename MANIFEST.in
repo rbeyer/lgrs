@@ -3,7 +3,10 @@ include CHANGELOG.rst
 include CONTRIBUTING.rst
 include LICENSE
 include README.rst
+include usage.rst
+include usage_js.rst
 
+recursive-include examples *.html
 recursive-include tests *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
