@@ -240,6 +240,11 @@ class GeoRelatives:
         Similar to `json` but created by calling
         `.to_json(use_objects=True)`.
 
+    Raises
+    ------
+    TypeError
+        If `precision` is less than 1 and a box member is derived.
+
     Notes
     -----
     For most locations, only one family among `lps`, `ltm_1`, and `ltm_2` is
