@@ -184,7 +184,8 @@ class GeoRelatives:
     precision : float
         The maximum allowed nominal side length of each box member. If not a
         supported precision, the actual precision is rounded down to a
-        better precision.
+        better precision. Must be at least 1, or an error is raised when a box
+        member is derived.
     extended_ltm : bool, default=False
         Whether to use the extended LTM region, which extends to 82° N/S
         instead of 80° N/S.
@@ -254,8 +255,9 @@ class GeoRelatives:
         ├── precision                          <same as input>
         ├── extended_ltm                       <same as input>
         ├── use_center                         <same as input>
-        ├── latlon                             <derived from input>
+        ├── sort_by_center                     <same as input>
         ├── note                               <same as input>
+        ├── latlon                             <derived from input>
         ├── [nominal]
         │   ├── point: LpsPoint | LtmPoint     <same location as `latlon`>
         │   ├── lgrs: LpsLgrsBox | LtmLgrsBox  <contains `latlon`>
@@ -452,10 +454,12 @@ class GeoRelatives:
         """
         Safely get any attribute chain from `self`.
 
-        When an attribute chain first encounters `None`, the remaining
-        chained attributes are ignored and `None` is returned. This makes
-        it a little easier to work with attribute chains in which the final
-        attribute, or one of its ancestors, does not exist. See Examples.
+        When an attribute chain first encounters `None`, the remaining chained
+        attributes are ignored and `None` is returned. This makes it a little
+        easier to work with attribute chains in which the final attribute, or
+        one of its ancestors, is unpopulated (that is, `None`). A chain that
+        names a nonexistent attribute still raises an `AttributeError`. See
+        Examples.
 
         Parameters
         ----------
@@ -467,6 +471,11 @@ class GeoRelatives:
         -------
         value : typing.Any
             The value at `address` or `None`, if `None` was encountered.
+
+        Raises
+        ------
+        AttributeError
+            If `address` names an attribute that does not exist.
 
         Examples
         --------
@@ -670,7 +679,9 @@ def convert_coordinate(
         `GeoRelatives` instance whose value should be returned, such as
         `"json"`, `"nominal.lgrs"`, or `"forced.lps.northing"`. Internally,
         uses ``GeoRelatives.get(target)``, so that chains that may be
-        interrupted by `None` can be safely used. See Examples.
+        interrupted by `None` can be safely used. A chain that names a
+        nonexistent attribute (for example, by a misspelling) raises an
+        `AttributeError`. See Examples.
 
     Returns
     -------
