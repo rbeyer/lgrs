@@ -79,6 +79,20 @@ filename = "src/lgrs/__init__.py"
 search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
 
+[[tool.bumpversion.files]]
+filename = "examples/convert_coordinate.html"
+search = 'lgrs==[^"]+'
+replace = 'lgrs=={new_version}'
+regex = true
+include_bumps = ["release"]
+
+[[tool.bumpversion.files]]
+filename = "examples/package_grid.html"
+search = 'lgrs==[^"]+'
+replace = 'lgrs=={new_version}'
+regex = true
+include_bumps = ["release"]
+
 [tool.black]
 line-length = 79
 force-exclude = "LGRS"
