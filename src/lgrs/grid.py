@@ -263,7 +263,8 @@ def make_box_grid(
     precision : float
         The maximum allowed precision, which is the nominal side length of
         each grid box. If not a supported precision, the actual precision is
-        rounded down to a better precision. All boxes have the same precision.
+        rounded down to a better precision. Must be at least 1. All boxes have
+        the same precision.
     acc : bool, default=False
         Whether to use Artemis Condensed Coordinates (ACC) rather than the
         standard Lunar Grid Reference System (LGRS). The geometry of the
