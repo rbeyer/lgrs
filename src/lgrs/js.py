@@ -43,6 +43,7 @@ else:
 import lgrs.coords as _coords
 import lgrs.easy as _easy
 import lgrs.grid as _grid
+import lgrs.srs.srs as _srs
 import lgrs.util as _util
 import lgrs.values as _values
 
@@ -53,6 +54,13 @@ import lgrs.values as _values
 _bounds_numeric_name_to_type = {
     name: float for name in ("left", "bottom", "right", "top")
 }
+
+# Note: `_coerce_kwargs()` converts a value only when its type hint is
+# exactly `int` or `float`, and `make_lunar_wkt()` declares `zone` as
+# `int | None`. This mapping supplies the bare type, so that a string
+# such as "23" is converted.
+# TODO: Fix this more elegantly.
+_wkt_numeric_name_to_type = {"zone": int}
 
 
 def _coerce_kwargs(
@@ -354,6 +362,43 @@ def make_gdfs(
     """
     gdfs = _coerce_kwargs(locals(), _grid.make_gdfs, call=True)
     return gdfs
+
+
+@_util.partially_wraps(_srs.make_lunar_wkt, exclude=("Returns",))
+def make_lunar_wkt(name: str | None = None, **kwargs: _typing.Any) -> str:
+    """
+    Return LPS or LTM zone WKT.
+
+    This function wraps, and is identical to, `lgrs.make_lunar_wkt()`
+    except as noted herein.
+
+    Arguments representing a single numeric value may be passed as strings
+    (such as `"23"`) and will be coerced. Empty strings are replaced with
+    `None`.
+
+    Returns
+    -------
+    wkt : str
+        The LPS/LTM zone or geographic WKT.
+
+    Examples
+    --------
+    In JavaScript::
+
+        // Get the WKT of the CRS for LTM zone 23, Northern Hemisphere.
+        const wkt = make_lunar_wkt("LTM 23N");
+
+        // Equivalently, by component.
+        const kwargs = { proj: "LTM", zone: 23, south: false };
+        const wkt2 = make_lunar_wkt.callKwargs(kwargs);
+    """
+    wkt = _coerce_kwargs(
+        locals(),
+        _srs.make_lunar_wkt,
+        seed=_wkt_numeric_name_to_type,
+        call=True,
+    )
+    return wkt
 
 
 @_util.partially_wraps(_easy.write_grid, exclude=("out_path",))
