@@ -2038,6 +2038,11 @@ class BaseCoordinate(_BaseCoordinate):
         out : LpsAccBox or LtmAccBox
             The transformed coordinate. If `self` is compatible, `self` is
             returned. If caching is enabled, a cached instance may be returned.
+
+        Raises
+        ------
+        TypeError
+            If `precision` is less than 1.
         """
         return self._get_cached_or_create(
             self._to_acc,
@@ -2121,6 +2126,11 @@ class BaseCoordinate(_BaseCoordinate):
         out : LpsLgrsBox or LtmLgrsBox
             The transformed coordinate. If `self` is compatible, `self` is
             returned. If caching is enabled, a cached instance may be returned.
+
+        Raises
+        ------
+        TypeError
+            If `precision` is less than 1.
         """
         return self._get_cached_or_create(
             self._to_lgrs,
@@ -2820,6 +2830,11 @@ class PointCoordinate(BaseCoordinate):
             `extended_ltm`. The maximum length of `boxes` is 3, and it may
             contain, at most, 1 `LpsLgrsBox` and 2 `LtmLgrsBox` instances. The
             `LpsLgrsBox` instance, if present, is ``boxes[0]``.
+
+        Raises
+        ------
+        TypeError
+            If `precision` is less than 1.
 
         Examples
         --------
@@ -3785,6 +3800,12 @@ class BoxCoordinate(BaseCoordinate):
         -------
         out : typing.Self
             A version of `self` that satisfies `precision`.
+
+        Raises
+        ------
+        TypeError
+            If `precision` is less than 1, or if `error` is `True` and
+            `precision` is finer than `self.precision`.
 
         Examples
         --------
