@@ -60,9 +60,6 @@ from math import floor as _floor
 import pyproj as _pyproj
 import regex as _regex
 import shapely as _shapely
-from beartype._check.forward.reference.fwdrefmeta import (
-    BeartypeForwardRefMeta as _BeartypeForwardRefMeta,
-)
 
 # Internal.
 import lgrs.bounds as _bounds
@@ -142,20 +139,27 @@ def _cache_new_cousin(func: _ToMethod) -> _ToMethod:
     return wrapped
 
 
+def _is_beartype_fwd_ref(obj: _typing.Any) -> bool:
+    # In a module that `beartype` has hooked, `typing.get_type_hints()`
+    # returns a proxy class instead of fully resolving a forward
+    # reference. Every proxy class has the same type, `proxy_type =
+    # type(obj)`. Unfortunately, checking `isinstance(obj, proxy_type)`
+    # would require importing `proxy_type` in advance, and its location
+    # varies between `beartype` versions. Therefore, simply recognize
+    # `proxy_type` by its origin in `beartype`.
+    return type(obj).__module__.partition(".")[0] == "beartype"
+
+
 def _resolve_beartype_fwd_refs(refs: _typing.Any) -> _typing.Any:
     # Somewhat ugly patch to undo some `beartype` magic.
     was_tup = isinstance(refs, tuple)
     if not was_tup:
-        if isinstance(refs, _BeartypeForwardRefMeta):
+        if _is_beartype_fwd_ref(refs):
             refs = (refs,)
         else:
             return refs
     resolved = (
-        (
-            globals()[ref.__name__]
-            if isinstance(ref, _BeartypeForwardRefMeta)
-            else ref
-        )
+        (globals()[ref.__name__] if _is_beartype_fwd_ref(ref) else ref)
         for ref in refs
     )
     if was_tup:
@@ -170,7 +174,7 @@ def _resolve_out_types(func: _collections.abc.Callable) -> tuple[type, ...]:
     out_hint = _resolve_beartype_fwd_refs(
         _typing.get_type_hints(func)["return"]
     )
-    if isinstance(out_hint, _BeartypeForwardRefMeta):
+    if _is_beartype_fwd_ref(out_hint):
         out_hint = globals()[out_hint.__name__]
     if isinstance(out_hint, _types.UnionType):
         out_types = _resolve_beartype_fwd_refs(_typing.get_args(out_hint))
