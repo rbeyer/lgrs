@@ -36,12 +36,13 @@ from __future__ import annotations
 import collections as _collections
 import functools as _functools
 import itertools as _itertools
+import numbers as _numbers
 import re as _re
 import typing as _typing
 
 # External.
 import beartype as _beartype
-import numpy as _np
+import numpy as _numpy
 import pyproj as _pyproj
 from pyproj import aoi as _pyproj_aoi, database as _pyproj_database
 
@@ -58,7 +59,7 @@ import lgrs.srs.wkt as _wkt
 type _FloatIterable = _collections.abc.Iterable[float]
 
 _lunar_crs_internal_name_pattern = _re.compile(
-    "^(?P<num>[0-9]{1,2})?(?P<hemi>[NS])(?P<suffix>[*]*)$"
+    "^(?P<num>[0-9]{1,2})?(?P<hemi>[NS])(?P<suffix>[*]{0,2})$"
 )
 
 
@@ -104,14 +105,14 @@ def _conform_longitude(longitude: float) -> float:
 def _ensure_float_iterable(
     obj: float | _FloatIterable, *, convert_np: bool = True
 ) -> tuple[bool, _FloatIterable]:
-    if isinstance(obj, float | int):
-        if convert_np and isinstance(obj, _np.number):
+    if isinstance(obj, float | int | _numbers.Number):
+        if convert_np and isinstance(obj, _numpy.number):
             converted = float(obj)
             return (True, (converted,))
         else:
             return (True, (obj,))
     else:
-        if convert_np and isinstance(obj, _np.ndarray):
+        if convert_np and isinstance(obj, _numpy.ndarray):
             converted = obj.tolist()  # *REASSIGNMENT*
             return (False, converted)
         else:
@@ -331,15 +332,17 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         Whether CRS is LTM.
     hemisphere: string
         ``"N"`` or ``"S"``.
+    lps_hemisphere : string or None
+        The LPS hemisphere (``"N"`` or ``"S"``), or ``None`` if `.is_ltm`.
     ltm_zone : string or None
         The LTM zone (such as ``"23N"``), or ``None`` if `.is_lps`.
     ltm_zone_number : int or None
         The LTM zone number (such as ``23``), or ``None``, if `.is_lps`.
-    lps_hemisphere : string or None
-        The LPS hemisphere (``"N"`` or ``"S"``), or ``None`` if `.is_ltm`.
     absolute_ltm_limit : float
         The magnitude of the LTM/LPS boundary: ``80``, ``82``, or ``90``
         degrees.
+    hint : str or None
+        ``self.lps_hemisphere or self.ltm_zone``
 
     Methods
     -------
@@ -355,11 +358,33 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
     pyproj.database.CRSInfo : Parent class, with additional documentation.
     """
 
-    # * BASIC BEHAVIOR. ───────────────────────────────────────────────
+    # * UTILITIES. ────────────────────────────────────────────────────
     # Below: Assigned by `._from_internal_name()`. All instances should
     # be created by that factory function.
     _internal_name: str
     _internal_name_parsed: _InternalNameParsed
+
+    @_functools.cache
+    def _get_name_and_kwargs_for_make(
+        self, *, force_nominal: bool = False
+    ) -> tuple[str, dict[str, _typing.Any]]:
+        suffix = self._internal_name_parsed.suffix
+        name = self._internal_name.removesuffix(suffix)
+        kwargs = {}
+        if not force_nominal:
+            match suffix:
+                case "":
+                    pass
+                case "*":
+                    kwargs["extended_ltm"] = True
+                case "**":
+                    if self.is_lps:
+                        kwargs["global_lps"] = True
+                    else:
+                        kwargs["global_ltm"] = True
+                case _:
+                    raise TypeError(f"`suffix` is not recognized: {suffix!r}")
+        return (name, kwargs)
 
     @_functools.cached_property
     def _sort_tuple(self) -> tuple[int, int, int | None, str]:
@@ -497,6 +522,10 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         return self._internal_name_parsed.hemisphere
 
     @_functools.cached_property
+    def hint(self) -> str | None:
+        return self.lps_hemisphere or self.ltm_zone
+
+    @_functools.cached_property
     def is_lps(self) -> bool:
         return self._internal_name_parsed.zone_number is None
 
@@ -559,22 +588,9 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         crs : lgrs.CRS
             The `CRS` instance corresponding to this info instance.
         """
-        suffix = self._internal_name_parsed.suffix
-        name = self._internal_name.removesuffix(suffix)
-        kwargs = {}
-        if not force_nominal:
-            match suffix:
-                case "":
-                    kwargs["extended_ltm"] = False
-                case "*":
-                    kwargs["extended_ltm"] = True
-                case "**":
-                    if self.is_lps:
-                        kwargs["global_lps"] = True
-                    else:
-                        kwargs["global_ltm"] = True
-                case _:
-                    raise TypeError(f"`suffix` is not recognized: {suffix!r}")
+        name, kwargs = self._get_name_and_kwargs_for_make(
+            force_nominal=force_nominal
+        )
         crs = _srs.make_lunar_crs(name, **kwargs)
         return crs
 
@@ -618,13 +634,6 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
         True
         """
         return info._sort_tuple
-
-
-# Note: Unfortunately, if we want to replicate
-# `pyproj.query_utm_crs_info()` as closely as possible, we'd need to
-# implement something like `pyproj.database.CRSInfo` (stub below) and
-# `pyproj.database.PJType`, possibly more.
-class SRSInfo(_pyproj_database.CRSInfo): ...
 
 
 # endregion
@@ -822,8 +831,9 @@ def query_lunar_crs_info(
                 # *REASSIGNMENT*
                 inner_crs_internal_names = (common_crs_internal_names,)
             else:
-                assert len(inner_crs_internal_names) == 1
-                these_unique_crs_internal_names = set(crs_internal_names)
+                these_unique_crs_internal_names = set(
+                    _itertools.chain.from_iterable(inner_crs_internal_names)
+                )
                 try:
                     (common_crs_internal_name,) = (
                         these_unique_crs_internal_names

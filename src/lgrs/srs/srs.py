@@ -30,6 +30,7 @@ import pyproj as _pyproj
 # Internal.
 import lgrs.caching as _caching
 import lgrs.srs.wkt as _wkt
+import lgrs.util as _util
 
 
 # endregion
@@ -163,6 +164,17 @@ class _CrsParameters:
     def make_crs(self) -> CRS:
         if not self._spec_count:
             return CRS(_wkt.DATUM_NAME)
+        wkt = self.make_wkt()
+        crs = CRS(wkt)
+        return crs
+
+    # Note: Caching this method ensures that equivalent `_CrsParameters`
+    # instances return the same WKT string instance.
+    @_caching._optionally_cache
+    def make_wkt(self) -> str:
+        if not self._spec_count:
+            crs = self.make_crs()
+            return crs.to_wkt(pretty=True)
         match self.proj:
             case "LPS":
                 type_ = _wkt.LpsZone
@@ -179,8 +191,7 @@ class _CrsParameters:
             global_ltm=self.global_ltm,
             datum_name=self.ellps,
         )
-        crs = CRS(zone_instance.wkt)
-        return crs
+        return zone_instance.wkt
 
 
 class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
@@ -204,21 +215,21 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     False
     """
 
-    def _remove_aou_name_prefix(self, prefix: str) -> str | None:
-        if self.area_of_use is None:
+    def _extract(self, regex: _re.Pattern) -> str | None:
+        if self.coordinate_operation is None:
             return None
-        if not self.area_of_use.name.startswith(prefix):
+        match = regex.search(self.coordinate_operation.name)
+        if match is None:
             return None
-        # Note: `-1` truncates trailing period.
-        return self.area_of_use.name[len(prefix) : -1]
+        return match.group(1)
 
     @_functools.cached_property
     def lps_hemisphere(self) -> _typing.Literal["N", "S", None]:
-        return self._remove_aou_name_prefix(_wkt._lps_usage_area_prefix)
+        return self._extract(_wkt._lps_regex)
 
     @_functools.cached_property
     def ltm_zone(self) -> str | None:
-        return self._remove_aou_name_prefix(_wkt._ltm_usage_area_prefix)
+        return self._extract(_wkt._ltm_regex)
 
 
 # Note: Only identical calls are cached here. Compare:
@@ -236,7 +247,7 @@ def make_lunar_crs(
     global_ltm: bool = False,
 ) -> CRS:
     """
-    Return LPS or LTM zone `CRS` using UTM-like `proj.CRS()` arguments.
+    Return LPS or LTM zone `CRS` using UTM-like `pyproj.CRS()` arguments.
 
     As a convenience, `make_lunar_crs()` returns the underlying geographic
     `CRS`. See Examples section below.
@@ -244,7 +255,7 @@ def make_lunar_crs(
     Parameters
     ----------
     name : str, optional
-        String name of `crs`. If specified, all remaining arguments, except
+        String name of CRS. If specified, all remaining arguments, except
         for `extended_ltm`, `global_lps`, and `global_ltm`, are interpreted
         from `name` and cannot be independently specified.
     proj : str, optional
@@ -253,10 +264,10 @@ def make_lunar_crs(
     zone : int, optional
         The LTM zone. Should not be specified for LPS.
     south : bool, optional
-        Whether `crs` is in the Southern Hemisphere. Must be specified,
+        Whether CRS is in the Southern Hemisphere. Must be specified,
         unless `name` is specified or all arguments are defaulted.
     ellps : str, default="IAU_2015:30100"
-        The name of the `crs` ellipsoid. Only "IAU_2015:30100" is supported.
+        The name of the CRS ellipsoid. Only "IAU_2015:30100" is supported.
     extended_ltm : bool, default=False
         Whether to use the extended LTM region. If `True`, the nominal
         poleward extent of the LTM region is 82° N/S instead of 80° N/S.
@@ -270,7 +281,7 @@ def make_lunar_crs(
     Returns
     -------
     crs : CRS
-        The LPS or LTM zone `CRS` instance.
+        The LPS/LTM zone or geographic `CRS` instance.
 
     Raises
     ------
@@ -325,6 +336,30 @@ def make_lunar_crs(
     params = _CrsParameters(**locals())
     crs = params.make_crs()
     return crs
+
+
+# Note: Only identical calls are cached here. Compare:
+# `_CrsParameters.make_crs()`.
+@_caching._optionally_cache
+@_util.partially_wraps(make_lunar_crs, exclude=(1, "Raises"))
+def make_lunar_wkt(name: str | None = None, **kwargs) -> str:
+    """
+    Return LPS or LTM zone WKT using UTM-like `pyproj.CRS()` arguments.
+
+    Returns
+    -------
+    wkt : str
+        The LPS/LTM zone or geographic WKT.
+
+    Raises
+    ------
+    TypeError
+        If WKT cannot be interpreted, or if `proj` is `"LPS"`/`"LTM"`
+        but `global_ltm`/`global_lps` is `True`.
+    """
+    params = _CrsParameters(name=name, **kwargs)
+    wkt = params.make_wkt()
+    return wkt
 
 
 # endregion

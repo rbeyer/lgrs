@@ -65,7 +65,7 @@ class TestDirectCrsGeneration(unittest.TestCase):
             south=80.0,
             east=180.0,
             west=-180.0,
-            method_name_part="Stereographic",
+            method_name_part="Polar Stereographic",
         )
 
     def test_ltm_generation(self) -> None:
@@ -76,7 +76,7 @@ class TestDirectCrsGeneration(unittest.TestCase):
             south=-80.0,
             east=-172.0,
             west=-180.0,
-            method_name_part="transverse Mercator",
+            method_name_part="Transverse Mercator",
         )
 
 

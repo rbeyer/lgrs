@@ -29,7 +29,7 @@ import typing as _typing
 
 # External.
 import geopandas as _geopandas
-import numpy as _np
+import numpy as _numpy
 import pyproj as _pyproj
 import pyproj.aoi as _pyproj_aoi
 import rasterio as _rasterio
@@ -55,13 +55,41 @@ type CrsHint = _pyproj.CRS | str | None
 ###############################################################################
 def _make_crit_array(
     num_or_iter: float | _collections.abc.Iterable,
-) -> _np.ndarray:
+    *,
+    nudge_leftward: bool = False,
+    nudge_zeroward: bool = False,
+) -> _numpy.ndarray:
+    # Validate.
+    if nudge_leftward and nudge_zeroward:
+        raise TypeError("At most, only one `nudge_*` option may be `True`.")
+
+    # Construct base array.
     if isinstance(num_or_iter, _collections.abc.Iterable):
         iterable = num_or_iter
     else:
         iterable = (-num_or_iter, num_or_iter)
-    a = _np.fromiter(iterable, dtype=_np.float64)
-    return a
+    base = _numpy.fromiter(iterable, dtype=_numpy.float64)
+
+    # Optionally extend by nudged values.
+    if not nudge_leftward and not nudge_zeroward:
+        final = base
+    else:
+        arrays = [base]
+        if nudge_leftward:
+            nudged = base.copy()
+            nudged -= _values.DEGREE_EPSILON
+            arrays.append(nudged)
+        elif nudge_zeroward:
+            nudged = base.copy()
+            nudged[base < 0] += _values.DEGREE_EPSILON
+            nudged[base > 0] -= _values.DEGREE_EPSILON
+            arrays.append(nudged)
+        final = _numpy.concatenate(arrays)
+
+    # Mark read-only and return sorted array.
+    final.sort()
+    final.flags.writeable = False
+    return final
 
 
 def _resolve_file_path_and_open_kwargs(
@@ -257,15 +285,18 @@ class _BaseBounds(_Base):
             raise TypeError(f"Path could not be found: {file_path}")
         try:
             gdf = _geopandas.read_file(file_path, **open_kwargs)
-        except Exception:
+        except Exception as vec_err:
             try:
-                with _rasterio.open(path, **open_kwargs) as src:
+                with _rasterio.open(file_path, **open_kwargs) as src:
                     native_bounds = src.bounds
                     native_crs = src.crs
-            except Exception:
+            except Exception as ras_err:
                 raise TypeError(
                     f"Path could not be read either as vector or raster data: "
                     f"{path}."
+                ) from ExceptionGroup(
+                    "attempted vector and raster reads both failed",
+                    (vec_err, ras_err),
                 )
         else:
             native_bounds = gdf.total_bounds
@@ -389,7 +420,7 @@ class GeographicBounds(_BaseBounds):
     right : float
         The right longitude, in degrees.
     top : float
-        That top latitude, in degrees.
+        The top latitude, in degrees.
 
     Attributes
     ----------
@@ -400,7 +431,7 @@ class GeographicBounds(_BaseBounds):
     brackets_antimeridian : bool
         Whether bounds bracket the antimeridian (±180°). Note that bounds
         that wrap to span all longitudes are not considered to bracket the
-         antimeridian.
+        antimeridian.
     conformed : 4-float BoundsTuple
         Similar to ``tuple(self)`` but a `BoundsTuple` (named tuple) whose
         longitudes are conformed to the interval [-180, +180).
@@ -409,8 +440,8 @@ class GeographicBounds(_BaseBounds):
     logical : 4-float BoundsTuple
         For bounds bracketing the antimeridian, `logical.left` and
         `logical.right` are conformed to the interval [-360, +360] so that
-         `logical.right > logical.left`. Otherwise, equivalent to
-         `.conformed`.
+        `logical.right > logical.left`. Otherwise, equivalent to
+        `.conformed`.
     median_xy : tuple[float, float]
         The median longitude and latitude, respectively, calculated from
         `.logical`. The longitude is then conformed to the interval [-180,
@@ -549,13 +580,21 @@ class GeographicBounds(_BaseBounds):
     # * CRITICAL LATITUDES & LONGITUDES. ──────────────────────────────
     # Note: The equator is not "critical" for these purposes, because
     # LTM boxes mate there precisely, without overlap.
+    # Note: Nudge equatorward to ensure that locations near the LTM/LPS
+    # boundary sample the LTM side (where appropriate), since LPS wins
+    # exactly at the boundary.
     _crit_lats_extended_ltm_array = _make_crit_array(
-        _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE
+        _wkt.LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE, nudge_zeroward=True
     )
     _crit_lats_unextended_ltm_array = _make_crit_array(
-        _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE
+        _wkt.LTM_UNEXTENDED_MAX_ABSOLUTE_LATITUDE, nudge_zeroward=True
     )
-    _crit_ltm_lons_array = _make_crit_array(range(-356, 361, 8))
+    # Note: Nudge leftward to ensure that locations near a longitudinal
+    # LTM boundary sample the left side (where appropriate), since the
+    # right side wins exactly at the boundary.
+    _crit_ltm_lons_array = _make_crit_array(
+        range(-356, 361, 8), nudge_leftward=True
+    )
 
     # Note: Type-hinting `coords.Constraints` would cause circular
     # import in Python <= 3.13.
@@ -575,14 +614,6 @@ class GeographicBounds(_BaseBounds):
         if sliced_array is None:
             return None
         final = sliced_array.tolist()
-        sliced_array[sliced_array < 0] += _values.DEGREE_EPSILON
-        sliced_array[sliced_array > 0] -= _values.DEGREE_EPSILON
-        final.extend(sliced_array.tolist())
-        final.sort()
-        if final[0] < self.logical.bottom:
-            del final[0]
-        if final[-1] > self.logical.top:
-            del final[-1]
         return final
 
     # Note: Type-hinting `coords.Constraints` would cause circular
@@ -605,20 +636,14 @@ class GeographicBounds(_BaseBounds):
         if sliced_array is None:
             return None
         final = sliced_array.tolist()
-        sliced_array -= _values.DEGREE_EPSILON
-        # Note: Reverse slice so that smallest value is at the end of
-        # the list, for more performant removal, if necessary.
-        final.extend(sliced_array[::-1].tolist())
-        if final[-1] < self.logical.left:
-            del final[-1]
         return final
 
     @staticmethod
     def _slice_array_by_interval_ends(
-        a: _np.ndarray,
+        a: _numpy.ndarray,
         left: float,
         right: float,
-    ) -> _np.ndarray | None:
+    ) -> _numpy.ndarray | None:
         idx_0 = a.searchsorted(left, side="left")
         idx_n = a.searchsorted(right, side="right")
         if idx_0 == idx_n:
@@ -681,7 +706,7 @@ class GeographicBounds(_BaseBounds):
         self,
     ) -> tuple[BoundsTuple, ...]:
         if self.brackets_antimeridian:
-            c_left, c_bottom, c_top, c_right = self.conformed
+            c_left, c_bottom, c_right, c_top = self.conformed
             return (
                 BoundsTuple(c_left, c_bottom, +180, c_top),
                 BoundsTuple(-180, c_bottom, c_right, c_top),
@@ -741,3 +766,6 @@ class ProjectedBounds(_BaseBounds):
     @_functools.cached_property
     def crs(self) -> _srs.CRS | _pyproj.CRS:
         return resolve_crs(self.crs_hint)
+
+
+# endregion

@@ -18,6 +18,7 @@ __author__ = "lgrs Developers"
 __email__ = "eschaefer@seti.org"
 __version__ = "0.4.0-dev"
 
+# * IMPORT BEARTYPE. ──────────────────────────────────────────────────
 import beartype.claw
 
 # * BUBBLE-UP MOST USEFUL CLASSES AND FUNCTIONS. ──────────────────────
@@ -30,10 +31,14 @@ from lgrs.easy import write_grid
 # from lgrs.easy import from_geographic, from_gridded, from_lps_or_ltm
 
 # Note: Analogous to `pyproj`:
-from lgrs.srs.srs import CRS, make_lunar_crs
+from lgrs.srs.srs import CRS, make_lunar_crs, make_lunar_wkt
 
 # * ENABLE TYPE-CHECKING AT PACKAGE LEVEL. ───────────────────────────
+# Note: Types and execution in `lgrs.js` are not available outside a
+# JavaScript (Pyodide) environment, so disable type-checking.
 beartype.claw.beartype_this_package(
-    conf=beartype.BeartypeConf(is_pep484_tower=True)
+    conf=beartype.BeartypeConf(
+        is_pep484_tower=True, claw_skip_package_names=("lgrs.js",)
+    )
 )
 del beartype

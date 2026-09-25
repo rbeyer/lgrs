@@ -28,6 +28,69 @@ and the release date, in year-month-day format (see examples below).
 Unreleased
 ----------
 
+Added
+^^^^^
+* CLI support for critical functionality, including coordinate conversion, grid
+  generation, and WKT generation. A bare ``lgrs`` in a terminal will show
+  available commands. (Backed by the ``lgrs.cli`` module.)
+* JavaScript support for critical functionality, including coordinate
+  conversion, grid generation, WKT generation, and more. See ``lgrs.js`` module.
+* A JavaScript usage guide, ``usage_js.rst``, which introduces ``lgrs.js`` and
+  refers to two complete example web pages in ``examples/``
+  (``convert_coordinate.html`` and ``package_grid.html``) that run it in a
+  browser.
+* Creation of a coordinate of any type from a string via
+  ``lgrs.coords.BaseCoordinate.from_string()``, which accepts many formats,
+  including longitude-first geographic strings.
+* Easy conversion from an input coordinate to all related coordinates via
+  ``lgrs.easy.convert_coordinate()``.
+* Support for (direct) WKT generation via ``lgrs.make_lunar_wkt()``.
+* Direct access to a useful name placeholder via ``LunarCrsInfo.hint``.
+* Granular control of coordinate caching via
+  ``BaseCoordinate.uncache_cousin_group()``.
+
+Changed
+^^^^^^^
+* The string form of a point coordinate (``.string`` and ``str()``) has been
+  revised for human readability, following common practice: for example,
+  ``1° N, 2° E`` rather than ``1°N 2°E``, and ``23N 310589.12 30311.48``
+  rather than ``23N310589.12E30311.48N``.
+* The WKT of LPS and LTM CRSs is now fully standards compliant and consistent
+  with community practice, so it differs from the WKT of earlier releases. For
+  example, the south polar CRS is now named
+  ``Moon (2015) - Sphere / Ocentric / LPS South``.
+* The ``mode`` argument of ``lgrs.easy.write_grid()`` is now positional rather
+  than keyword-only.
+* ``lgrs.grid.make_box_grid()`` and ``lgrs.easy.write_grid()`` expand ``~``
+  in path-like ``bounds``.
+* Error reporting is more informative across ``lgrs.bounds``, ``lgrs.coords``,
+  and ``lgrs.easy``, including chained causes for failed vector/raster reads.
+* Documentation has been substantially expanded and corrected throughout the
+  library, most notably for ``lgrs.easy.write_grid()``, ``lgrs.grid``, and the
+  ``precision`` arguments of ``BaseCoordinate.to_acc()``,
+  ``BaseCoordinate.to_lgrs()``, ``PointCoordinate.to_all_lgrs()``, and
+  ``BoxCoordinate.with_precision()``. The usage guide (``usage.rst``) now also
+  covers the newer functionality, including ``lgrs.easy.convert_coordinate()``,
+  ``lgrs.make_lunar_wkt()``, ``lgrs.query_lunar_crs_info()``, and the
+  command-line program.
+
+Removed
+^^^^^^^
+* ``lgrs.transformer`` module. Transformer caching is handled within
+  ``lgrs.caching``.
+* ``lgrs.database.SRSInfo`` stub.
+* Geodesic functions in ``lgrs.values``.
+* Unused members of ``lgrs.exceptions``.
+
+Fixed
+^^^^^
+* Valid latitude bounds are now correct in ``lgrs.coords``.
+* Zone boundary nudging in ``lgrs.bounds`` is corrected, along with a
+  bounds-order typo and a wrong path.
+* ``lgrs.grid`` now preserves ``name_hint``.
+* ``lgrs.database`` accepts a broader range of numeric types.
+
+
 0.3.0 (2026-06-25)
 ------------------
 
@@ -131,7 +194,6 @@ Grid generation is now implemented.
 
 Changed
 ^^^^^^^
-
 Constraints and Validation
 
 * Constraints are now packaged in their own class (Constraints) and

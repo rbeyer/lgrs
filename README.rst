@@ -66,6 +66,13 @@ Usage
 Examples and how to get started with the *lgrs* library can be found in our
 `usage guide <https://github.com/rbeyer/lgrs/blob/master/usage.rst>`__.
 
+To use *lgrs* in a web browser (via Pyodide), see the `JavaScript usage guide
+<https://github.com/rbeyer/lgrs/blob/master/usage_js.rst>`__. The `examples
+folder <https://github.com/rbeyer/lgrs/tree/master/examples>`__ has two
+complete web pages that do so: ``convert_coordinate.html`` converts a
+coordinate, and ``package_grid.html`` generates and downloads a grid. To try
+one, download the file and open it in a web browser.
+
 
 Contributing
 ------------
@@ -88,6 +95,7 @@ file for a complete list of developers.
 
 License
 -------
+
 The *lgrs* software is licensed under the Apache License,
 Version 2.0 (the "License"); you may not use this file except in
 compliance with the License. You may obtain a copy of the License

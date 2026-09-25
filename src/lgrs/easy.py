@@ -17,45 +17,608 @@
 ###############################################################################
 # region> IMPORT
 ###############################################################################
+# Special.
+from __future__ import annotations
+
 # Standard.
-import enum as _enum
+import collections as _collections
+import dataclasses as _dataclasses
+import functools as _functools
+import inspect as _inspect
+import itertools as _itertools
+import json as _json
 import pathlib as _pathlib
 import typing as _typing
 
 # Internal.
 import lgrs.bounds as _bounds
+import lgrs.coords as _coords
+import lgrs.database as _database
 import lgrs.grid as _grid
+import lgrs.util as _util
 
 
 # endregion
 ###############################################################################
-# region> ENUMERATIONS
+# region> FAMILIES
 ###############################################################################
-class Format(_enum.StrEnum):
-    LAT_LON = _enum.auto()
-    LON_LAT = _enum.auto()
-    LPS_OR_LTM = _enum.auto()
-    LGRS = _enum.auto()
-    ACC = _enum.auto()
-    ACC_FULL = _enum.auto()
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class _BaseFamily:
+    """A group of coordinates derived from `latlon`."""
+
+    _input_latlon: _coords.LatLonPoint
+    _input_lgrs: _coords.LpsLgrsBox | _coords.LtmLgrsBox | None = None
+    _extended_ltm: bool | None = None  # Aligned with `_input_lgrs`.
+    _precision: float | None = None  # Aligned with `_input_lgrs`.
+
+    _aligned_name_to_get = {
+        "extended_ltm": lambda b: b.constraints.extended_ltm,
+        "precision": lambda b: b.precision,
+    }
+
+    def __post_init__(self) -> None:
+        if self._input_lgrs is None:
+            for attr_name in self._aligned_name_to_get:
+                if getattr(self, f"_{attr_name}") is None:
+                    raise TypeError(
+                        "If `_input_lgrs` is not specified, "
+                        f"must specify: `_{attr_name}`"
+                    )
+        else:
+            for attr_name, get in self._aligned_name_to_get.items():
+                object.__setattr__(
+                    self,
+                    f"_{attr_name}",
+                    get(self._input_lgrs),
+                )
+
+    @_functools.cached_property
+    def _constraints(self) -> _coords.Constraints:
+        if self._input_lgrs is None:
+            constraints = _coords.Constraints(extended_ltm=self._extended_ltm)
+        else:
+            constraints = _coords.Constraints(global_crs=self._input_lgrs.crs)
+        return constraints
 
 
-class Region(_enum.StrEnum):
-    POLAR = _enum.auto()
-    NONPOLAR = _enum.auto()
-    ANY = _enum.auto()
+@_dataclasses.dataclass(frozen=True, kw_only=True)
+class _BaseFullFamily(_BaseFamily):
+    """A family of related coordinates derived from `latlon`."""
+
+    @_functools.cached_property
+    def acc(self) -> _coords.LpsAccBox | _coords.LtmAccBox:
+        """An ACC box that contains `latlon`."""
+        return self.lgrs.to_acc()
+
+    @_functools.cached_property
+    def center(self) -> _coords.LpsPoint | _coords.LtmPoint:
+        """The center point of `lgrs` and `acc`."""
+        return self.lgrs.center_latlon.to_lps_or_ltm(
+            constraints=self._constraints
+        )
+
+    @_functools.cached_property
+    def corner(self) -> _coords.LpsPoint | _coords.LtmPoint:
+        """The reference (lower-left) corner of `lgrs` and `acc`."""
+        return self.lgrs.to_lps_or_ltm(constraints=self._constraints)
+
+    @_functools.cached_property
+    def lgrs(self) -> _coords.LpsLgrsBox | _coords.LtmLgrsBox:
+        """An LGRS box that contains `latlon`."""
+        if self._input_lgrs is None:
+            return self._input_latlon.to_lgrs(
+                precision=self._precision, constraints=self._constraints
+            )
+        else:
+            return self._input_lgrs
+
+    @_functools.cached_property
+    def point(self) -> _coords.LpsPoint | _coords.LtmPoint:
+        """A point at the same location as `latlon`."""
+        return self._input_latlon.to_lps_or_ltm(constraints=self._constraints)
 
 
-class Type(_enum.StrEnum):
-    LABELED = _enum.auto()
-    STRING = _enum.auto()
-    PRETTY = _enum.auto()
+class ForcedFamily(_BaseFamily):
+    # Note: Annotations are used to populate JSON structures.
+    lps: _coords.LpsPoint
+    ltm: _coords.LtmPoint
+
+    @_functools.cached_property
+    def lps(self) -> _coords.LpsPoint:
+        return self._input_latlon.to_lps(
+            constraints=self._constraints, search=True
+        )
+
+    @_functools.cached_property
+    def ltm(self) -> _coords.LtmPoint:
+        return self._input_latlon.to_ltm(
+            constraints=self._constraints, search=True
+        )
+
+
+class LpsFamily(_BaseFullFamily):
+    point: _coords.LpsPoint
+    lgrs: _coords.LpsLgrsBox
+    acc: _coords.LpsAccBox
+    corner: _coords.LpsPoint
+    center: _coords.LpsPoint
+
+
+class LtmFamily(_BaseFullFamily):
+    point: _coords.LtmPoint
+    lgrs: _coords.LtmLgrsBox
+    acc: _coords.LtmAccBox
+    corner: _coords.LtmPoint
+    center: _coords.LtmPoint
+
+
+class NominalFamily(_BaseFullFamily):
+    # Note: Annotations are used to populate JSON structures.
+    point: _coords.LpsPoint | _coords.LtmPoint
+    lgrs: _coords.LpsLgrsBox | _coords.LtmLgrsBox
+    acc: _coords.LpsAccBox | _coords.LtmAccBox
+    corner: _coords.LpsPoint | _coords.LtmPoint
+    center: _coords.LpsPoint | _coords.LtmPoint
+
+
+# endregion
+###############################################################################
+# region> RELATIVES
+###############################################################################
+@_dataclasses.dataclass(frozen=True)
+class GeoRelatives:
+    """
+    Create an organized structure of related coordinates.
+
+    Given an `input_coordinate` (point or box), extracts a geographic point
+    coordinate (`.latlon`) and from that point coordinate derives many
+    related coordinates. Derived coordinates are logically grouped into
+    "families", but not all families may be relevant for a given
+    `input_coordinate`. Each coordinate within a family is called a
+    "member".
+
+    Parameters
+    ----------
+    input_coordinate : lgrs.coords.BaseCoordinate
+        The coordinate from which `latlon` is derived.
+    precision : float
+        The maximum allowed nominal side length of each box member. If not a
+        supported precision, the actual precision is rounded down to a
+        better precision. Must be at least 1, or an error is raised when a box
+        member is derived.
+    extended_ltm : bool, default=False
+        Whether to use the extended LTM region, which extends to 82° N/S
+        instead of 80° N/S.
+    use_center : bool, default=False
+        When `input_coordinate` is a `BoxCoordinate`, specifies whether to
+        use its center instead of its reference (lower-left) corner to
+        derive `latlon` and hence all members. If `input_coordinate` is
+        instead a `PointCoordinate`, this argument is ignored.
+    sort_by_center : bool, default=True
+        Only applies if `.ltm_2` is populated. Then, between `.ltm_1` and
+        `.ltm_2`, `.ltm_2` represent the box whose center (if `True`) or
+        reference (lower-left) corner (if `False`) is further from `latlon`.
+    note : string, optional
+        A custom note.
+
+    Attributes
+    ----------
+    latlon : lgrs.coords.LatLonPoint
+        `input_coordinate` as a geographic point coordinate. Honors
+        `use_center`, if applicable.
+    nominal : NominalFamily
+        The family of nominal coordinates. Each member is derived from
+        `latlon` using default constraints only, except that `extended_ltm`
+        is honored.
+    lps : LpsFamily | None
+        The family of LPS-based coordinates, which all share the same CRS.
+        `None` if no LPS-based box is compatible with `latlon`.
+    ltm_1 : LtmFamily | None
+        A family of LTM-based coordinates, which all share the same CRS.
+        `None` if no LTM-based box is compatible with `latlon`.
+    ltm_2 : LtmFamily | None
+        A second family of LTM-based coordinates, which all share the same
+        CRS. Only populated when `latlon` is near the boundary between two
+        LTM zones, so that a valid box in each zone contains `latlon`. Then,
+        the CRS of `ltm_2` differs from that of `ltm_1`. See
+        `sort_by_center`.
+    forced : ForcedFamily
+        A pair of LPS and LTM coordinates representing the same location as
+        `latlon`. Each of these is populated regardless of the location of
+        `latlon` (hence "forced").
+    json_dict : dict
+        A mapping representation that includes `GeoRelatives` initialization
+        parameters and all `GeoRelatives` attributes except for `json`,
+        `json_full`, and `json_dict`, as well as initialization parameters
+        and some salient attributes (such as `.string`) for each coordinate
+        member.
+    json : string
+        A JSON-compatible pretty string representation of `json_dict` whose
+        values are all JSON objects, strings, numbers (int or real),
+        booleans, or null. Created by calling `.to_json()`.
+    json_full : string
+        Similar to `json` but created by calling
+        `.to_json(use_objects=True)`.
+
+    Raises
+    ------
+    TypeError
+        If `precision` is less than 1 and a box member is derived.
+
+    Notes
+    -----
+    For most locations, only one family among `lps`, `ltm_1`, and `ltm_2` is
+    populated. However, near zone boundaries, two or all three may be
+    populated. When all families are relevant, the overall structure is as
+    shown below. For easy reference, each attribute name representing a
+    family is shown in square brackets (for example, ``[nominal]``, even
+    though the attribute name is ``nominal``) and comments are shown in
+    angle brackets::
+
+        GeoRelatives
+        ├── input_coordinate                   <same as input>
+        ├── precision                          <same as input>
+        ├── extended_ltm                       <same as input>
+        ├── use_center                         <same as input>
+        ├── sort_by_center                     <same as input>
+        ├── note                               <same as input>
+        ├── latlon                             <derived from input>
+        ├── [nominal]
+        │   ├── point: LpsPoint | LtmPoint     <same location as `latlon`>
+        │   ├── lgrs: LpsLgrsBox | LtmLgrsBox  <contains `latlon`>
+        │   ├── acc: LpsAccBox | LtmAccBox     <contains `latlon`>
+        │   ├── corner: LpsPoint | LtmPoint    <`lgrs`/`acc` lower-left corner>
+        │   └── center: LpsPoint | LtmPoint    <`lgrs`/`acc` center>
+        ├── [lps]
+        │   ├── point: LpsPoint                <same location as `latlon`>
+        │   ├── lgrs: LpsLgrsBox               <contains `latlon`>
+        │   ├── acc: LpsAccBox                 <contains `latlon`>
+        │   ├── corner: LpsPoint               <`lgrs`/`acc` lower-left corner>
+        │   └── center: LpsPoint               <`lgrs`/`acc` center>
+        ├── [ltm_1]
+        │   ├── point: LtmPoint                <same location as `latlon`>
+        │   ├── lgrs: LtmLgrsBox               <contains `latlon`>
+        │   ├── acc: LtmAccBox                 <contains `latlon`>
+        │   ├── corner: LtmPoint               <`lgrs`/`acc` lower-left corner>
+        │   └── center: LtmPoint               <`lgrs`/`acc` center>
+        ├── [ltm_2]
+        │   ├── point: LtmPoint                <same location as `latlon`>
+        │   ├── lgrs: LtmLgrsBox               <contains `latlon`>
+        │   ├── acc: LtmAccBox                 <contains `latlon`>
+        │   ├── corner: LtmPoint               <`lgrs`/`acc` lower-left corner>
+        │   └── center: LtmPoint               <`lgrs`/`acc` center>
+        ├── [forced]
+        │   ├── lps: LpsPoint                  <same location as `latlon`>
+        │   └── ltm: LtmPoint                  <same location as `latlon`>
+        ├── json_dict                          <`dict` mapping>
+        ├── json                               <JSON string>
+        └── json_full                          <deeper JSON string>
+
+    It is guaranteed that `nominal.point`, `nominal.lgrs`, and `nominal.acc`
+    compare equal (ignoring constraints) to their counterparts in exactly
+    one of `lps`, `ltm_1`, or `ltm_2`. Typically, all members of `nominal`
+    are (constraint-agnostic) equal to their counterparts in one of those
+    other families, but this is not guaranteed generally due to
+    complications near zone boundaries.
+
+    All `lgrs` members come from ``latlon.to_all_lgrs(...)``. Better
+    performance and more precise control can be achieved using coordinate
+    instances and their methods directly. In that case, use
+    `lgrs.coords.Constraints()` to target non-nominal coordinates.
+    """
+
+    input_coordinate: _coords.PointCoordinate
+    _: _dataclasses.KW_ONLY
+    precision: float
+    extended_ltm: bool = False
+    use_center: bool = False
+    sort_by_center: bool = True
+    note: str | None = None
+
+    # * UTILITIES. ────────────────────────────────────────────────────
+    def _assign_nonnominal(self) -> None:
+        # Organize LGRS boxes by region.
+        region_to_boxes = _collections.defaultdict(list)
+        for box in self.latlon.to_all_lgrs(
+            precision=self.precision, extended_ltm=self.extended_ltm
+        ):
+            match box:
+                case _coords.LpsLgrsBox():
+                    region = "LPS"
+                case _coords.LtmLgrsBox():
+                    region = "LTM"
+                case _:
+                    raise TypeError(
+                        f"`box` does not have an expected type: {box!r}"
+                    )
+            region_to_boxes[region].append(box)
+
+        # Sort LTM boxes, if necessary.
+        ltm_boxes = region_to_boxes["LTM"]
+        if len(ltm_boxes) > 1:
+            if self.sort_by_center:
+                sorter = self._sort_by_center
+            else:
+                sorter = self._sort_by_corner
+            ltm_boxes.sort(key=sorter)
+
+        # Assign attributes.
+        lps_boxes = region_to_boxes["LPS"]
+        for boxes, attr_names in (
+            (lps_boxes, ("lps",)),
+            (ltm_boxes, ("ltm_1", "ltm_2")),
+        ):
+            for box, attr_name in _itertools.zip_longest(boxes, attr_names):
+                if box is None:
+                    fam = None
+                elif attr_name is None:
+                    max_count = len(attr_names)
+                    box_count = len(boxes)
+                    raise TypeError(
+                        f"Expected to have {max_count} "
+                        f"{type(box).__name__}'s at most, but found: "
+                        f"{box_count}"
+                    )
+                else:
+                    region = attr_name.split("_")[0].upper()
+                    match region:
+                        case "LPS":
+                            fam_type = LpsFamily
+                        case "LTM":
+                            fam_type = LtmFamily
+                        case _:
+                            raise TypeError(
+                                f"Unexpected `attr_name`: {attr_name!r}"
+                            )
+                    fam = fam_type(_input_latlon=self.latlon, _input_lgrs=box)
+                object.__setattr__(self, attr_name, fam)
+
+    def _sort_by_center(self, box: _coords.LtmLgrsBox) -> float:
+        return box.center_latlon.distance_to(self.latlon)
+
+    def _sort_by_corner(self, box: _coords.LtmLgrsBox) -> float:
+        return box.to_latlon().distance_to(self.latlon)
+
+    # * BASIC DATA ATTRIBUTES. ────────────────────────────────────────
+    @_functools.cached_property
+    def forced(self) -> ForcedFamily:
+        return ForcedFamily(
+            _input_latlon=self.latlon,
+            _extended_ltm=self.extended_ltm,
+            _precision=self.precision,
+        )
+
+    @_functools.cached_property
+    def latlon(self) -> _coords.LatLonPoint:
+        if (
+            isinstance(self.input_coordinate, _coords.BoxCoordinate)
+            and self.use_center
+        ):
+            latlon = self.input_coordinate.center_latlon
+        else:
+            latlon = self.input_coordinate.to_latlon()
+        return latlon
+
+    @_functools.cached_property
+    def lps(self) -> LpsFamily | None:
+        self._assign_nonnominal()
+        return self.__dict__["lps"]
+
+    @_functools.cached_property
+    def ltm_1(self) -> LtmFamily | None:
+        self._assign_nonnominal()
+        return self.__dict__["ltm_1"]
+
+    @_functools.cached_property
+    def ltm_2(self) -> LtmFamily | None:
+        self._assign_nonnominal()
+        return self.__dict__["ltm_2"]
+
+    @_functools.cached_property
+    def nominal(self) -> NominalFamily:
+        nom_fam = NominalFamily(
+            _input_latlon=self.latlon,
+            _extended_ltm=self.extended_ltm,
+            _precision=self.precision,
+        )
+        return nom_fam
+
+    # * DERIVED ATTRIBUTES. ───────────────────────────────────────────
+    @_functools.cached_property
+    def json(self) -> str:
+        return self.to_json()
+
+    @_functools.cached_property
+    def json_dict(self) -> dict:
+        json_dict = {}
+        for top_key in (
+            *(field.name for field in _dataclasses.fields(self)),
+            "latlon",
+            "nominal",
+            "lps",
+            "ltm_1",
+            "ltm_2",
+            "forced",
+        ):
+            val = getattr(self, top_key)
+            if isinstance(val, _BaseFamily):
+                # *REASSIGNMENT*
+                val = {
+                    attr_name: getattr(val, attr_name)
+                    for attr_name in type(val).__annotations__
+                }
+            json_dict[top_key] = val
+        return json_dict
+
+    @_functools.cached_property
+    def json_full(self) -> str:
+        return self.to_json(use_objects=True)
+
+    # * METHODS. ──────────────────────────────────────────────────────
+    def get(self, address: str) -> _typing.Any:
+        """
+        Safely get any attribute chain from `self`.
+
+        When an attribute chain first encounters `None`, the remaining chained
+        attributes are ignored and `None` is returned. This makes it a little
+        easier to work with attribute chains in which the final attribute, or
+        one of its ancestors, is unpopulated (that is, `None`). A chain that
+        names a nonexistent attribute still raises an `AttributeError`. See
+        Examples.
+
+        Parameters
+        ----------
+        address : string
+            The dot-delimited attribute name to get, such as
+            `"ltm_2.point"`.
+
+        Returns
+        -------
+        value : typing.Any
+            The value at `address` or `None`, if `None` was encountered.
+
+        Raises
+        ------
+        AttributeError
+            If `address` names an attribute that does not exist.
+
+        Examples
+        --------
+        Consider an instance for which `.ltm_1` is populated but neither
+        `.ltm_2` nor `.lps`.
+
+        >>> from lgrs.coords import LatLonPoint
+        >>> geo_point = LatLonPoint(0, 0)
+        >>> relatives = GeoRelatives(geo_point, precision=1)
+        >>> relatives.ltm_1 is not None
+        True
+        >>> relatives.ltm_2 is not None
+        False
+        >>> relatives.lps is not None
+        False
+
+        Now imagine that you wanted to compile the `CRS` of all LGRS members
+        without knowing which families were populated. With the current
+        method, this is much less cumbersome.
+
+        >>> crs_list = [
+        ...     crs for address in
+        ...     ("ltm_1.lgrs.crs", "ltm_2.lgrs.crs", "lps.lgrs.crs")
+        ...     if (crs := relatives.get(address)) is not None
+        ... ]
+        >>> len(crs_list)
+        1
+        """
+        result = self  # Initialize.
+        for attr_name in address.split("."):
+            result = getattr(result, attr_name)
+            if result is None:
+                return None
+        return result
+
+    def to_json(
+        self,
+        *,
+        use_objects: bool = False,
+        ensure_ascii: bool = False,
+        indent: int | str | None = 4,
+        **kwargs,
+    ) -> str:
+        """
+        Make JSON string representation of `.json_dict`.
+
+        Parameters
+        ----------
+        use_objects : bool, default=False
+            Whether to represent coordinates as JSON objects rather than
+            strings. Internally, sets ``default`` to `str` if `False` or
+            `lgrs.coords.BaseCoordinate.to_json` if `True`. If ``default``
+            is specified explicitly, that argument overrides `use_objects`.
+        ensure_ascii : bool, default=False
+            Passed to ``json.dumps()``. Note default used in present method.
+        indent : int or str or None, default=4
+            Passed to ``json.dumps()``. Note default used in present method.
+        **kwargs
+            Additional keyword arguments, including ``default``, are passed
+            to ``json.dumps()``.
+
+        Returns
+        -------
+        string : str
+            The JSON representation.
+
+        Examples
+        --------
+        Create relatives instance.
+
+        >>> from lgrs.coords import LatLonPoint
+        >>> geo_point = LatLonPoint(0, 0)
+        >>> relatives = GeoRelatives(geo_point, precision=1)
+
+        Encode to JSON then decode, with both `use_objects` options.
+
+        >>> import json
+        >>> as_strings = json.loads(relatives.to_json(use_objects=False))
+        >>> as_objects = json.loads(relatives.to_json(use_objects=True))
+
+        Note that `as_strings` encodes coordinates as strings whereas
+        `as_objects` encodes as JSON objects, which decode to nested
+        `dict`s.
+
+        >>> as_strings["latlon"]
+        '0° N, 0° E'
+        >>> as_objects["latlon"]
+        {'latitude': 0, 'longitude': 0, 'string': '0° N, 0° E'}
+        """
+        # Collect `json.dumps()` kwargs.
+        dumps_kwargs = locals().copy()
+        del dumps_kwargs["self"]
+        del dumps_kwargs["use_objects"]
+        dumps_kwargs.update(dumps_kwargs.pop("kwargs"))
+
+        # Set `default`, if applicable.
+        if "default" not in dumps_kwargs:
+            if use_objects:
+                default = _coords.BaseCoordinate.to_json_dict
+            else:
+                default = str
+            dumps_kwargs["default"] = default
+
+        # Dump to string and return.
+        return _json.dumps(self.json_dict, **dumps_kwargs)
 
 
 # endregion
 ###############################################################################
 # region> UTILITIES
 ###############################################################################
+def _call_with_kwargs(
+    func: _collections.abc.Callable,
+    kwargs: dict[str, _typing.Any],
+    *,
+    defaults: dict[str, _typing.Any] | None = None,
+    overrides: dict[str, _typing.Any] | None = None,
+    used: set | None = None,
+) -> _typing.Any:
+    # Update set of used keys.
+    if used is not None:
+        used.update(kwargs)
+
+    # Finalize `kwargs`.
+    if defaults:
+        new_kwargs = defaults.copy()
+        new_kwargs.update(kwargs)
+        kwargs = new_kwargs  # *REASSIGNMENT*
+    if overrides:
+        kwargs = kwargs.copy()  # *REASSIGNMENT*
+        kwargs.update(overrides)
+    sig = _inspect.signature(func)
+    final_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
+
+    # Call and return.
+    return func(**final_kwargs)
+
+
 def _test_mode(path: _pathlib.Path, mode: str) -> str:
     match mode:
         case "x":
@@ -78,206 +641,203 @@ def _test_mode(path: _pathlib.Path, mode: str) -> str:
 
 
 # endregion
+
+
 ###############################################################################
 # region> CONVENIENCE FUNCTIONS
 ###############################################################################
-# def from_gridded(
-#     string: str,
-#     *,
-#     fmt: Format = Format.LGRS,
-#     typ: Type = Type.LABELED,
-#     region: Region = Region.ANY,
-#     extended_ltm: bool = False,
-# ) -> tuple | str: ...
-#
-#
-# def from_geographic(
-#     latitude: float,
-#     longitude: float,
-#     *,
-#     fmt: Format = Format.LGRS,
-#     typ: Type = Type.LABELED,
-#     region: Region = Region.ANY,
-#     extended_ltm: bool = False,
-# ) -> tuple | str: ...
-#
-#
-# # TODO: Or could "cheat" and call this `from_projected()`, perhaps even
-# #  replace-all "lps_or_ltm" ro "projected" across the package, with the
-# #  understanding (as we'd state in the docs) that projected invariably
-# #  means LPS or LTM in the package.
-# def from_lps_or_ltm(
-#     easting: float,
-#     northing: float,
-#     *,
-#     fmt: Format = Format.LGRS,
-#     typ: Type = Type.LABELED,
-#     region: Region = Region.ANY,
-#     extended_ltm: bool = False,
-# ) -> tuple | str:
-#     """
-#     Convert from LPS or LTM coordinates.
-#
-#     Parameters
-#     ----------
-#     easting : float
-#         Easting coordinate.
-#     northing : float
-#         Northing coordinate.
-#     fmt : Format, default=Format.LGRS
-#         The format of `converted`.
-#     typ : Type, default=Type.LABELED
-#         The type of `converted`.
-#     region : Region, default=Region.ANY
-#         Whether to enforce a polar or non-polar check.
-#     extended_ltm : bool, default=False
-#         Whether to use the extended LTM region (from 80 to 82 degrees).
-#
-#     Returns
-#     -------
-#     converted : tuple or str
-#         A named tuple or string representing the converted coordinates.
-#
-#     Raises
-#     ------
-#     lgrs.exceptions.NonPolarError
-#         If `region` requires the polar region but `converted` is not
-#         poleward of 80 degrees (if `extended_ltm` is `False`) or 82 degrees
-#         (if `extended_ltm` is `True`).
-#     lgrs.exceptions.PolarError
-#         If `region` requires the non-polar region but `converted` is
-#         poleward of 80 degrees (if `extended_ltm` is `False`) or 82 degrees
-#         (if `extended_ltm` is `True`).
-#
-#     """
-#     # Examples
-#     # --------
-#     # >>> import lgrs.easy
-#     # >>> lgrs.easy.from_lps_or_ltm(488590, 608480)
-#     # (zone="A", area="ZS", easting=13590, northing=8480,
-#     #  string="AZS1359008480")
-#     # >>> lgrs.easy.from_lps_or_ltm(488590, 608480, typ=Type.STRING)
-#     # "AZS1359008480"
-#     # >>> lgrs.easy.from_lps_or_ltm(488590, 608480, typ=Type.PRETTY)
-#     # "A ZS 13590 08480"
-#
-#     # """
-#     # import sys
-#     # _rich.print(
-#     #   "[bold red]NonPolarError:[/bold red] Test.", file=sys.stderr,
-#     #   flush=True
-#     # )
-#     ...
+# TODO: Decide what `maxsize` should be.
+@_functools.lru_cache(maxsize=1000)
+def _make_georelatives_instance(*args, **kwargs):
+    return GeoRelatives(*args, **kwargs)
 
 
+@_util.partially_wraps(
+    _coords.BaseCoordinate.from_string, prepend=("Notes",), strict=True
+)
+@_util.partially_wraps(GeoRelatives, extend=(1,))
+def convert_coordinate(
+    input_coordinate: _coords.BaseCoordinate | str,
+    *,
+    precision: float,
+    target: str | None = None,
+    **kwargs,
+) -> GeoRelatives | _typing.Any:
+    """
+    Convert an input coordinate to all relevant coordinates.
+
+    Internally, a `GeoRelatives` instance is generated. Recent
+    `GeoRelatives` instances are cached when created by the present
+    function, so there is trivial cost to making subsequent calls with a
+    different `target` each time (but all other arguments the same). The
+    documentation for `GeoRelatives` is integrated below, but you might find
+    it easiest to skip to Examples.
+
+    Parameters
+    ----------
+    input_coordinate : a point or box coordinate, or equivalent string
+        If a string, it is converted to a coordinate instance (by
+        `lgrs.coords.BaseCoordinate.from_string()`) before being passed to
+        `GeoRelatives()`. See Notes for supported formats.
+    target : string, optional
+        Specifies the address (attribute reference, possibly chained) on the
+        `GeoRelatives` instance whose value should be returned, such as
+        `"json"`, `"nominal.lgrs"`, or `"forced.lps.northing"`. Internally,
+        uses ``GeoRelatives.get(target)``, so that chains that may be
+        interrupted by `None` can be safely used. A chain that names a
+        nonexistent attribute (for example, by a misspelling) raises an
+        `AttributeError`. See Examples.
+
+    Returns
+    -------
+    relatives_or_value : GeoRelatives or typing.Any
+        The `GeoRelatives` instance (if `target` is not specified) or
+        whatever object is targeted by `target`.
+
+    Examples
+    --------
+    Consider an example point.
+
+    >>> example = "80 N, 0 E"
+
+    First, let's confirm that parsing works.
+
+    >>> convert_coordinate(example, precision=1, target="latlon")
+    LatLonPoint(latitude=80, longitude=0, constraints=Constraints())
+
+    To get the 1-m LGRS box as a coordinate:
+
+    >>> convert_coordinate(example, precision=1, target="nominal.lgrs") # doctest: +NORMALIZE_WHITESPACE
+    LpsLgrsBox(longitudinal_band='Z', easting_area='A', northing_area='-',
+    easting='00000', northing='22818', constraints=Constraints())
+
+    To get that same box as a string reference:
+
+    >>> convert_coordinate(
+    ...     example, precision=1, target="nominal.lgrs.string"
+    ... )
+    'ZA-0000022818'
+
+    To get the (pretty-formatted) geographic coordinate at the center of
+    that box:
+
+    >>> convert_coordinate(
+    ...     example, precision=1, target="nominal.lgrs.center_latlon.string"
+    ... )
+    '80.00000244867157° N, 9.480358578044988e-05° E'
+
+    To determine whether the example point lies in both valid LPS and LTM
+    ACC boxes:
+
+    >>> in_lps = convert_coordinate(
+    ...     example, precision=1, target="lps.acc"
+    ... ) is not None
+    >>> in_ltm = convert_coordinate(
+    ...     example, precision=1, target="ltm_1.acc"
+    ... ) is not None
+    >>> in_lps and in_ltm
+    True
+
+    To make it easier to work with deep targets, any target that is
+    interrupted by `None` simply returns `None` (rather than, say, raising
+    an `AttributeError`).
+
+    >>> ltm_2 = convert_coordinate(example, precision=1, target="ltm_2")
+    >>> ltm_2 is None
+    True
+    >>> convert_coordinate(
+    ...     example, precision=1, target="ltm_2.lgrs.string"
+    ... ) is None
+    True
+    """  # noqa: E501
+    # Create `GeoRelatives` instance.
+    if isinstance(input_coordinate, str):
+        # *REASSIGNMENT*
+        input_coordinate = _coords.BaseCoordinate.from_string(input_coordinate)
+    georel = _make_georelatives_instance(
+        input_coordinate, precision=precision, **kwargs
+    )
+
+    # Extract and return targeted value.
+    if target is None:
+        return georel
+    else:
+        return georel.get(target)
+
+
+@_util.partially_wraps(_grid.make_box_grid)
 def write_grid(
     bounds: _typing.Any,
     precision: float,
-    out_path: _pathlib.Path | str,
+    out_path: _pathlib.Path | str | None,
+    mode: _typing.Literal["x", "w", "a"] = "x",
     *,
     acc: bool = False,
     extended_ltm: bool = False,
-    mode: _typing.Literal["x", "w", "a"] = "x",
     min_overlap: bool = True,
     min_zones: bool = False,
     fallback_to_geo: bool = False,
     densify_count: int = 21,
-) -> None:
+    json_extras: bool | None = None,
+    driver: str | None = None,
+    **kwargs,
+) -> dict[str, dict] | None:
     """
-    Write out an LGRS or ACC box grid to one or more files.
+    Write out an LGRS or ACC box grid to file(s) or a GeoJSON-like `dict`.
 
     Parameters
     ----------
-    bounds : a resolvable bounds hint
-        Resolved to define the footprint of the box grid. Supported inputs:
-            (1) 4-sequence of `float`s
-                Order of `float`s is (min_lon, min_lat, max_lon, max_lat).
-                Values are in degrees in IAU_2015:30100.
-            (2) 5-sequence of 4 `float`s followed by a CRS hint
-                Order is (min_x, min_y, max_x, max_y, crs_hint). If the
-                final element is not a `CRS`, it is coerced by
-                `lgrs.bounds.resolve_crs()`. For example, "S" indicates the
-                south LPS CRS, "23N" indicates the Northern Hemisphere LTM
-                zone 23 CRS, and `None` indicates the underlying geographic
-                CRS, IAU_2015:30100. Arguments compatible with
-                `pyproj.CRS.from_user_input()` are also supported, such as
-                "IAU_2015:30100" or "ESRI:104903".
-            (3) path (`str` or `pathlib.Path`) to vector or raster data
-                The target's bounds, in its CRS, are used. You may specify a
-                layer or table by the convention:
-                ``"path/to/my.gpkg|layer=my_layer_name"`` or
-                ``"path/to/my.gpkg|table=my_table_name"``, as appropriate.
-            (4) short name (`str`) for an LGRS CRS
-                This option generates all boxes for the indicated CRS, which
-                is resolved by `lgrs.bounds.resolve_crs()`.
-            (5) `None`
-                Interpreted as global bounds.
-            (6) `bounds.GeographicBounds` or `bounds.ProjectedBounds`
-                Used directly.
-            (7) `pyproj.AreaOfInterest` or `pyproj.AreaOfUse`
-                Converted by ``GeographicBounds.from_area(bounds)``.
-    precision : float
-        The required precision of the grid. If not a supported precision,
-        the actual precision is rounded down to a better precision. All
-        boxes have the same precision.
-    out_path : string or pathlib.Path
-        The output file path. You may specify a layer name by the
-        convention: ``"path/to/my.gpkg|layer=layer_name"``. May contain `"{}"`
-        as a placeholder (in file path and/or layer name portions), which will
-        be replaced with an automatically generated descriptive name that
-        ensures uniqueness among the outputs of this call. If the parent
-        directory of `out_path` does not exist, it will be created. If
-        `out_path` is a GeoPackage, each output layer will be appended to it;
-        the GeoPackage will also be created, if necessary.
-    acc : bool, default=False
-        Whether to use Artemis Condensed Coordinates (ACC) rather than the
-        standard Lunar Grid Reference System (LGRS). The geometry of the
-        boxes in each case are identical but the field data differ.
-    extended_ltm : bool, default=False
-        Whether to use the extended LTM region, which extends to 82° N/S
-        instead of 80° N/S.
+    out_path : string, pathlib.Path, or None
+        The output file path, or `None` to return a GeoJSON-like `dict`. You
+        may specify a layer name by the convention:
+        ``"path/to/my.gpkg|layer=layer_name"``. May contain `"{}"` as a
+        placeholder (in file path and/or layer name portions), which will be
+        replaced with an automatically generated descriptive name that
+        ensures uniqueness among the outputs (one per CRS) of this call. If
+        the parent directory of `out_path` does not exist, it will be
+        created. If `out_path` is a GeoPackage, each output layer will be
+        appended to it; the GeoPackage will also be created, if necessary.
     mode : "x", "w", or "a", default="x"
         The file write mode. ``"x"`` requires that the file to which
         `out_path` points (after resolution of any ``"{}"``) not preexist
-        the call. ``"w"`` will create that file, overwriting if it preexists.
-        ``"a"`` requires that the file preexist and appends to that file;
-        if the layer also preexists, it is likewise appended to.
-    min_overlap : bool, default=True
-        Whether to reduce box overlap. If `True`, boxes only overlap near LPS
-        and LTM zone boundaries, where overlap is necessary to ensure coverage.
-        If `False`, all valid boxes in the targeted area are generated, which
-        may include inter-zone overlaps of up to ~35.4 km, that is, the
-        diagonal of a 25-km box. In the special case that `bounds` is specified
-        by an LGRS CRS string, `min_overlap` is instead interpreted to relate
-        to the overlap of that region with its neighbors. Then, `True`
-        generates only boxes that are within the nominal bounds of the zone
-        whereas `False` generates all valid boxes from the maximally expanded
-        zone.
-    min_zones : bool, default=False
-        Whether to minimize the number of zones (and therefore, CRSs) that are
-        used. If `True`, boxes from non-nominal (expanded) areas of zones may
-        be generated if doing so enables fewer zones to be used overall. For
-        example, when working near the nominal longitudinal boundary between
-        two LTM zones, you may prefer all boxes to come from one zone, if
-        possible, instead of nearly all boxes from that zone and a few from a
-        neighboring zone.
-    fallback_to_geo: bool, default=False
-        Specifies the behavior when the CRS of a path-like `bounds` cannot
-        be transformed to the geographic CRS IAU_2015:30100. If `True` and
-        that CRS can be transformed to some geographic CRS, that geographic
-        CRS is assumed equivalent to IAU_2015:30100. If `True` but no CRS
-        can be identified for `path`, the coordinates are assumed to
-        already be in IAU_2015:30100, with order (lat, lon). In all other
-        cases, an exception is raised.
-    densify_count : int, default=21
-        Whenever a bounding box must be transformed between CRSs, this number
-        of samples will be added to each edge prior to transformation. Having
-        more samples helps ensure that the transformation of the bounding box
-        is more precise, but higher values will decrease performance.
+        the call. ``"w"`` will create that file, overwriting if it
+        preexists. ``"a"`` requires that the file preexist and appends to
+        that file; if the layer also preexists, it is likewise appended to.
+        Ignored if `out_path` is `None`.
+    json_extras : bool, optional
+        Whether to add the following top-level foreign members to GeoJSON
+        output:
+            "name":
+                An automatically generated descriptive name for the layer.
+            "lgrs:crs_hint":
+                A short `str` such as `"S"` for south LPS CRS or `"23N"` for
+                the Northern Hemisphere LTM zone.
+            "lgrs:crs_projjson":
+                A `dict` generated by ``pyproj.CRS.to_json_dict()``.
+            "lgrs:crs_wkt":
+                A `str` generated by ``pyproj.CRS.to_wkt()``.
+        This behavior is only available if (1) `out_path` is `None` or (2)
+        `out_path` points to a GeoJSON file and no other argument implies
+        driver-dependent behavior. (See Warnings section for more
+        information.) In the latter case, ``json.dumps()`` is called for
+        formatting. Defaults `True` for supported calls.
+    driver : string, optional
+        Passed to ``geopandas.GeoDataFrame.to_file()``. Ignored if
+        `out_path` is `None`.
+    **kwargs
+        Extra arguments are distributed among internally-called functions,
+        including ``geopandas.GeoDataFrame.to_file()`` and others as
+        documented herein.
 
     Returns
     -------
-    None
+    hint_to_dict : a dict[str, dict] or None
+        If `out_path` is `None`, a `dict` mapping CRS hint to GeoJSON-like
+        `dict` is returned. Each CRS hint is a short string such as `"S"`
+        for south LPS CRS or `"23N"` for the Northern Hemisphere LTM zone 23
+        CRS. Each `dict` is generated by
+        ``geopandas.GeoDataFrame.to_geo_dict()``.  Otherwise, `None` is
+        returned.
 
     Raises
     ------
@@ -286,52 +846,99 @@ def write_grid(
         `out_path` does not preexist. Also if `out_path` does not contain
         the ``"{}"`` placeholder and `bounds` is not an LGRS CRS short name.
         In that case, a name collision is risked if multiple CRSs generate
-        multiple outputs.
+        multiple outputs. Also if `json_extras` is `True` but bypassing is
+        not supported (see Warnings). Finally, if arguments in `**kwargs`
+        are unused.
 
     Warnings
     --------
-    In the current implementation, the `True` option for `min_zones` has no
-    effect unless `bounds` can be spanned by boxes from a single CRS.
+    When writing out to a GeoJSON file or using the GeoJSON-like
+    `hint_to_dict` values, bear in mind that the CRS foreign members added
+    by `json_extras` will be the only CRS reference available, since the
+    `"crs"` member does not support any LGRS CRS (currently).
+
+    When writing out to a GeoJSON file, it is often possible to bypass
+    ``geopandas.GeoDataFrame.to_file()``. This bypassing makes `json_extras`
+    behavior available at no cost to performance and is likely what you
+    want. Conversely, to ensure that ``geopandas.GeoDataFrame.to_file()`` is
+    called, specify ``driver="GeoJSON"``. Otherwise, bypassing is preferred
+    and heuristics determine whether to use it on a given call. If
+    `json_extras` is `True` but bypassing is not supported, an error is
+    raised.
 
     Examples
     --------
+    Target 3-5 degrees longitude, 4-6 degrees latitude in IAU_2015:30100.
+    Generate an ACC grid with cell side length 1000 m. Output to auto-
+    named layers (one per CRS) in `grid_1.gpkg`.
     >>> write_grid(  # doctest: +SKIP
-    ...     (3, 3, 5, 5), 1_000, "~/grids/grid_1.gpkg|layer={}",  # doctest: +SKIP
+    ...     (3, 4, 5, 6), 1_000, "~/grids/grid_1.gpkg|layer={}",  # doctest: +SKIP
     ...     acc=True  # doctest: +SKIP
     ... )  # doctest: +SKIP
+
+    For the entire LPS North region, generate an LGRS grid with cell side
+    length 25,000 m. Incorporate an automatically generated name into the
+    name of the output shapefile.
     >>> write_grid("N", 25_000, r"C:\\my_grids\final_{}_Moon.shp")  # doctest: +SKIP
-    >>> write_grid("path/to/craters.tif", 100, "~/grids/craters_{}.geojson")  # doctest: +SKIP
+
+    The above is a special case in which the output is known beforehand to
+    be confined to a single CRS. In such cases, the "{}" placeholder is
+    optional:
+    >>> write_grid("N", 25_000, r"C:\\my_grids\final_LPS_N_Moon.shp")  # doctest: +SKIP
+
+    For the footprint of `craters.tif`, generate an ACC grid with cell side
+    length 100 m. Return as a mapping to GeoJSON-like `dict` instances.
+    >>> json_dict = write_grid("path/to/craters.tif", 100, None, acc=True)  # doctest: +SKIP
+
+    Generate a global LGRS grid with cell side length 25 km. Split grid
+    between GeoPackage layers, one per CRS, each named automatically.
+    >>> write_grid(None, 25_000, "~/grids/global.gpkg|layer={}")  # doctest: +SKIP
     """  # noqa: E501
     # Process `out_*` arguments.
-    nom_out_path_template = _pathlib.Path(out_path)
-    del out_path  # Avoid accidental use.
-    out_file_path_template, open_kwargs = (
-        _bounds._resolve_file_path_and_open_kwargs(nom_out_path_template)
-    )
-    if open_kwargs:
-        ((layer_kw, layer_name),) = open_kwargs.items()
-    else:
-        layer_kw = None
-    # Note: Satisfaction of `mode` expectations can only be evaluated
-    # once the output file path is resolved.
-    file_path_is_dynamic = "{}" in out_file_path_template.name
-    if not file_path_is_dynamic:
-        # *REASSIGNMENT*
-        mode = _test_mode(out_file_path_template, mode)
-    if not out_file_path_template.parent.parent.exists():
-        raise TypeError(
-            "The grandparent of `out_path` does not exist: "
-            f"'{out_file_path_template.parent.parent}'"
+    return_mapping = out_path is None
+    if not return_mapping:
+        nom_out_path_template = _pathlib.Path(out_path)
+        del out_path  # Avoid accidental use.
+        out_file_path_template, open_kwargs = (
+            _bounds._resolve_file_path_and_open_kwargs(nom_out_path_template)
         )
+        if open_kwargs:
+            ((layer_kw, layer_name),) = open_kwargs.items()
+        else:
+            layer_kw = None
+        # Note: Satisfaction of `mode` expectations can only be
+        # evaluated once the output file path is resolved.
+        file_path_is_dynamic = "{}" in out_file_path_template.name
+        if not file_path_is_dynamic:
+            # *REASSIGNMENT*
+            mode = _test_mode(out_file_path_template, mode)
+        if not out_file_path_template.parent.parent.exists():
+            raise TypeError(
+                "The grandparent of `out_path` does not exist: "
+                f"'{out_file_path_template.parent.parent}'"
+            )
 
-    # Verify required uniqueness.
-    expect_exactly_one_crs = "{}" not in nom_out_path_template.name
-    # TODO: Could eventually support output to a single file generally
-    #  by using a geographic CRS and densification.
-    if expect_exactly_one_crs:
-        _, exclusive_crs = _grid._resolve_bounds(**locals())
-        if exclusive_crs is None:
-            raise TypeError("`out_path.name` must contain '{}'")
+        # Verify required uniqueness.
+        expect_exactly_one_crs = "{}" not in nom_out_path_template.name
+        # TODO: Could eventually support output to a single file
+        #  generally by using a geographic CRS and densification.
+        if expect_exactly_one_crs:
+            _, exclusive_crs = _grid._resolve_bounds(**locals())
+            if exclusive_crs is None:
+                raise TypeError("`out_path.name` must contain '{}'")
+
+    # Determine whether to generate a GeoJSON-like mapping.
+    make_geo_dict = return_mapping or (
+        driver is None
+        and mode != "a"
+        and layer_kw is None
+        and out_file_path_template.suffix.lower() in (".json", ".geojson")
+    )
+    if json_extras and not make_geo_dict:
+        raise TypeError(
+            "`json_extras` is `True` but bypassing is not "
+            "supported for this call"
+        )
 
     # Generate grid `GeoDataFrame`(s).
     boxes = _grid.make_box_grid(
@@ -346,7 +953,60 @@ def write_grid(
     )
     gdfs = _grid.make_gdfs(boxes)
 
-    # Output each `GeoDataFrame`.
+    # Optionally generate a GeoJSON-like mapping.
+    used_kwarg_set = set()
+    if make_geo_dict:
+        key_to_dict = {}
+        if json_extras is None:
+            json_extras = True  # *REASSIGNMENT*
+        for gdf in gdfs:
+            crs_info: _database.LunarCrsInfo = _database.LunarCrsInfo.from_crs(
+                gdf.crs
+            )
+            if return_mapping:
+                key = crs_info.hint
+            else:
+                # Note: If not returning the mapping, use a more
+                # accessible key.
+                key = id(gdf)
+            geo_dict = _call_with_kwargs(
+                gdf.to_geo_dict,
+                kwargs,
+                used=used_kwarg_set,
+            )
+            key_to_dict[key] = geo_dict
+            if json_extras:
+                for key, val_or_func, defaults in (
+                    ("name", gdf.name_hint, None),
+                    ("lgrs:crs_hint", crs_info.hint, None),
+                    ("lgrs:crs_projjson", gdf.crs.to_json_dict, None),
+                    ("lgrs:crs_wkt", gdf.crs.to_wkt, {"pretty": True}),
+                ):
+                    if isinstance(val_or_func, _collections.abc.Callable):
+                        func = val_or_func  # For clarity.
+                        val = _call_with_kwargs(
+                            func,
+                            kwargs,
+                            defaults=defaults,
+                            used=used_kwarg_set,
+                        )
+                    else:
+                        val = val_or_func
+                    geo_dict[key] = val
+        if return_mapping:
+            return key_to_dict
+
+    # If will call `geopandas.GeoDataFrame.to_file()`, subset `kwargs`.
+    # Note: Since `geopandas.GeoDataFrame.to_file()` has open-ended
+    # keyword arguments, must use process of elimination to determine
+    # relevant arguments.
+    else:
+        # *REASSIGNMENT*
+        kwargs = {k: v for k, v in kwargs.items() if k not in used_kwarg_set}
+        if driver is not None:
+            kwargs["driver"] = driver
+
+    # Output each `GeoDataFrame` to a file or layer.
     out_dir_path = out_file_path_template.parent
     out_file_name_template = out_file_path_template.name
     out_dir_path_exists = out_dir_path.exists()
@@ -356,18 +1016,24 @@ def write_grid(
         )
         if file_path_is_dynamic:
             mode = _test_mode(gdf_out_path, mode)  # *REASSIGNMENT*
-        to_file_kwargs = {
-            "filename": gdf_out_path,
-            "index": True,
-            "mode": mode,
-        }
-        if layer_kw is not None:
-            to_file_kwargs[layer_kw] = layer_name.format(gdf.name_hint)
         # Note: Wait to create out directory until necessary.
         if not out_dir_path_exists:
             out_dir_path.mkdir()
             out_dir_path_exists = True
-        gdf.to_file(**to_file_kwargs)
+        if make_geo_dict:
+            geo_dict = key_to_dict[id(gdf)]
+            geo_dict_str = _call_with_kwargs(
+                _json.dumps,
+                kwargs,
+                defaults={"indent": 2},
+                overrides={"obj": geo_dict},
+            )
+            with gdf_out_path.open(mode=mode) as f:
+                f.write(geo_dict_str)
+        else:
+            if layer_kw is not None:
+                kwargs[layer_kw] = layer_name.format(gdf.name_hint)
+            gdf.to_file(gdf_out_path, index=True, mode=mode, **kwargs)
 
 
 # endregion

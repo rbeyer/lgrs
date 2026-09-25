@@ -27,7 +27,7 @@ import typing as _typing
 
 # External.
 import geopandas as _geopandas
-import numpy as _np
+import numpy as _numpy
 from pyproj import aoi as _pyproj_aoi
 
 # Internal.
@@ -81,7 +81,7 @@ def _construct_latlon_grid(
     delta = precision / _math.sqrt(2)
     grid_height = lat_range * _values.M_PER_DEGREE_LATITUDE
     row_count = _calculate_safe_count(grid_height, delta)
-    lats = _np.linspace(min_lat, max_lat, row_count).tolist()
+    lats = _numpy.linspace(min_lat, max_lat, row_count).tolist()
 
     # Determine critical latitude and longitude coordinates.
     crit_lats = bounds._get_critical_latitudes(constraints)
@@ -107,7 +107,7 @@ def _construct_latlon_grid(
         # Determine longitude coordinates.
         row_width = lon_range * m_per_deg_lon
         col_count = _calculate_safe_count(row_width, delta)
-        lons = _np.linspace(min_lon, max_lon, col_count).tolist()
+        lons = _numpy.linspace(min_lon, max_lon, col_count).tolist()
         if crit_lons is not None:
             lons.extend(crit_lons)
 
@@ -128,13 +128,16 @@ def _resolve_bounds(
     _bounds.GeographicBounds | _bounds.ProjectedBounds,
     _srs.CRS | None,
 ]:
-    # Standardize `bounds`, so that each type as a single interpretation.
+    # Standardize `bounds`, so that each type as a single
+    # interpretation.
     geo_crs = _srs.make_lunar_crs()
     if isinstance(bounds, str):
         try:
             std_bounds = _srs.make_lunar_crs(bounds, extended_ltm=extended_ltm)
         except TypeError:
             std_bounds = _pathlib.Path(bounds)
+            if std_bounds.parts[0] == "~":
+                std_bounds = std_bounds.expanduser()  # *REASSIGNMENT*
     elif isinstance(bounds, _collections.abc.Sequence):
         match len(bounds):
             case 4:
@@ -205,6 +208,7 @@ def _spatially_filter_boxes(
 class LunarGeoDataFrame(_geopandas.GeoDataFrame):
     """Subclass of `geopandas.GeoDataFrame`."""
 
+    _metadata = ["name_hint"]
     name_hint: str
 
 
@@ -224,7 +228,7 @@ def make_box_grid(
     densify_count: int = 21,
 ) -> list[_coords.BoxCoordinate]:
     """
-    Generate a grid of LGRS or ACC boxes spanning specified bounds.
+    Generate grid as a list of LGRS or ACC boxes spanning specified bounds.
 
     Parameters
     ----------
@@ -257,9 +261,10 @@ def make_box_grid(
             (7) `pyproj.AreaOfInterest` or `pyproj.AreaOfUse`
                 Converted by ``GeographicBounds.from_area(bounds)``.
     precision : float
-        The required precision of the grid. If not a supported precision,
-        the actual precision is rounded down to a better precision. All
-        boxes have the same precision.
+        The maximum allowed precision, which is the nominal side length of
+        each grid box. If not a supported precision, the actual precision is
+        rounded down to a better precision. Must be at least 1. All boxes have
+        the same precision.
     acc : bool, default=False
         Whether to use Artemis Condensed Coordinates (ACC) rather than the
         standard Lunar Grid Reference System (LGRS). The geometry of the
@@ -268,25 +273,25 @@ def make_box_grid(
         Whether to use the extended LTM region, which extends to 82° N/S
         instead of 80° N/S.
     min_overlap : bool, default=True
-        Whether to reduce box overlap. If `True`, boxes only overlap near LPS
-        and LTM zone boundaries, where overlap is necessary to ensure coverage.
-        If `False`, all valid boxes in the targeted area are generated, which
-        may include inter-zone overlaps of up to ~35.4 km, that is, the
-        diagonal of a 25-km box. In the special case that `bounds` is specified
-        by an LGRS CRS string, `min_overlap` is instead interpreted to relate
-        to the overlap of that region with its neighbors. Then, `True`
-        generates only boxes that are within the nominal bounds of the zone
-        whereas `False` generates all valid boxes from the maximally expanded
-        zone.
+        Whether to reduce box overlap. If `True`, boxes only overlap near
+        LPS and LTM zone boundaries, where overlap is necessary to ensure
+        coverage. If `False`, all valid boxes in the targeted area are
+        generated, which may include inter-zone overlaps of up to ~35.4 km,
+        that is, the diagonal of a 25-km box. In the special case that
+        `bounds` is specified by an LGRS CRS string, `min_overlap` is
+        instead interpreted to relate to the overlap of that region with its
+        neighbors. Then, `True` generates only boxes that are within the
+        nominal bounds of the zone whereas `False` generates all valid boxes
+        from the maximally expanded zone.
     min_zones : bool, default=False
-        Whether to minimize the number of zones (and therefore, CRSs) that are
-        used. If `True`, boxes from non-nominal (expanded) areas of zones may
-        be generated if doing so enables fewer zones to be used overall. For
-        example, when working near the nominal longitudinal boundary between
-        two LTM zones, you may prefer all boxes to come from one zone, if
-        possible, instead of nearly all boxes from that zone and a few from a
-        neighboring zone.
-    fallback_to_geo: bool, default=False
+        Whether to minimize the number of zones (and therefore, CRSs) that
+        are used. If `True`, boxes from non-nominal (expanded) areas of
+        zones may be generated if doing so enables fewer zones to be used
+        overall. For example, when working near the nominal longitudinal
+        boundary between two LTM zones, you may prefer all boxes to come
+        from one zone, if possible, instead of nearly all boxes from that
+        zone and a few from a neighboring zone.
+    fallback_to_geo : bool, default=False
         Specifies the behavior when the CRS of a path-like `bounds` cannot
         be transformed to the geographic CRS IAU_2015:30100. If `True` and
         that CRS can be transformed to some geographic CRS, that geographic
@@ -295,15 +300,21 @@ def make_box_grid(
         already be in IAU_2015:30100, with order (lat, lon). In all other
         cases, an exception is raised.
     densify_count : int, default=21
-        Whenever a bounding box must be transformed between CRSs, this number
-        of samples will be added to each edge prior to transformation. Having
-        more samples helps ensure that the transformation of the bounding box
-        is more precise, but higher values will decrease performance.
+        Whenever a bounding box must be transformed between CRSs, this
+        number of samples will be added to each edge prior to
+        transformation. Having more samples helps ensure that the
+        transformation of the bounding box is more precise, but higher
+        values will decrease performance.
 
     Returns
     -------
     boxes : list of lgrs.coords.BoxCoordinate instances
         A flat list of boxes. LPS and LTM boxes may be commingled.
+
+    Raises
+    ------
+    TypeError
+        If `precision` is less than 1.
 
     Warnings
     --------
@@ -419,6 +430,7 @@ def make_box_grid(
         if min_zones:
             crs_set = {box.crs_nominal for box in box_list}
             if len(crs_set) > 1:
+                # Note: For each sample point, map each CRS to its box.
                 full_crs_to_box_list = [
                     {
                         box.crs_nominal: box
@@ -432,7 +444,7 @@ def make_box_grid(
                 ]
                 remaining_crs_to_box_list = full_crs_to_box_list
                 required_crses = []
-                while remaining_crs_to_box_list:
+                if remaining_crs_to_box_list:
                     crs_counter = _collections.Counter(
                         crs
                         for crs_to_box in remaining_crs_to_box_list
@@ -446,10 +458,9 @@ def make_box_grid(
                         for crs_to_box in remaining_crs_to_box_list
                         if max_crs not in crs_to_box
                     ]
-                    break  # See note on next line.
                 # Note: Commented-out code below should work (after
-                # removal of `break` on line above) but would suffer
-                # from inter-zone edge effects.
+                # `if` -> `while` above) but would suffer from inter-
+                # zone edge effects.
                 # box_set = set()  # *REASSIGNMENT*
                 # for crs_to_box in full_crs_to_box_list:
                 #     for crs in required_crses:

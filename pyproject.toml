@@ -32,8 +32,8 @@ reference = ["gdal"]
 [project.urls]
 Repository = "https://github.com/rbeyer/lgrs"
 
-# [project.scripts]
-# lgrs = "lgrs.cli:main"
+[project.scripts]
+lgrs = "lgrs.cli:main"
 
 [tools.setuptools.packages.find]
 where = ["src"]
@@ -79,10 +79,24 @@ filename = "src/lgrs/__init__.py"
 search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
 
+[[tool.bumpversion.files]]
+filename = "examples/convert_coordinate.html"
+search = 'lgrs==[^"]+'
+replace = 'lgrs=={new_version}'
+regex = true
+include_bumps = ["release"]
+
+[[tool.bumpversion.files]]
+filename = "examples/package_grid.html"
+search = 'lgrs==[^"]+'
+replace = 'lgrs=={new_version}'
+regex = true
+include_bumps = ["release"]
+
 [tool.black]
 line-length = 79
 force-exclude = "LGRS"
-
+target-version = ["py313"]
 
 [tool.flake8]
 exclude = "src/lgrs/reference/LGRS_Coordinate_Conversion.py,src/lgrs/reference/LGRS_Grid_Generation.py"
