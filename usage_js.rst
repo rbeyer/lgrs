@@ -170,7 +170,7 @@ from JavaScript itself have no ``type``. To read the Python message:
       if (e.type !== undefined) {
         const message = pyodide.runPython("import sys; str(sys.last_value)");
         console.error(e.type, message);
-        // Prints: MalformedCoordinate `string` is not in a supported format:
+        // Prints: CoordinateError `string` is not in a supported format:
         // 'not a coordinate'
       }
     }

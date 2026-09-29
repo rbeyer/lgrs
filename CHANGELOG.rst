@@ -79,6 +79,8 @@ Changed
   one that cannot be opened raises ``PermissionError``, and one that is not
   readable vector or raster data raises the new
   ``lgrs.exceptions.GeospatialFileError`` (a ``ValueError``).
+  ``lgrs.exceptions.MalformedCoordinate`` is renamed ``CoordinateError`` and
+  now subclasses ``ValueError``.
 * Documentation has been substantially expanded and corrected throughout the
   library, most notably for ``lgrs.easy.write_grid()``, ``lgrs.grid``, and the
   ``precision`` arguments of ``BaseCoordinate.to_acc()``,
@@ -87,6 +89,11 @@ Changed
   covers the newer functionality, including ``lgrs.easy.convert_coordinate()``,
   ``lgrs.make_lunar_wkt()``, ``lgrs.query_lunar_crs_info()``, and the
   command-line program.
+
+Deprecated
+^^^^^^^^^^
+* ``lgrs.exceptions.MalformedCoordinate``, the name used through 0.3.0. It
+  still works, with a ``DeprecationWarning``; use ``CoordinateError``.
 
 Removed
 ^^^^^^^

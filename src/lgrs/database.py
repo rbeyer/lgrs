@@ -83,7 +83,7 @@ def _calculate_ltm_zone_number(longitude: float) -> tuple[float, int]:
 
 def _conform_latitude(latitude: float) -> float:
     if abs(latitude) > 90:
-        raise _exceptions.MalformedCoordinate(
+        raise _exceptions.CoordinateError(
             "`latitude` must be in [-90, 90] interval"
         )
     return latitude
@@ -91,7 +91,7 @@ def _conform_latitude(latitude: float) -> float:
 
 def _conform_longitude(longitude: float) -> float:
     if abs(longitude) > 360:
-        raise _exceptions.MalformedCoordinate(
+        raise _exceptions.CoordinateError(
             "`longitude` must be in [-360, 360] interval"
         )
     # Note: Conformity to [-180, 180) interval required by Eq. 13 of

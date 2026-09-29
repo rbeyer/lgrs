@@ -16,11 +16,19 @@
 
 
 ###############################################################################
+# region> IMPORT
+###############################################################################
+# Standard.
+import warnings as _warnings
+
+
+# endregion
+###############################################################################
 # region> EXCEPTIONS
 ###############################################################################
-class MalformedCoordinate(Exception):
+class CoordinateError(ValueError):
     """
-    Raised when a coordinate is malformed.
+    Raised when a coordinate is malformed or invalid.
     """
 
     pass
@@ -36,6 +44,25 @@ class GeospatialFileError(ValueError):
     """
 
     pass
+
+
+# endregion
+###############################################################################
+# region> DEPRECATED NAMES
+###############################################################################
+def __getattr__(name: str) -> type:
+    # Note: Python calls a module-level `__getattr__()` only for a name
+    # that the module does not define (PEP 562). Resolve the name used
+    # through 0.3.0, `MalformedCoordinate`, to its renamed class, with a
+    # warning, so that code written for 0.3.0 keeps working.
+    if name == "MalformedCoordinate":
+        _warnings.warn(
+            "`MalformedCoordinate` is deprecated; use `CoordinateError`.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return CoordinateError
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # endregion

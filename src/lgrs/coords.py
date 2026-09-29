@@ -747,9 +747,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate, _EasyFields):
     def _raise_fallback_exception(
         self, cause: Exception | None = None
     ) -> _typing.NoReturn:
-        err = _exceptions.MalformedCoordinate(
-            f"Coordinate is not valid: {self!r}"
-        )
+        err = _exceptions.CoordinateError(f"Coordinate is not valid: {self!r}")
         if cause is None:
             raise err
         else:
@@ -764,7 +762,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate, _EasyFields):
         # `self`.
         try:
             self._validate_by_reconstruction()
-        except _exceptions.MalformedCoordinate:
+        except _exceptions.CoordinateError:
             raise
         except Exception:
             pass
@@ -776,7 +774,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate, _EasyFields):
         # diagnose cause for user.
         try:
             self._validate_each_field()
-        except _exceptions.MalformedCoordinate:
+        except _exceptions.CoordinateError:
             raise
         except Exception as e:
             cause = e
@@ -796,7 +794,7 @@ class _BaseCoordinate(_AbstractBaseCoordinate, _EasyFields):
             if func is not None:
                 try:
                     func()
-                except _exceptions.MalformedCoordinate:
+                except _exceptions.CoordinateError:
                     raise
                 except Exception as e:
                     if first_other_error is None:
@@ -841,12 +839,12 @@ class BaseCoordinate(_BaseCoordinate):
         # `LGRS_Coordinate_Conversion`.
         parts = tuple(string.split(" "))
         if len(parts) == 1:
-            raise _exceptions.MalformedCoordinate(
+            raise _exceptions.CoordinateError(
                 "`string` must be space-delimited"
             )
         field_name_to_type = cls._get_field_name_to_type()
         if len(parts) > len(field_name_to_type):
-            raise _exceptions.MalformedCoordinate(
+            raise _exceptions.CoordinateError(
                 "`string` contains too many space-delimited "
                 f"components: {string!r}"
             )
@@ -858,7 +856,7 @@ class BaseCoordinate(_BaseCoordinate):
 
     @staticmethod
     def _raise_parsing_error(string: str) -> _typing.NoReturn:
-        raise _exceptions.MalformedCoordinate(
+        raise _exceptions.CoordinateError(
             f"`string` is not in a supported format: {string!r}"
         )
 
@@ -891,7 +889,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.exceptions.MalformedCoordinate
+        lgrs.exceptions.CoordinateError
             If `string` cannot be parsed to a valid coordinate instance.
 
         Warnings
@@ -951,7 +949,7 @@ class BaseCoordinate(_BaseCoordinate):
         >>> BoxCoordinate.from_string("45.0 -120.0")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
           ...
-        lgrs.exceptions.MalformedCoordinate:
+        lgrs.exceptions.CoordinateError:
           ...
         >>> box_1 = BoxCoordinate.from_string("42SAM2468910101")
         >>> isinstance(box_1, LtmLgrsBox)
@@ -966,7 +964,7 @@ class BaseCoordinate(_BaseCoordinate):
         >>> LtmPoint.from_string("45.0°N, 120.0°W")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
           ...
-        lgrs.exceptions.MalformedCoordinate:
+        lgrs.exceptions.CoordinateError:
           ...
         """  # noqa: E501
         kwargs = {"constraints": constraints, "validate": validate}
@@ -977,7 +975,7 @@ class BaseCoordinate(_BaseCoordinate):
         for func in funcs:
             try:
                 return func(string, **kwargs)
-            except _exceptions.MalformedCoordinate:
+            except _exceptions.CoordinateError:
                 continue
         cls._raise_parsing_error(string)
 
@@ -1133,7 +1131,7 @@ class BaseCoordinate(_BaseCoordinate):
             prefix = ""
         else:
             prefix = f"For `{if_attr_name}={getattr(self, if_attr_name)!r}`, "
-        raise _exceptions.MalformedCoordinate(
+        raise _exceptions.CoordinateError(
             f"{prefix}"
             f"`{attr_name}` must be "
             f"{middle}"
@@ -1198,7 +1196,7 @@ class BaseCoordinate(_BaseCoordinate):
         if isinstance(twin, BoxCoordinate):
             twin = twin.with_precision(self.precision)  # *REASSIGNMENT*
         if self.is_lps_based() != twin.is_lps_based():
-            raise _exceptions.MalformedCoordinate(
+            raise _exceptions.CoordinateError(
                 f"For the given constraints, {self.constraints!r}, location "
                 f"should be in {'LPS' if twin.is_lps_based() else 'LTM'} "
                 f"region, not: {self!r}"
@@ -1208,7 +1206,7 @@ class BaseCoordinate(_BaseCoordinate):
         # Note: This test is included for completeness but should never
         # fail.
         if self._init_kwargs.keys() != twin._init_kwargs.keys():
-            raise _exceptions.MalformedCoordinate(
+            raise _exceptions.CoordinateError(
                 f"Cannot compare `self` to `twin`: {self!r}"
             )
         for field_name in self._init_kwargs:
@@ -1226,7 +1224,7 @@ class BaseCoordinate(_BaseCoordinate):
             break
         else:
             return
-        raise _exceptions.MalformedCoordinate(
+        raise _exceptions.CoordinateError(
             f"For the given constraints, {self.constraints!r}, location "
             f"should have the form\n"
             f"    {twin!r}\n"
@@ -1259,7 +1257,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.exceptions.MalformedCoordinate
+        lgrs.exceptions.CoordinateError
             If the instance is invalid. Unlike at-initialization validation,
             an instance is considered invalid even if its values are merely
             not conformed. See Examples.
@@ -1275,7 +1273,7 @@ class BaseCoordinate(_BaseCoordinate):
         >>> latlon_2.validate()  # doctest: +NORMALIZE_WHITESPACE
         Traceback (most recent call last):
           ...
-        lgrs.exceptions.MalformedCoordinate:
+        lgrs.exceptions.CoordinateError:
           Validation conformed the following value(s):
             longitude: 182 --> -178
 
@@ -1292,7 +1290,7 @@ class BaseCoordinate(_BaseCoordinate):
             old_v = self._init_kwargs[k]
             if new_v != old_v:
                 change_lines.append(f"    {k}: {old_v!r} --> {new_v!r}")
-        raise _exceptions.MalformedCoordinate(
+        raise _exceptions.CoordinateError(
             "\n"
             "  Validation conformed the following value(s):\n"
             f"{'\n'.join(change_lines)}"
@@ -1652,7 +1650,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.exceptions.MalformedCoordinate
+        lgrs.exceptions.CoordinateError
             If `replaced` would be invalid and `validate` is `True`.
 
         Examples
@@ -1670,7 +1668,7 @@ class BaseCoordinate(_BaseCoordinate):
         >>> illegal_point = ltm_point.replace(Constraints())  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
           ...
-        lgrs.exceptions.MalformedCoordinate:
+        lgrs.exceptions.CoordinateError:
           ...
         """  # noqa: E501
         # Resolve constraints and initialization kwargs for `replaced`.
@@ -1748,7 +1746,7 @@ class BaseCoordinate(_BaseCoordinate):
             cand = bound_method(constraints=constraints, validate=validate)
             if isinstance(cand, targ_typ):
                 return cand
-        raise _exceptions.MalformedCoordinate(
+        raise _exceptions.CoordinateError(
             f"Location is not compatible with `{targ_typ.__name__}`, "
             f"given `{constraints_list[0]!r}`: {self!r}"
         )
@@ -1941,7 +1939,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.exceptions.MalformedCoordinate
+        lgrs.exceptions.CoordinateError
             If `any_system=False` and the system of `typ` is incompatible with
             `self`.
 
@@ -1985,7 +1983,7 @@ class BaseCoordinate(_BaseCoordinate):
         >>> bad_box = latlon_point_2.to(LpsLgrsBox, search=True)  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
           ...
-        lgrs.exceptions.MalformedCoordinate:
+        lgrs.exceptions.CoordinateError:
           ...
         """  # noqa: E501
         force_system, convert = self._get_conversion_sequence(typ)
@@ -2192,7 +2190,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.exceptions.MalformedCoordinate
+        lgrs.exceptions.CoordinateError
             If `constraints` are incompatible with `LpsPoint` for this
             location, and `search` is `False`.
 
@@ -2319,7 +2317,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        lgrs.exceptions.MalformedCoordinate
+        lgrs.exceptions.CoordinateError
             If `constraints` are incompatible with `LtmPoint` for this
             location, and `search` is `False`.
 
@@ -2446,7 +2444,7 @@ class PointCoordinate(BaseCoordinate):
                 continue
             try:
                 new = typ(*parts, **kwargs)
-            except (TypeError, _exceptions.MalformedCoordinate):
+            except (TypeError, _exceptions.CoordinateError):
                 continue
             else:
                 return new
@@ -2465,9 +2463,7 @@ class PointCoordinate(BaseCoordinate):
             "([-0-9.]+)(?:[^-0-9.]+)([-0-9.]+)(?:[^-0-9.]*)$", spaced_str
         )
         if xy_coords_match is None:
-            raise _exceptions.MalformedCoordinate(
-                f"Could not parse: {string!r}"
-            )
+            raise _exceptions.CoordinateError(f"Could not parse: {string!r}")
         xy_coords_suffix = xy_coords_match.group()
         prefix = spaced_str.removesuffix(xy_coords_suffix)
 
@@ -2974,7 +2970,7 @@ class LatLonPoint(PointCoordinate):
 
     Raises
     ------
-    lgrs.exceptions.MalformedCoordinate
+    lgrs.exceptions.CoordinateError
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -3005,12 +3001,12 @@ class LatLonPoint(PointCoordinate):
     >>> LatLonPoint(1000, -1000)  # Example 2  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
       ...
-    lgrs.exceptions.MalformedCoordinate:
+    lgrs.exceptions.CoordinateError:
       ...
     >>> geo_point.to_lps()  # Example 3  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
       ...
-    lgrs.exceptions.MalformedCoordinate:
+    lgrs.exceptions.CoordinateError:
       ...
 
     You always have the option to override the constraints, and any override
@@ -3133,7 +3129,7 @@ class LpsPoint(PointCoordinate):
 
     Raises
     ------
-    lgrs.exceptions.MalformedCoordinate
+    lgrs.exceptions.CoordinateError
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -3254,7 +3250,7 @@ class LtmPoint(PointCoordinate):
 
     Raises
     ------
-    lgrs.exceptions.MalformedCoordinate
+    lgrs.exceptions.CoordinateError
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -3347,7 +3343,7 @@ class BoxCoordinate(BaseCoordinate):
         # Instance is invalid, but try to diagnose cause for user.
         try:
             self._validate_against_pattern(self.string)
-        except _exceptions.MalformedCoordinate:
+        except _exceptions.CoordinateError:
             raise
         except Exception:
             pass
@@ -3364,7 +3360,7 @@ class BoxCoordinate(BaseCoordinate):
         simple_pattern = cls._get_simple_pattern()
         if simple_pattern.search(string):
             if "I" in string or "O" in string:
-                raise _exceptions.MalformedCoordinate(
+                raise _exceptions.CoordinateError(
                     "`.string` contains the letters 'I' or 'O', which are "
                     "not used by LGRS"
                 )
@@ -3374,7 +3370,7 @@ class BoxCoordinate(BaseCoordinate):
                 failed_pattern = cls._pattern
         else:
             failed_pattern = simple_pattern
-        raise _exceptions.MalformedCoordinate(
+        raise _exceptions.CoordinateError(
             f"`.string` does not have the form: {failed_pattern.pattern!r}"
         )
 
@@ -3388,7 +3384,7 @@ class BoxCoordinate(BaseCoordinate):
         for name in ("global_lps", "global_ltm", "global_crs"):
             if not getattr(constraints, name):
                 continue
-            raise _exceptions.MalformedCoordinate(
+            raise _exceptions.CoordinateError(
                 "Global constraints are not compatible with "
                 f"`{cls.__name__}`, including: `{name}`"
             )
@@ -3429,11 +3425,11 @@ class BoxCoordinate(BaseCoordinate):
             for typ in (LpsLgrsBox, LpsAccBox, LtmLgrsBox, LtmAccBox):
                 try:
                     new = typ.from_string(collapsed_string, **kwargs)
-                except _exceptions.MalformedCoordinate:
+                except _exceptions.CoordinateError:
                     continue
                 else:
                     return new
-            raise _exceptions.MalformedCoordinate(
+            raise _exceptions.CoordinateError(
                 f"`string` is not in a supported format: {string!r}"
             )
 
@@ -4013,7 +4009,7 @@ class LpsAccBox(_BaseAccBox):
 
     Raises
     ------
-    lgrs.exceptions.MalformedCoordinate
+    lgrs.exceptions.CoordinateError
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -4074,7 +4070,7 @@ class LpsAccBox(_BaseAccBox):
 
     def _validate_easting(self) -> None:
         if (self.easting is None) != (self.northing is None):
-            raise _exceptions.MalformedCoordinate(
+            raise _exceptions.CoordinateError(
                 "`easting` and `northing` must both be specified "
                 "or both be `None`."
             )
@@ -4159,7 +4155,7 @@ class LpsLgrsBox(_BaseLgrsBox):
 
     Raises
     ------
-    lgrs.exceptions.MalformedCoordinate
+    lgrs.exceptions.CoordinateError
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -4324,7 +4320,7 @@ class LtmAccBox(_BaseAccBox):
 
     Raises
     ------
-    lgrs.exceptions.MalformedCoordinate
+    lgrs.exceptions.CoordinateError
         If the instance is invalid. Both values and constraints are
         considered.
 
@@ -4438,7 +4434,7 @@ class LtmLgrsBox(_BaseLgrsBox):
 
     Raises
     ------
-    lgrs.exceptions.MalformedCoordinate
+    lgrs.exceptions.CoordinateError
         If the instance is invalid. Both values and constraints are
         considered.
 
