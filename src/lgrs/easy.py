@@ -619,7 +619,8 @@ def _call_with_kwargs(
 
     # Call with the defaults, selected arguments, and overrides, each
     # taking precedence over the one before.
-    return func(**{**defaults, **selected, **overrides})
+    result = func(**{**defaults, **selected, **overrides})
+    return result
 
 
 def _dumps_geojson(geo_dict: dict, **kwargs) -> str:
@@ -629,7 +630,8 @@ def _dumps_geojson(geo_dict: dict, **kwargs) -> str:
     # nearly as small as `indent=None` while leaving one feature per
     # line for reading, `grep`, and `diff`.
     if "indent" in kwargs:
-        return _json.dumps(geo_dict, **kwargs)
+        geojson_text = _json.dumps(geo_dict, **kwargs)
+        return geojson_text
     keys = sorted(geo_dict) if kwargs.get("sort_keys") else list(geo_dict)
     member_strings = []
     for key in keys:
@@ -641,7 +643,8 @@ def _dumps_geojson(geo_dict: dict, **kwargs) -> str:
         else:
             val_string = _json.dumps(geo_dict[key], **kwargs)
         member_strings.append(f"{_json.dumps(key, **kwargs)}: {val_string}")
-    return "{\n" + ",\n".join(member_strings) + "\n}\n"
+    geojson_text = "{\n" + ",\n".join(member_strings) + "\n}\n"
+    return geojson_text
 
 
 def _test_mode(path: _pathlib.Path, mode: str) -> str:
