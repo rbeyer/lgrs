@@ -53,7 +53,9 @@ class Complement:
 ###############################################################################
 # region> NUMPY DOC PARSING
 ###############################################################################
-# Note: Avoids adding `numpydoc` as a dependency.
+# Note: `NumpyDoc` parses NumPy-style docstrings itself, so that `lgrs`
+# need not depend on `numpydoc`. `NumpyDoc` is original code, not copied
+# or derived from the `numpydoc` package.
 type ContentItem = tuple[str, list[str] | None]
 type Content = str | dict[str, ContentItem] | None
 
