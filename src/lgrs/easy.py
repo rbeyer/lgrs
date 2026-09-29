@@ -596,17 +596,21 @@ def _call_with_kwargs(
     func: _collections.abc.Callable,
     kwargs: dict[str, _typing.Any],
     *,
+    accepts: _collections.abc.Callable | None = None,
     defaults: dict[str, _typing.Any] | None = None,
     overrides: dict[str, _typing.Any] | None = None,
     consumed: set[str] | None = None,
 ) -> _typing.Any:
-    # Select the caller's keyword arguments that `func` takes and that
-    # no override replaces, and record their names in `consumed`.
+    # Select the caller's keyword arguments that `func` takes (or that
+    # `accepts` takes, if `func` passes them on to it) and that no
+    # override replaces, and record their names in `consumed`.
+    if accepts is None:
+        accepts = func  # *REASSIGNMENT*
     if defaults is None:
         defaults = {}  # *REASSIGNMENT*
     if overrides is None:
         overrides = {}  # *REASSIGNMENT*
-    params = _inspect.signature(func).parameters
+    params = _inspect.signature(accepts).parameters
     selected = {
         k: v for k, v in kwargs.items() if k in params and k not in overrides
     }
@@ -616,6 +620,28 @@ def _call_with_kwargs(
     # Call with the defaults, selected arguments, and overrides, each
     # taking precedence over the one before.
     return func(**{**defaults, **selected, **overrides})
+
+
+def _dumps_geojson(geo_dict: dict, **kwargs) -> str:
+    # Note: If `indent` is given (even as `None`), defer entirely to
+    # `json.dumps()`. Otherwise, write each top-level member and each
+    # feature on its own line, as GDAL does, which keeps the file
+    # nearly as small as `indent=None` while leaving one feature per
+    # line for reading, `grep`, and `diff`.
+    if "indent" in kwargs:
+        return _json.dumps(geo_dict, **kwargs)
+    keys = sorted(geo_dict) if kwargs.get("sort_keys") else list(geo_dict)
+    member_strings = []
+    for key in keys:
+        if key == "features":
+            feature_strings = [
+                _json.dumps(feature, **kwargs) for feature in geo_dict[key]
+            ]
+            val_string = "[\n" + ",\n".join(feature_strings) + "\n]"
+        else:
+            val_string = _json.dumps(geo_dict[key], **kwargs)
+        member_strings.append(f"{_json.dumps(key, **kwargs)}: {val_string}")
+    return "{\n" + ",\n".join(member_strings) + "\n}\n"
 
 
 def _test_mode(path: _pathlib.Path, mode: str) -> str:
@@ -816,8 +842,7 @@ def write_grid(
         This behavior is only available if (1) `out_path` is `None` or (2)
         `out_path` points to a GeoJSON file and no other argument implies
         driver-dependent behavior. (See Warnings section for more
-        information.) In the latter case, ``json.dumps()`` is called for
-        formatting. Defaults `True` for supported calls.
+        information.) Defaults `True` for supported calls.
     driver : string, optional
         Passed to ``geopandas.GeoDataFrame.to_file()``. Ignored if
         `out_path` is `None`.
@@ -867,7 +892,9 @@ def write_grid(
     called, set `driver` to ``"GeoJSON"``. Otherwise, bypassing is preferred
     and heuristics determine whether to use it on a given call. If
     `json_extras` is `True` but bypassing is not supported, an error is
-    raised.
+    raised. When bypassing, the file has one feature per line, unless
+    `indent` is given, in which case ``json.dumps()`` formats the whole
+    file; other ``json.dumps()`` arguments are passed through.
 
     Examples
     --------
@@ -998,10 +1025,10 @@ def write_grid(
         if not return_mapping:
             key_to_str = {
                 key: _call_with_kwargs(
-                    _json.dumps,
+                    _dumps_geojson,
                     kwargs,
-                    defaults={"indent": 2},
-                    overrides={"obj": geo_dict},
+                    accepts=_json.dumps,
+                    overrides={"geo_dict": geo_dict},
                     consumed=consumed_kwarg_set,
                 )
                 for key, geo_dict in key_to_dict.items()
