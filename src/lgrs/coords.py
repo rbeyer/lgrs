@@ -3615,8 +3615,12 @@ class BoxCoordinate(BaseCoordinate):
         try:
             return self._field_data
         except AttributeError:
-            self.set_field_data()
-            return self._field_data
+            # Note: Call `set_field_data()` after this `except` block,
+            # not inside it, so that any error it raises does not carry
+            # this irrelevant `AttributeError` as its context.
+            pass
+        self.set_field_data()
+        return self._field_data
 
     @_functools.cached_property
     def geometry(self) -> _shapely.Polygon:
