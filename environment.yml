@@ -15,6 +15,5 @@ dependencies:
   - numpy
   - pyproj
   - rasterio
-  - regex
   - shapely
   - typer

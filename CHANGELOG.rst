@@ -81,6 +81,8 @@ Changed
   ``lgrs.exceptions.GeospatialFileError`` (a ``ValueError``).
   ``lgrs.exceptions.MalformedCoordinate`` is renamed ``CoordinateError`` and
   now subclasses ``ValueError``.
+* ``lgrs`` no longer depends on the ``regex`` package. ``lgrs.coords`` uses the
+  standard library's ``re`` instead.
 * Documentation has been substantially expanded and corrected throughout the
   library, most notably for ``lgrs.easy.write_grid()``, ``lgrs.grid``, and the
   ``precision`` arguments of ``BaseCoordinate.to_acc()``,

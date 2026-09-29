@@ -22,8 +22,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "AUTHORS.rst"]
 
 dependencies = [
-    "beartype", "geopandas", "numpy", "pyproj", "rasterio", "regex", "shapely",
-    "typer"
+    "beartype", "geopandas", "numpy", "pyproj", "rasterio", "shapely", "typer"
 ]
 
 [project.optional-dependencies]

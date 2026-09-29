@@ -51,6 +51,7 @@ import dataclasses as _dataclasses
 import functools as _functools
 import inspect as _inspect
 import itertools as _itertools
+import re as _re
 import types as _types
 import typing as _typing
 import weakref as _weakref
@@ -58,7 +59,6 @@ from math import floor as _floor
 
 # External.
 import pyproj as _pyproj
-import regex as _regex
 import shapely as _shapely
 
 # Internal.
@@ -196,10 +196,10 @@ def _calc_na_letterset(zone_number: int) -> int:
     return na_letterset
 
 
-def _compile_regex_without_i_and_o(pattern: str) -> _regex.Pattern:
-    clean_pattern = _regex.sub("[A-Z]-[A-Z]", _remove_i_and_o, pattern)
-    annotated_clean_pattern = f"{clean_pattern}(?# {_regex.escape(pattern)})"
-    return _regex.compile(annotated_clean_pattern)
+def _compile_regex_without_i_and_o(pattern: str) -> _re.Pattern:
+    clean_pattern = _re.sub("[A-Z]-[A-Z]", _remove_i_and_o, pattern)
+    annotated_clean_pattern = f"{clean_pattern}(?# {_re.escape(pattern)})"
+    return _re.compile(annotated_clean_pattern)
 
 
 def _expand_char_range(char_range: str) -> list[str]:
@@ -209,7 +209,7 @@ def _expand_char_range(char_range: str) -> list[str]:
 
 
 def _extract_chars_from_pattern(
-    pattern: _regex.Pattern | None = None,
+    pattern: _re.Pattern | None = None,
     name: str | None = None,
     *,
     pre: str = "",
@@ -220,7 +220,7 @@ def _extract_chars_from_pattern(
     # indexed. Therefore, a string (rather than mapping) is sufficient.
     # Note: Extraction is not general (e.g., does not accommodate
     # escaped ")").
-    chars = _regex.search(
+    chars = _re.search(
         rf"\(\?P<{name}>\[(?P<gpattern>.*?)]\)", pattern.pattern
     ).group("gpattern")
     final = pre + chars + post
@@ -232,14 +232,17 @@ def _format_as_five_digit_int(n: float) -> str:
 
 
 def _make_en_pattern(*digit_count: int) -> str:
+    # Note: Number each group name by its digit count (e.g.,
+    # "easting4"), because `re` rejects a group name that appears twice
+    # in one pattern, even in mutually exclusive alternatives.
     pattern = "|".join(
-        f"((?P<easting>[0-9]{{{i}}})(?P<northing>[0-9]{{{i}}}))"
+        f"((?P<easting{i}>[0-9]{{{i}}})(?P<northing{i}>[0-9]{{{i}}}))"
         for i in sorted(digit_count, reverse=True)
     )
     return pattern
 
 
-def _remove_i_and_o(match: _regex.Match) -> str:
+def _remove_i_and_o(match: _re.Match) -> str:
     expanded = _expand_char_range(match.group())
     for char in ("I", "O"):
         try:
@@ -2453,13 +2456,13 @@ class PointCoordinate(BaseCoordinate):
     @classmethod
     def _parse_string(cls, string: str) -> list[str | int | float]:
         # Replace likely delimiters with a " ".
-        spaced_str = _regex.sub(r"([,°/;|]|\s)+", " ", string)
+        spaced_str = _re.sub(r"([,°/;|]|\s)+", " ", string)
 
         # Split into `xy_coords_suffix` (starting from penultimate
         # number) and `prefix` (everything before `xy_coords_suffix`).
         # Note: For latitude-first geographic coordinates,
         # `xy_coords_suffix` is a convenient misnomer.
-        xy_coords_match = _regex.search(
+        xy_coords_match = _re.search(
             "([-0-9.]+)(?:[^-0-9.]+)([-0-9.]+)(?:[^-0-9.]*)$", spaced_str
         )
         if xy_coords_match is None:
@@ -2469,10 +2472,10 @@ class PointCoordinate(BaseCoordinate):
 
         # Within `xy_coords_suffix`, treat a trailing "S" or "W" as a
         # leading "-", but simply discard any "N" or "E".
-        signed_xy_coords_suffix = _regex.sub(
+        signed_xy_coords_suffix = _re.sub(
             "(?i)(?P<num>[0-9.]+) *(W|S)", r"-\g<num> ", xy_coords_suffix
         )
-        cleaner_signed_xy_coords_suffix = _regex.sub(
+        cleaner_signed_xy_coords_suffix = _re.sub(
             "(?i)[EN]", " ", signed_xy_coords_suffix
         )
 
@@ -2489,7 +2492,7 @@ class PointCoordinate(BaseCoordinate):
         # Coerce each component.
         # Note: Split `prefix` wherever there is a space or a letter
         # follows a number, or vice versa.
-        str_parts = _regex.split(
+        str_parts = _re.split(
             "(?: +)|(?:(?<=[A-Za-z])(?=[-0-9.]))|(?:(?<=[-0-9.])(?=[A-Za-z]))",
             prefix,
         )
@@ -2516,7 +2519,7 @@ class PointCoordinate(BaseCoordinate):
         if len(parts) == 2:
             card_idxs = []
             for card_1_str, card_2_str in (("N", "S"), ("E", "W")):
-                match = _regex.search(
+                match = _re.search(
                     f"(?i){card_1_str}|{card_2_str}", xy_coords_suffix
                 )
                 if match is None:
@@ -3353,7 +3356,7 @@ class BoxCoordinate(BaseCoordinate):
             return False
 
     @classmethod
-    def _validate_against_pattern(cls, string: str) -> _regex.Match:
+    def _validate_against_pattern(cls, string: str) -> _re.Match:
         match = cls._pattern.search(string)
         if match:
             return match
@@ -3408,7 +3411,7 @@ class BoxCoordinate(BaseCoordinate):
             return int(f"{string}000"[:nom_length])
 
     # * INSTANTIATION FROM STRING. ────────────────────────────────────
-    _pattern: _regex.Pattern
+    _pattern: _re.Pattern
 
     @classmethod
     def _from_string(
@@ -3435,7 +3438,7 @@ class BoxCoordinate(BaseCoordinate):
 
         # Match to pattern.
         match = cls._validate_against_pattern(collapsed_string)
-        match_dict = match.groupdict()
+        field_name_to_value = cls._get_field_name_to_value(match)
 
         # Coerce each argument to the correct type.
         # TODO: Approach below allows 0-prefixing of integers. The only
@@ -3448,19 +3451,66 @@ class BoxCoordinate(BaseCoordinate):
         field_name_to_type = cls._get_field_name_to_type()
         init_kwargs = {
             name: field_name_to_type[name](value_string)
-            for name, value_string in match_dict.items()
-            if value_string is not None
+            for name, value_string in field_name_to_value.items()
         }
         return cls(**init_kwargs, **kwargs)
 
     @classmethod
+    def _get_field_name_to_value(cls, match: _re.Match) -> dict[str, str]:
+        # Map each group that matched to its field, and skip the groups
+        # of alternatives that did not match.
+        # Note: See also `_make_en_pattern()`, which generates the
+        # numbered groups.
+        match_dict = match.groupdict()
+        group_name_to_field_name = cls._get_group_name_to_field_name()
+        field_name_to_value = {}
+        for group_name, value in match_dict.items():
+            if value is None:
+                continue
+            field_name = group_name_to_field_name[group_name]
+            if field_name in field_name_to_value:
+                raise RuntimeError(
+                    f"More than one group matched for field: {field_name!r}"
+                )
+            field_name_to_value[field_name] = value
+        return field_name_to_value
+
+    @classmethod
     @_functools.cache
-    def _get_simple_pattern(cls) -> _regex.Pattern:
-        match = _regex.search(r"\(\?# *(?P<s>.*)\)$", cls._pattern.pattern)
+    def _get_group_name_to_field_name(cls) -> dict[str, str]:
+        # Map each group name to its field, and raise unless the name is
+        # exactly one field name, optionally followed by a number, as
+        # `_make_en_pattern()` produces (e.g., "easting4").
+        field_names = cls._get_field_name_to_type()
+        group_name_to_field_name = {}
+        for group_name in cls._pattern.groupindex:
+            if group_name in field_names:
+                field_name = group_name
+            else:
+                candidates = [
+                    name
+                    for name in field_names
+                    if group_name.startswith(name)
+                    and group_name.removeprefix(name).isdecimal()
+                ]
+                if len(candidates) != 1:
+                    raise RuntimeError(
+                        f"Group name {group_name!r} must be one field name, "
+                        f"optionally followed by a number, but it matches: "
+                        f"{candidates!r}"
+                    )
+                field_name = candidates[0]
+            group_name_to_field_name[group_name] = field_name
+        return group_name_to_field_name
+
+    @classmethod
+    @_functools.cache
+    def _get_simple_pattern(cls) -> _re.Pattern:
+        match = _re.search(r"\(\?# *(?P<s>.*)\)$", cls._pattern.pattern)
         orig_pattern = match.group("s")
         unescaped = orig_pattern.replace("\\", "")
-        simple_pattern = _regex.sub(r"\(\?P<.+?>(.*?)\)", r"\1", unescaped)
-        return _regex.compile(simple_pattern)
+        simple_pattern = _re.sub(r"\(\?P<.+?>(.*?)\)", r"\1", unescaped)
+        return _re.compile(simple_pattern)
 
     # * COORDINATE TRANSFORMATION. ────────────────────────────────────
     def _get_crs_name(self) -> str:
