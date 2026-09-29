@@ -152,7 +152,7 @@ def _resolve_bounds(
                 crs = _bounds.resolve_crs(bounds[4])
                 std_bounds = (*bounds[:4], crs)
             case _:
-                raise TypeError(
+                raise ValueError(
                     "If `bounds` is a flat (1D) `sequence`, it must have "
                     f"length 4 or 5, not: {len(bounds)}"
                 )
@@ -324,7 +324,7 @@ def make_box_grid(
 
     Raises
     ------
-    TypeError
+    ValueError
         If `precision` is less than 1.
 
     Warnings

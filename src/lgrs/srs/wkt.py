@@ -230,7 +230,7 @@ def _validate_constraints(
                 continue
             enabled_count += 1
             if enabled_count > 1:
-                raise TypeError(
+                raise ValueError(
                     "At most one of the following constraints may be enabled: "
                     f"`{'`, `'.join(mutually_exclusive_arg_names)}`"
                 )
@@ -264,14 +264,14 @@ class BaseZone(metaclass=_caching._AbstractMetaMultiton):
 
     def _validate_datum_name(self) -> None:
         if self.datum_name != DATUM_NAME:
-            raise TypeError(
+            raise ValueError(
                 f"`datum_name` must be {DATUM_NAME!r}, not: "
                 f"{self.datum_name!r}"
             )
 
     def _validate_hemisphere(self) -> None:
         if self.hemisphere not in ("N", "S"):
-            raise TypeError(
+            raise ValueError(
                 "`hemisphere` must be either 'N' or 'S', not: "
                 f"{self.hemisphere!r}"
             )
@@ -343,7 +343,7 @@ class LpsZone(BaseZone):
             lat_sign = ""  # *REASSIGNMENT*
             polar_region = "hemisphere"  # *REASSIGNMENT*
         else:
-            raise TypeError(
+            raise RuntimeError(
                 "`.absolute_ltm_limit` is not supported: "
                 f"{self.absolute_ltm_limit!r}"
             )
@@ -424,7 +424,7 @@ class LtmZone(BaseZone):
     # * UTILITIES. ────────────────────────────────────────────────────
     def _validate_number(self) -> None:
         if not (1 <= self.number <= 45):
-            raise TypeError(
+            raise ValueError(
                 f"`number` must be in the range [1, 45], not: {self.number!r}"
             )
 
@@ -449,7 +449,7 @@ class LtmZone(BaseZone):
                 f"{lat_sign}{LTM_EXTENDED_MAX_ABSOLUTE_LATITUDE}° latitude."
             )
         else:
-            raise TypeError(
+            raise RuntimeError(
                 "`.absolute_ltm_limit` is not supported: "
                 f"{self.absolute_ltm_limit!r}"
             )

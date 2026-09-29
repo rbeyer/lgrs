@@ -452,7 +452,7 @@ class Constraints(_EasyFields, metaclass=_caching._MetaMultiton):
 
     Raises
     ------
-    TypeError
+    ValueError
         If mutually incompatible constraints are used.
     """
 
@@ -467,7 +467,7 @@ class Constraints(_EasyFields, metaclass=_caching._MetaMultiton):
     def __post_init__(self) -> None:
         enabled_count = _wkt._validate_constraints(**self.__dict__)
         if self.global_crs and enabled_count > 1:
-            raise TypeError(
+            raise ValueError(
                 "If `global_crs` is specified, no other constraint can be set."
             )
 
@@ -626,7 +626,7 @@ class Constraints(_EasyFields, metaclass=_caching._MetaMultiton):
     ) -> tuple[_srs.CRS | None, _collections.abc.Sequence[BaseCoordinate]]:
         # Validate arguments.
         if target_lps and ltm_zone_number is not None:
-            raise TypeError(
+            raise ValueError(
                 "If `target_lps` is `True`, cannot specify `ltm_zone_number`"
             )
 
@@ -1146,7 +1146,7 @@ class BaseCoordinate(_BaseCoordinate):
     ) -> _typing.NoReturn:
         if func is not None:
             func()
-        raise TypeError("An unexpected error occurred.")
+        raise RuntimeError("An unexpected error occurred.")
 
     def _validate_against_closed_interval(
         self,
@@ -1513,7 +1513,11 @@ class BaseCoordinate(_BaseCoordinate):
         Raises
         ------
         TypeError
-            If `error` is `True` and `self` and `other` are not equal.
+            If `error` is `True` and `self` and `other` are of different
+            types.
+        ValueError
+            If `error` is `True` and `self` and `other` are of the same type
+            but not equal.
 
         Examples
         --------
@@ -1542,7 +1546,7 @@ class BaseCoordinate(_BaseCoordinate):
                 err_lines.append(f"  {field_name!r} values differ:")
                 err_lines.append(f"    {self_val!r} vs. {other_val!r}")
         if err_lines:
-            raise TypeError("\n" + "\n".join(err_lines))
+            raise ValueError("\n" + "\n".join(err_lines))
         return True
 
     @classmethod
@@ -1867,7 +1871,7 @@ class BaseCoordinate(_BaseCoordinate):
             else:
                 precision = 1
         elif error and required_precision < self._precision:
-            raise TypeError(
+            raise ValueError(
                 "The requested `precision` is finer than `self.precision`: "
                 f"{required_precision!r} < {self.precision!r}"
             )
@@ -1878,7 +1882,7 @@ class BaseCoordinate(_BaseCoordinate):
     @staticmethod
     def _resolve_precision_static(required_precision: float) -> int:
         if required_precision < 1:
-            raise TypeError(
+            raise ValueError(
                 "`precision` must be >=1, not: " f"{required_precision!r}"
             )
         elif 1 <= required_precision < 10:
@@ -2045,7 +2049,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        TypeError
+        ValueError
             If `precision` is less than 1.
         """
         return self._get_cached_or_create(
@@ -2133,7 +2137,7 @@ class BaseCoordinate(_BaseCoordinate):
 
         Raises
         ------
-        TypeError
+        ValueError
             If `precision` is less than 1.
         """
         return self._get_cached_or_create(
@@ -2758,7 +2762,7 @@ class PointCoordinate(BaseCoordinate):
                 # required to ensure that
                 # `._calc_min_dist_to_meridian()` is guaranteed to be
                 # lower limit.
-                raise TypeError(
+                raise RuntimeError(
                     "Potential LTM zone count exceeds supported maximum."
                 )
         zone_nums.sort()
@@ -2837,7 +2841,7 @@ class PointCoordinate(BaseCoordinate):
 
         Raises
         ------
-        TypeError
+        ValueError
             If `precision` is less than 1.
 
         Examples
@@ -3706,8 +3710,11 @@ class BoxCoordinate(BaseCoordinate):
         Raises
         ------
         TypeError
-            If `error` is `True` and `logical_only` or `same_crs_only`
-            requirements are violated.
+            If `error` and `logical_only` are `True` and `other` is not a
+            `BoxCoordinate`.
+        ValueError
+            If `error` is `True`, `logical_only` or `same_crs_only` is `True`,
+            and `other` is not from the same (nominal) CRS.
         """
         # Honor restrictive arguments.
         other_is_box = isinstance(other, BoxCoordinate)
@@ -3719,7 +3726,7 @@ class BoxCoordinate(BaseCoordinate):
         is_cross_crs = self.crs_nominal != other.crs_nominal
         if (logical_only or same_crs_only) and is_cross_crs:
             if error:
-                raise TypeError(
+                raise ValueError(
                     f"`other` is not from the same (nominal) CRS: {other!r}"
                 )
             else:
@@ -3807,7 +3814,7 @@ class BoxCoordinate(BaseCoordinate):
 
         Raises
         ------
-        TypeError
+        ValueError
             If `precision` is less than 1, or if `error` is `True` and
             `precision` is finer than `self.precision`.
 

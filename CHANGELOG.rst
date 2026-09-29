@@ -69,6 +69,12 @@ Changed
   99N"``, now reports why it is invalid: as the cause of the
   ``FileNotFoundError`` when passed as ``bounds``, or of the ``pyproj`` error
   when passed as a CRS.
+  Errors also use the conventional exception classes: an invalid or
+  incompatible argument value raises ``ValueError`` rather than ``TypeError``,
+  a missing or already existing output file raises ``FileNotFoundError`` or
+  ``FileExistsError``, and an internal inconsistency raises ``RuntimeError``.
+  ``TypeError`` remains for arguments of the wrong type and for missing
+  required arguments.
   A path given as ``bounds`` that cannot be found raises ``FileNotFoundError``,
   one that cannot be opened raises ``PermissionError``, and one that is not
   readable vector or raster data raises the new

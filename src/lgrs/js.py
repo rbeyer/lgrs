@@ -114,7 +114,7 @@ def _coerce_to_type[T](
     try:
         return typ(raw_val)
     except Exception:
-        raise TypeError(
+        raise ValueError(
             f"Could not coerce {name!r} to `{typ.__name__}`: {raw_val!r}"
         ) from None
 

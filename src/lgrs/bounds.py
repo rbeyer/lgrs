@@ -63,7 +63,7 @@ def _make_crit_array(
 ) -> _numpy.ndarray:
     # Validate.
     if nudge_leftward and nudge_zeroward:
-        raise TypeError("At most, only one `nudge_*` option may be `True`.")
+        raise ValueError("At most, only one `nudge_*` option may be `True`.")
 
     # Construct base array.
     if isinstance(num_or_iter, _collections.abc.Iterable):
@@ -250,7 +250,7 @@ class _BaseBounds(_Base):
                     min_val_desc = logical_min_val
                 else:
                     min_val_desc = f"{logical_min_val}, from {min_val}"
-                raise TypeError(
+                raise ValueError(
                     f"`{max_name}` ({max_val_desc}) must be greater than "
                     f"`{min_name}` ({min_val_desc})."
                 )
@@ -485,7 +485,7 @@ class GeographicBounds(_BaseBounds):
 
     Raises
     ------
-    TypeError
+    ValueError
         If values are invalid. Namely, if the absolute value of any
         longitude exceeds 360, the absolute value of any latitude exceeds
         90, or the range implied by the minimum and maximum longitudes
@@ -535,12 +535,12 @@ class GeographicBounds(_BaseBounds):
                 case _:
                     continue
             if abs(field_val) > max_abs:
-                raise TypeError(
+                raise ValueError(
                     f"Absolute value of `{field_name}` must be <={max_abs}, "
                     f"not: {field_val!r}>"
                 )
         if self.right - self.left > 360:
-            raise TypeError(
+            raise ValueError(
                 "The difference between `right` and `left` cannot exceed 360."
             )
 
@@ -783,7 +783,7 @@ class ProjectedBounds(_BaseBounds):
 
     Raises
     ------
-    TypeError
+    ValueError
         If values are invalid. Namely, if any maximum is not greater than
         its counterpart minimum.
     """

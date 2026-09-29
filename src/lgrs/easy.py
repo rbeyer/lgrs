@@ -242,7 +242,7 @@ class GeoRelatives:
 
     Raises
     ------
-    TypeError
+    ValueError
         If `precision` is less than 1 and a box member is derived.
 
     Notes
@@ -354,7 +354,7 @@ class GeoRelatives:
                 elif attr_name is None:
                     max_count = len(attr_names)
                     box_count = len(boxes)
-                    raise TypeError(
+                    raise RuntimeError(
                         f"Expected to have {max_count} "
                         f"{type(box).__name__}'s at most, but found: "
                         f"{box_count}"
@@ -367,7 +367,7 @@ class GeoRelatives:
                         case "LTM":
                             fam_type = LtmFamily
                         case _:
-                            raise TypeError(
+                            raise RuntimeError(
                                 f"Unexpected `attr_name`: {attr_name!r}"
                             )
                     fam = fam_type(_input_latlon=self.latlon, _input_lgrs=box)
@@ -623,20 +623,20 @@ def _test_mode(path: _pathlib.Path, mode: str) -> str:
     match mode:
         case "x":
             if path.exists():
-                raise TypeError(
+                raise FileExistsError(
                     f"Specified `mode='x'` but file path exists: {path}"
                 )
             mode = "w"  # *REASSIGNMENT*
         case "a":
             if not path.exists():
-                raise TypeError(
+                raise FileNotFoundError(
                     "Specified `mode='a'` but file path does not exist: "
                     f"{path}"
                 )
         case "w":
             pass
         case _:
-            raise TypeError(f"`mode` not supported: {mode!r}")
+            raise ValueError(f"`mode` not supported: {mode!r}")
     return mode
 
 
@@ -841,14 +841,19 @@ def write_grid(
 
     Raises
     ------
+    FileExistsError
+        If `mode` is ``"x"`` and the output file exists.
+    FileNotFoundError
+        If `mode` is ``"a"`` and the output file does not exist, or if the
+        grandparent of `out_path` does not preexist.
     TypeError
-        If file state implied by `mode` is violated or the grandparent of
-        `out_path` does not preexist. Also if `out_path` does not contain
-        the ``"{}"`` placeholder and `bounds` is not an LGRS CRS short name.
-        In that case, a name collision is risked if multiple CRSs generate
-        multiple outputs. Also if `json_extras` is `True` but bypassing is
-        not supported (see Warnings). Finally, if arguments in `**kwargs`
-        are unused.
+        If arguments in `**kwargs` are unused.
+    ValueError
+        If `out_path` does not contain the ``"{}"`` placeholder and `bounds`
+        is not an LGRS CRS short name. In that case, a name collision is
+        risked if multiple CRSs generate multiple outputs. Also if
+        `json_extras` is `True` but bypassing is not supported (see
+        Warnings).
 
     Warnings
     --------
@@ -913,7 +918,7 @@ def write_grid(
             # *REASSIGNMENT*
             mode = _test_mode(out_file_path_template, mode)
         if not out_file_path_template.parent.parent.exists():
-            raise TypeError(
+            raise FileNotFoundError(
                 "The grandparent of `out_path` does not exist: "
                 f"'{out_file_path_template.parent.parent}'"
             )
@@ -925,7 +930,7 @@ def write_grid(
         if expect_exactly_one_crs:
             _, exclusive_crs = _grid._resolve_bounds(**locals())
             if exclusive_crs is None:
-                raise TypeError("`out_path.name` must contain '{}'")
+                raise ValueError("`out_path.name` must contain '{}'")
 
     # Determine whether to generate a GeoJSON-like mapping.
     make_geo_dict = return_mapping or (
@@ -935,7 +940,7 @@ def write_grid(
         and out_file_path_template.suffix.lower() in (".json", ".geojson")
     )
     if json_extras and not make_geo_dict:
-        raise TypeError(
+        raise ValueError(
             "`json_extras` is `True` but bypassing is not "
             "supported for this call"
         )

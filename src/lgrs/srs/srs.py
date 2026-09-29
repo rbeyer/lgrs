@@ -79,7 +79,7 @@ class _CrsParameters:
         # Parse `name`, if specified.
         if name is not None:
             if self._spec_count:
-                raise TypeError(
+                raise ValueError(
                     "If `name` is specified, all other arguments, except for "
                     "`extended_ltm`, `global_lps`, and `global_ltm`, must be "
                     "`None`"
@@ -92,7 +92,7 @@ class _CrsParameters:
     def _parse_name(self, name: str) -> None:
         match = _crs_name_pattern.search(name)
         if match is None:
-            raise TypeError(f"`name` is not in a recognized form: {name!r}")
+            raise ValueError(f"`name` is not in a recognized form: {name!r}")
         self.ellps = match.group("datum")
         self.proj = match.group("proj")
         num = match.group("num")
@@ -131,12 +131,12 @@ class _CrsParameters:
         # Check compatibility.
         if self.proj == "LPS":
             if self.zone is not None:
-                raise TypeError(
+                raise ValueError(
                     f"If `proj` is {self.proj!r}, `zone` must be `None`, not: "
                     f"{self.zone!r}"
                 )
             if self.global_ltm:
-                raise TypeError(
+                raise ValueError(
                     f"If `proj` is {self.proj!r}, "
                     "`global_ltm` must be `False`."
                 )
@@ -146,7 +146,7 @@ class _CrsParameters:
                     f"If `proj` is {self.proj!r}, `zone` must be specified."
                 )
             if self.global_lps:
-                raise TypeError(
+                raise ValueError(
                     f"If `proj` is {self.proj!r}, "
                     "`global_lps` must be `False`."
                 )
@@ -181,7 +181,7 @@ class _CrsParameters:
             case "LTM":
                 type_ = _wkt.LtmZone
             case _:
-                raise TypeError(f"`proj` not recognized: {self.proj!r}")
+                raise ValueError(f"`proj` not recognized: {self.proj!r}")
         hemisphere = "S" if self.south else "N"
         zone_instance = type_(
             number=self.zone,
@@ -286,6 +286,9 @@ def make_lunar_crs(
     Raises
     ------
     TypeError
+        If a required argument is missing: `south`, when `name` is not
+        specified, or `zone`, when `proj` is `"LTM"`.
+    ValueError
         If CRS cannot be interpreted, or if `proj` is `"LPS"`/`"LTM"`
         but `global_ltm`/`global_lps` is `True`.
 
@@ -354,6 +357,9 @@ def make_lunar_wkt(name: str | None = None, **kwargs) -> str:
     Raises
     ------
     TypeError
+        If a required argument is missing: `south`, when `name` is not
+        specified, or `zone`, when `proj` is `"LTM"`.
+    ValueError
         If WKT cannot be interpreted, or if `proj` is `"LPS"`/`"LTM"`
         but `global_ltm`/`global_lps` is `True`.
     """

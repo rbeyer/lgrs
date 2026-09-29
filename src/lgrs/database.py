@@ -262,7 +262,7 @@ def _grid_sample(
         # `pyproj.aoi.AreaOfInterest` with `south_lat_degree` >
         # `north_lat_degree` to `pyproj.database.query_utm_crs_info()`
         # fails.
-        raise TypeError("`latitudes` must be specified in ascending order")
+        raise ValueError("`latitudes` must be specified in ascending order")
     lon1, lon2 = longitudes
     if lon2 < lon1:
         # Note: From inspection, passing a `pyproj.aoi.AreaOfInterest`
@@ -271,7 +271,7 @@ def _grid_sample(
         # of each CRS is defined.
         lon2 += 360  # *REASSIGNMENT*
     if (lon2 - lon1) > 360:
-        raise TypeError("`longitudes` cannot span > 360°")
+        raise ValueError("`longitudes` cannot span > 360°")
 
     # Sample in each dimension.
     samp_coords = []
@@ -303,7 +303,7 @@ def _grid_sample(
 def _parse_lunar_crs_internal_name(internal_name: str) -> _InternalNameParsed:
     match = _lunar_crs_internal_name_pattern.search(internal_name)
     if match is None:
-        raise TypeError(
+        raise ValueError(
             f"`internal_name` is not in supported format: {internal_name!r}"
         )
     num_str = match.group("num")
@@ -383,7 +383,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
                     else:
                         kwargs["global_ltm"] = True
                 case _:
-                    raise TypeError(f"`suffix` is not recognized: {suffix!r}")
+                    raise ValueError(f"`suffix` is not recognized: {suffix!r}")
         return (name, kwargs)
 
     @_functools.cached_property
@@ -425,7 +425,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             case "**":
                 trans_lat = sign * 90
             case _:
-                raise TypeError(f"`suffix` is not recognized: {suffix!r}")
+                raise ValueError(f"`suffix` is not recognized: {suffix!r}")
 
         # Build `LunarCrsInfo` instsance.
         if zone_num is None:
@@ -496,7 +496,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             The `LunarCrsInfo` instance that describes `crs`.
         """
         if crs.area_of_use is None:
-            raise TypeError(f"`crs` is not supported: {crs.name!r}")
+            raise ValueError(f"`crs` is not supported: {crs.name!r}")
         lat_range = crs.area_of_use.north - crs.area_of_use.south
         if crs.ltm_zone is None:
             short_name = crs.lps_hemisphere
@@ -512,7 +512,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
             case 90 | 0:
                 internal_name = f"{short_name}**"
             case _:
-                raise TypeError(f"`crs` is not recognized: {crs!r}")
+                raise ValueError(f"`crs` is not recognized: {crs!r}")
         crs_info = cls._from_internal_name(internal_name)
         return crs_info
 
@@ -554,7 +554,7 @@ class LunarCrsInfo(_pyproj_database.CRSInfo):
                 else:
                     limit = 90.0
             case _:
-                raise TypeError(f"`suffix` is not recognized: {suffix!r}")
+                raise ValueError(f"`suffix` is not recognized: {suffix!r}")
         return limit
 
     @_functools.cached_property
@@ -717,8 +717,10 @@ def query_lunar_crs_info(
     Raises
     ------
     TypeError
-        If the combination of `area_of_interest`, `latitude`, and `longitude`
-        are under- or over-specified.
+        If only one of `latitude` and `longitude` is specified.
+    ValueError
+        If `area_of_interest` is specified together with `latitude` and
+        `longitude`.
 
     Examples
     --------
@@ -727,14 +729,14 @@ def query_lunar_crs_info(
     """  # noqa: E501
     # Validate datum.
     if datum_name != _wkt.DATUM_NAME:
-        raise TypeError(f"`datum_name` must be {_wkt.DATUM_NAME!r}")
+        raise ValueError(f"`datum_name` must be {_wkt.DATUM_NAME!r}")
 
     # Resolve (unconformed) latitudes and longitudes.
     has_spatial_filter = True  # Default.
     match (latitude, longitude).count(None):
         case 0:
             if area_of_interest:
-                raise TypeError(
+                raise ValueError(
                     "Cannot specify both `area_of_interest` and "
                     "`latitude`, `longitude`."
                 )

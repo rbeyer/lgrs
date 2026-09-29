@@ -205,7 +205,7 @@ class NumpyDoc:
                     nom_content, inherited_content, a_is_nominal=True
                 )
             case _:
-                raise TypeError(
+                raise ValueError(
                     f"`merge_type` is not recognized {merge_type!r}"
                 )
 
@@ -439,7 +439,7 @@ class NumpyDoc:
             parsed, 2, strict=True
         ):
             if section_name not in section_name_to_content:
-                raise TypeError(
+                raise ValueError(
                     f"Section name not recognized: {section_name!r}"
                 )
             clean_content = content.rstrip()
@@ -561,16 +561,16 @@ class NumpyDoc:
 
         Raises
         ------
-        TypeError
+        ValueError
             If any parameter is not documented.
         """
         param_name_to_content = self.section_name_to_content["Parameters"]
         if param_name_to_content is None:
-            raise TypeError("Parameters section is missing!")
+            raise ValueError("Parameters section is missing!")
         for key in self.param_names:
             content = param_name_to_content.get(key)
             if content is None:
-                raise TypeError(f"Missing content for parameter: {key}")
+                raise ValueError(f"Missing content for parameter: {key}")
 
     def copy_param_docs_from(self, source: _collections.abc.Callable) -> None:
         """
@@ -629,7 +629,7 @@ class NumpyDoc:
         None
         """
         if name not in self.section_name_to_content:
-            raise TypeError(f"Section name not recognized: {name!r}")
+            raise ValueError(f"Section name not recognized: {name!r}")
         content_is_string = isinstance(content, str)
         if content_is_string:
             content = _textwrap.dedent(content.strip())  # *REASSIGNMENT*
@@ -749,7 +749,7 @@ class NumpyDoc:
 
         Raises
         ------
-        TypeError
+        ValueError
             If an unsupported section name is specified, the same value occurs
             in multiple collection parameters, or other unexpected cases.
 
@@ -765,7 +765,7 @@ class NumpyDoc:
         overrides = (*exclude, *extend, *prepend)
         override_set = set(overrides)
         if len(override_set) < len(overrides):
-            raise TypeError(
+            raise ValueError(
                 "Cannot repeat values between "
                 "`exclude`, `extend`, and `prepend`."
             )
@@ -921,7 +921,7 @@ def partially_wraps(
 
     Raises
     ------
-    TypeError
+    ValueError
         If `check` is `True` and any parameter lacks documentation after
         `decorated` and `wrapped` have been read.
 
@@ -1050,7 +1050,7 @@ def sync_param_docs_with(
 
     Raises
     ------
-    TypeError
+    ValueError
         If `check` is `True` and any parameter lacks documentation after
         `decorated` and all `sources` have been read.
 
