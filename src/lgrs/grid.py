@@ -268,8 +268,10 @@ def make_box_grid(
             (5) `None`
                 Interpreted as global bounds.
             (6) `bounds.GeographicBounds` or `bounds.ProjectedBounds`
+                (not available in `lgrs.js` or the CLI)
                 Used directly.
             (7) `pyproj.AreaOfInterest` or `pyproj.AreaOfUse`
+                (not available in `lgrs.js` or the CLI)
                 Converted by ``GeographicBounds.from_area(bounds)``.
     precision : float
         The maximum allowed precision, which is the nominal side length of

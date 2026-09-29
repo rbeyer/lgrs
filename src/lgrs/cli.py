@@ -300,9 +300,8 @@ def write_grid(
     Parameters
     ----------
     bounds : a resolvable bounds hint
-        [Note: The following description applies to the Python interface.
-        Not all forms are supported at the command line. See Examples
-        section.]
+        [At the command line, give a sequence as a quoted string, such as
+        "(3, 4, 5, 6)". See Examples.]
 
     Examples
     --------

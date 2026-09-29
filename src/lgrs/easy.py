@@ -667,11 +667,11 @@ def convert_coordinate(
     Convert an input coordinate to all relevant coordinates.
 
     Internally, a `GeoRelatives` instance is generated. Recent
-    `GeoRelatives` instances are cached when created by the present
-    function, so there is trivial cost to making subsequent calls with a
-    different `target` each time (but all other arguments the same). The
-    documentation for `GeoRelatives` is integrated below, but you might find
-    it easiest to skip to Examples.
+    `GeoRelatives` instances are cached when created by the present function
+    (except in the CLI), so there is trivial cost to making subsequent calls
+    with a different `target` each time (but all other arguments the same).
+    The documentation for `GeoRelatives` is integrated below, but you might
+    find it easiest to skip to Examples.
 
     Parameters
     ----------
@@ -857,16 +857,16 @@ def write_grid(
 
     Warnings
     --------
-    When writing out to a GeoJSON file or using the GeoJSON-like
-    `hint_to_dict` values, bear in mind that the CRS foreign members added
-    by `json_extras` will be the only CRS reference available, since the
-    `"crs"` member does not support any LGRS CRS (currently).
+    When writing out to a GeoJSON file or when `out_path` is `None`, so that
+    GeoJSON-like `dict`s are returned, bear in mind that the CRS foreign
+    members added by `json_extras` will be the only CRS reference available,
+    since the `"crs"` member does not support any LGRS CRS (currently).
 
     When writing out to a GeoJSON file, it is often possible to bypass
     ``geopandas.GeoDataFrame.to_file()``. This bypassing makes `json_extras`
     behavior available at no cost to performance and is likely what you
     want. Conversely, to ensure that ``geopandas.GeoDataFrame.to_file()`` is
-    called, specify ``driver="GeoJSON"``. Otherwise, bypassing is preferred
+    called, set `driver` to ``"GeoJSON"``. Otherwise, bypassing is preferred
     and heuristics determine whether to use it on a given call. If
     `json_extras` is `True` but bypassing is not supported, an error is
     raised.
