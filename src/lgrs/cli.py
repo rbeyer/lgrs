@@ -31,7 +31,7 @@ import builtins as _builtins
 import collections as _collections
 import functools as _functools
 import inspect as _inspect
-import pathlib as _pathlib
+import json as _json
 import pprint as _pprint
 import re as _re
 import types as _types
@@ -290,7 +290,7 @@ def make_lunar_wkt(
 def write_grid(
     bounds: str,
     precision: float,
-    out_path: _pathlib.Path,
+    out_path: str,
     mode: _typing.Literal["x", "w", "a"] = "x",
     **kwargs,
 ) -> None:
@@ -347,7 +347,19 @@ def write_grid(
     {cmd} "None" 25_000 "~/grids/global.gpkg|layer={}"
     """  # noqa: E501
     coerced_bounds = _parse_for_write_grid(bounds)
-    _easy.write_grid(coerced_bounds, precision, out_path, mode, **kwargs)
+    result = _easy.write_grid(
+        coerced_bounds, precision, out_path, mode, **kwargs
+    )
+    # Note: If `out_path` is `None`, `write_grid()` returns the grid
+    # rather than writing it, so print it as one JSON object that maps
+    # each CRS hint to its GeoJSON, laid out as `write_grid()` lays out
+    # a GeoJSON file (one feature per line).
+    if result is not None:
+        layer_strings = [
+            f"{_json.dumps(hint)}: {_easy._dumps_geojson(geo_dict).rstrip()}"
+            for hint, geo_dict in result.items()
+        ]
+        print("{\n" + ",\n".join(layer_strings) + "\n}")
 
 
 # endregion
