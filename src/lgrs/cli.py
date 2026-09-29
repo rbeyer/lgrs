@@ -53,6 +53,7 @@ import lgrs.util as _util
 ###############################################################################
 _app = _typer.Typer(
     add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
     no_args_is_help=True,
     pretty_exceptions_show_locals=True,
 )
