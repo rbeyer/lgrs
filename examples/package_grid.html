@@ -50,9 +50,10 @@
         padding: 12px 24px;
       }
 
-      code {
+      output {
         white-space: pre;
         display: block;
+        font-family: monospace;
       }
 
       /* A small spinner before the status text while `#status` is busy. */
@@ -75,78 +76,80 @@
     </style>
   </head>
   <body>
+    <h1>Make an LGRS grid with <i>lgrs</i></h1>
+
     <form id="grid-form">
       <div class="form-grid">
 
         <h3>Step 1: Enter the bounds for the grid. </h3>
         <p><i>The bounds may be expressed in degrees longitude and latitude or in meters easting and northing, depending on how you specify the CRS. The default CRS (IAU_2015:30100) uses degrees longitude and latitude. </i></p>
 
-        <label>Left:</label>
-        <input type="number" step="any" name="left">
+        <label for="left">Left:</label>
+        <input type="number" step="any" id="left" name="left">
       
-        <label>Bottom:</label>
-        <input type="number" step="any" name="bottom">
+        <label for="bottom">Bottom:</label>
+        <input type="number" step="any" id="bottom" name="bottom">
  
-        <label>Right:</label>
-        <input type="number" step="any" name="right">
+        <label for="right">Right:</label>
+        <input type="number" step="any" id="right" name="right">
 
-        <label>Top:</label>
-        <input type="number" step="any" name="top">
+        <label for="top">Top:</label>
+        <input type="number" step="any" id="top" name="top">
 
         <p><i>Specify the coordinate reference system (CRS) by a hint. For example, "S" indicates the south Lunar Polar Stereographic CRS and "23N" indicates the Northern Hemisphere Lunar Transverse Mercator zone 23 CRS. You may also specify a code like "IAU_2015:30100" or "ESRI:104903". (Do not include quotation marks in your entry.) </i></p>
 
-        <label>CRS:</label>
-        <input type="text" value="IAU_2015:30100" name="crs">
+        <label for="crs">CRS:</label>
+        <input type="text" value="IAU_2015:30100" id="crs" name="crs">
 
         <hr>
 
         <h3>Step 2: Enter the precision, in meters. </h3>
         <p><i>This is the same as the side length of each grid box. Supported precisions are 25 km, 1 km, 100 m, 10 m, and 1 m. If you specify an unsupported precision >1 m, it will be rounded down to the closest (finer) precision that is supported. A value &lt;1 m produces an error. </i></p>
 
-        <label>Precision (meters):</label>
-        <input type="number" step="any" name="precision">
+        <label for="precision">Precision (meters):</label>
+        <input type="number" step="any" id="precision" name="precision">
 
         <hr>
 
         <h3>Step 3: Choose the output format. </h3>
         <p><i>All files will be combined into a single .zip file, which is automatically downloaded. </i></p>
 
-        <label>GeoPackage (1 layer per CRS)</label>
-        <input type="radio" name="out_name" value="grid.gpkg|layer={}" checked>
+        <label for="out-gpkg-layers">GeoPackage (1 layer per CRS)</label>
+        <input type="radio" id="out-gpkg-layers" name="out_name" value="grid.gpkg|layer={}" checked>
 
-        <label>GeoPackage (1 file per CRS)</label>
-        <input type="radio" name="out_name" value="{}.gpkg">
+        <label for="out-gpkg-files">GeoPackage (1 file per CRS)</label>
+        <input type="radio" id="out-gpkg-files" name="out_name" value="{}.gpkg">
 
-        <label>GeoJSON (1 file per CRS)</label>
-        <input type="radio" name="out_name" value="{}.geojson">
+        <label for="out-geojson">GeoJSON (1 file per CRS)</label>
+        <input type="radio" id="out-geojson" name="out_name" value="{}.geojson">
 
-        <label>ESRI Shapefile (1 file set per CRS)</label>
-        <input type="radio" name="out_name" value="{}.shp">
+        <label for="out-shp">ESRI Shapefile (1 file set per CRS)</label>
+        <input type="radio" id="out-shp" name="out_name" value="{}.shp">
 
         <hr>
 
         <h3>Step 4: Modify advanced options. (optional) </h3>
         <p><i>"ACC" uses Artemis Condensed Coordinates rather than the standard LGRS; the box geometry is identical but the field data differ. "Extended LTM" extends the Lunar Transverse Mercator (LTM) zones to 82° N/S instead of 80° N/S. "Minimize overlap" (the default) limits overlap between boxes to the areas near LPS and LTM zone boundaries, where overlap is needed for coverage; unchecked, all valid boxes in the area are generated, which can overlap between zones by up to about 35 km. "Minimize zones" uses as few zones (and therefore CRSs) as possible, even if that requires boxes from the expanded area of a zone. </i></p>
 
-        <label>ACC</label>
-        <input type="checkbox" name="acc">
+        <label for="acc">ACC</label>
+        <input type="checkbox" id="acc" name="acc">
 
-        <label>Extended LTM</label>
-        <input type="checkbox" name="extended_ltm">
+        <label for="extended_ltm">Extended LTM</label>
+        <input type="checkbox" id="extended_ltm" name="extended_ltm">
 
-        <label>Minimize overlap</label>
-        <input type="checkbox" name="min_overlap" checked>
+        <label for="min_overlap">Minimize overlap</label>
+        <input type="checkbox" id="min_overlap" name="min_overlap" checked>
 
-        <label>Minimize zones</label>
-        <input type="checkbox" name="min_zones">
+        <label for="min_zones">Minimize zones</label>
+        <input type="checkbox" id="min_zones" name="min_zones">
 
         <hr>
 
       </div>
 
       <button id="gen-btn" disabled>Generate</button> <br>
-      <code id="status" class="busy" style="color: red;">[Status: Loading environment. Please wait...]</code>
-      <code id="prev-result"></code>
+      <output id="status" class="busy" style="color: red;">[Status: Loading environment. Please wait...]</output>
+      <output id="prev-result"></output>
 
     </form>
 

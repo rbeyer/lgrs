@@ -55,9 +55,10 @@
         padding: 12px 24px;
       }
 
-      code {
+      output {
         white-space: pre;
         display: block;
+        font-family: monospace;
       }
 
       /* A small spinner before the status text while `#status` is busy. */
@@ -102,6 +103,8 @@
     </style>
   </head>
   <body>
+    <h1>Convert a coordinate with <i>lgrs</i></h1>
+
     <form id="conversion-form">
       <div class="form-grid">
 
@@ -145,21 +148,21 @@
             </pre>
         </details>
 
-        <label>Input coordinate:</label>
-        <input type="text" placeholder="example: 80 N, 4 E" name="input_coordinate">
+        <label for="input_coordinate">Input coordinate:</label>
+        <input type="text" placeholder="example: 80 N, 4 E" id="input_coordinate" name="input_coordinate">
       
         <p><i>If your coordinate is for an LGRS or ACC box, its reference (lower-left) corner will be used by default. Optionally, you can choose to have its center point used instead. </i></p>
 
-        <label>Use box center:</label>
-        <input type="checkbox" name="use_center">
+        <label for="use_center">Use box center:</label>
+        <input type="checkbox" id="use_center" name="use_center">
 
         <hr>
 
         <h3>Step 2: Enter the precision, in meters. </h3>
         <p><i>This is the same as the side length of each LGRS or ACC box. Supported precisions are 25 km, 1 km, 100 m, 10 m, and 1 m. If you specify an unsupported precision >1 m, it will be rounded down to the closest (finer) precision that is supported. A value &lt;1 m produces an error. </i></p>
 
-        <label>Precision (meters):</label>
-        <input type="number" step="any" name="precision">
+        <label for="precision">Precision (meters):</label>
+        <input type="number" step="any" id="precision" name="precision">
 
         <hr>
 
@@ -229,34 +232,34 @@
             </pre>
         </details>
 
-        <label>Target:</label>
-        <input type="text" value="json" name="target">
+        <label for="target">Target:</label>
+        <input type="text" value="json" id="target" name="target">
 
         <hr>
 
         <h3>Step 4: Modify advanced options. (optional) </h3>
-        <p><i>"Extended LTM" extends the Lunar Transverse Mercator (LTM) zones to 82° N/S instead of 80° N/S. "Sort by center" matters only near a boundary between two LTM zones, where a box in each zone can contain the coordinate: the second of the two (<code style="display: inline;">ltm_2</code>) is then the box whose center (checked) or reference corner (unchecked) is farther from the coordinate. "Custom note" is passed through to the output, as <code style="display: inline;">note</code>. </i></p>
+        <p><i>"Extended LTM" extends the Lunar Transverse Mercator (LTM) zones to 82° N/S instead of 80° N/S. "Sort by center" matters only near a boundary between two LTM zones, where a box in each zone can contain the coordinate: the second of the two (<code>ltm_2</code>) is then the box whose center (checked) or reference corner (unchecked) is farther from the coordinate. "Custom note" is passed through to the output, as <code>note</code>. </i></p>
 
-        <label>Extended LTM</label>
-        <input type="checkbox" name="extended_ltm">
+        <label for="extended_ltm">Extended LTM</label>
+        <input type="checkbox" id="extended_ltm" name="extended_ltm">
 
-        <label>Sort by center</label>
-        <input type="checkbox" name="sort_by_center" checked>
+        <label for="sort_by_center">Sort by center</label>
+        <input type="checkbox" id="sort_by_center" name="sort_by_center" checked>
 
-        <label>Custom note:</label>
-        <input type="text" name="note">
+        <label for="note">Custom note:</label>
+        <input type="text" id="note" name="note">
 
         <hr>
 
       </div>
 
       <button id="convert-btn" disabled>Convert</button> <br>
-      <code id="status" class="busy" style="color: red;">[Status: Loading environment. Please wait...]</code>
-      <code id="prev-result"></code>
+      <output id="status" class="busy" style="color: red;">[Status: Loading environment. Please wait...]</output>
+      <output id="prev-result"></output>
 
       <hr>
 
-      <label>Output:</label>
+      <label for="output-box">Output:</label>
       <textarea id="output-box" wrap="off" readonly></textarea>
 
     </form>
