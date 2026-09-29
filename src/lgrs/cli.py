@@ -128,6 +128,12 @@ def _prep_for_cli(func: _types.FunctionType) -> _types.FunctionType:
     numdoc = _util.NumpyDoc(func)
     numdoc.annotate_params(make_metadata=_make_metadata, delete_section=True)
 
+    # Remove sections that describe the Python function rather than the
+    # command: its return value, the exceptions it raises, the
+    # attributes of its result, and related Python objects.
+    for section_name in ("Attributes", "Returns", "Raises", "See Also"):
+        numdoc.replace_section(section_name, None)
+
     # Add new examples to docstring.
     examples = numdoc.section_name_to_content["Examples"]
     # Note: To make Examples a bit easier to write, replace any "{}"
