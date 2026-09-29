@@ -65,6 +65,10 @@ Changed
   in path-like ``bounds``.
 * Error reporting is more informative across ``lgrs.bounds``, ``lgrs.coords``,
   and ``lgrs.easy``, including chained causes for failed vector/raster reads.
+  A string that has the form of a lunar CRS name but is invalid, such as ``"LTM
+  99N"``, now reports why it is invalid: as the cause of the
+  ``FileNotFoundError`` when passed as ``bounds``, or of the ``pyproj`` error
+  when passed as a CRS.
 * Documentation has been substantially expanded and corrected throughout the
   library, most notably for ``lgrs.easy.write_grid()``, ``lgrs.grid``, and the
   ``precision`` arguments of ``BaseCoordinate.to_acc()``,

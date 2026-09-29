@@ -138,8 +138,21 @@ def resolve_crs(crs_hint: CrsHint) -> _pyproj.CRS:
     else:
         try:
             crs = _srs.make_lunar_crs(crs_hint)
-        except TypeError:
-            crs = _pyproj.CRS(crs_hint)
+        except (TypeError, ValueError) as err:
+            # Note: If `crs_hint` has the form of a lunar CRS name,
+            # report the error that rejected it as the cause of any
+            # `pyproj` error. Otherwise, suppress it, because it is
+            # irrelevant to a hint meant for `pyproj`.
+            if isinstance(crs_hint, str) and _srs._crs_name_pattern.search(
+                crs_hint
+            ):
+                name_err = err
+            else:
+                name_err = None
+            try:
+                crs = _pyproj.CRS(crs_hint)
+            except _pyproj.exceptions.CRSError as crs_err:
+                raise crs_err from name_err
     return crs
 
 

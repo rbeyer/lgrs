@@ -131,10 +131,16 @@ def _resolve_bounds(
     # Standardize `bounds`, so that each type as a single
     # interpretation.
     geo_crs = _srs.make_lunar_crs()
+    name_err = None  # Default.
     if isinstance(bounds, str):
         try:
             std_bounds = _srs.make_lunar_crs(bounds, extended_ltm=extended_ltm)
-        except TypeError:
+        except (TypeError, ValueError) as err:
+            # Note: If `bounds` has the form of a CRS name, keep the
+            # error that rejected it as a name, so that a failed path
+            # lookup can report that error as its cause.
+            if _srs._crs_name_pattern.search(bounds):
+                name_err = err
             std_bounds = _pathlib.Path(bounds)
             if std_bounds.parts[0] == "~":
                 std_bounds = std_bounds.expanduser()  # *REASSIGNMENT*
@@ -167,9 +173,14 @@ def _resolve_bounds(
                     *std_bounds[:-1], crs_hint=crs
                 )
         case _pathlib.Path():
-            final_bounds = _bounds._BaseBounds.from_path(
-                std_bounds, fallback_to_geo=fallback_to_geo
-            )
+            try:
+                final_bounds = _bounds._BaseBounds.from_path(
+                    std_bounds, fallback_to_geo=fallback_to_geo
+                )
+            except FileNotFoundError as err:
+                if name_err is None:
+                    raise
+                raise err from name_err
         case _srs.CRS():
             exclusive_crs = std_bounds
             final_bounds = _bounds.GeographicBounds.from_area(
