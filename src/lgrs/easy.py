@@ -598,25 +598,24 @@ def _call_with_kwargs(
     *,
     defaults: dict[str, _typing.Any] | None = None,
     overrides: dict[str, _typing.Any] | None = None,
-    used: set | None = None,
+    consumed: set[str] | None = None,
 ) -> _typing.Any:
-    # Update set of used keys.
-    if used is not None:
-        used.update(kwargs)
+    # Select the caller's keyword arguments that `func` takes and that
+    # no override replaces, and record their names in `consumed`.
+    if defaults is None:
+        defaults = {}  # *REASSIGNMENT*
+    if overrides is None:
+        overrides = {}  # *REASSIGNMENT*
+    params = _inspect.signature(func).parameters
+    selected = {
+        k: v for k, v in kwargs.items() if k in params and k not in overrides
+    }
+    if consumed is not None:
+        consumed.update(selected)
 
-    # Finalize `kwargs`.
-    if defaults:
-        new_kwargs = defaults.copy()
-        new_kwargs.update(kwargs)
-        kwargs = new_kwargs  # *REASSIGNMENT*
-    if overrides:
-        kwargs = kwargs.copy()  # *REASSIGNMENT*
-        kwargs.update(overrides)
-    sig = _inspect.signature(func)
-    final_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
-
-    # Call and return.
-    return func(**final_kwargs)
+    # Call with the defaults, selected arguments, and overrides, each
+    # taking precedence over the one before.
+    return func(**{**defaults, **selected, **overrides})
 
 
 def _test_mode(path: _pathlib.Path, mode: str) -> str:
@@ -958,7 +957,7 @@ def write_grid(
     gdfs = _grid.make_gdfs(boxes)
 
     # Optionally generate a GeoJSON-like mapping.
-    used_kwarg_set = set()
+    consumed_kwarg_set = set()
     if make_geo_dict:
         key_to_dict = {}
         if json_extras is None:
@@ -976,7 +975,7 @@ def write_grid(
             geo_dict = _call_with_kwargs(
                 gdf.to_geo_dict,
                 kwargs,
-                used=used_kwarg_set,
+                consumed=consumed_kwarg_set,
             )
             key_to_dict[key] = geo_dict
             if json_extras:
@@ -991,23 +990,35 @@ def write_grid(
                             func,
                             kwargs,
                             defaults=defaults,
-                            used=used_kwarg_set,
+                            consumed=consumed_kwarg_set,
                         )
                     else:
                         val = val_or_func
                     geo_dict[key] = val
+        if not return_mapping:
+            key_to_str = {
+                key: _call_with_kwargs(
+                    _json.dumps,
+                    kwargs,
+                    defaults={"indent": 2},
+                    overrides={"obj": geo_dict},
+                    consumed=consumed_kwarg_set,
+                )
+                for key, geo_dict in key_to_dict.items()
+            }
+        unused = sorted(set(kwargs) - consumed_kwarg_set)
+        if unused:
+            raise TypeError(
+                "`write_grid()` got unexpected keyword arguments: "
+                + ", ".join(map(repr, unused))
+            )
         if return_mapping:
             return key_to_dict
 
-    # If will call `geopandas.GeoDataFrame.to_file()`, subset `kwargs`.
-    # Note: Since `geopandas.GeoDataFrame.to_file()` has open-ended
-    # keyword arguments, must use process of elimination to determine
-    # relevant arguments.
-    else:
-        # *REASSIGNMENT*
-        kwargs = {k: v for k, v in kwargs.items() if k not in used_kwarg_set}
-        if driver is not None:
-            kwargs["driver"] = driver
+    # If `geopandas.GeoDataFrame.to_file()` will write the output, add
+    # `driver` to the keyword arguments, all of which it receives.
+    elif driver is not None:
+        kwargs["driver"] = driver
 
     # Output each `GeoDataFrame` to a file or layer.
     out_dir_path = out_file_path_template.parent
@@ -1024,13 +1035,7 @@ def write_grid(
             out_dir_path.mkdir()
             out_dir_path_exists = True
         if make_geo_dict:
-            geo_dict = key_to_dict[id(gdf)]
-            geo_dict_str = _call_with_kwargs(
-                _json.dumps,
-                kwargs,
-                defaults={"indent": 2},
-                overrides={"obj": geo_dict},
-            )
+            geo_dict_str = key_to_str[id(gdf)]
             with gdf_out_path.open(mode=mode) as f:
                 f.write(geo_dict_str)
         else:
