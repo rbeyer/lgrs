@@ -310,14 +310,15 @@
         }
         catch (e) {
           console.error(e);
-          // Note: A Python error has a `type`. Report only its message, not
-          // the full traceback.
-          let message = "<unknown, non-Python error>";
+          // Note: A Python error has a `type`. Report that error and the
+          // errors chained to it. Indent every line of the report.
+          const indent = "       ";
+          let message = indent + "<unknown, non-Python error>";
           if (e.type !== undefined) {
-            message = await pyodide.runPython("import sys; str(sys.last_value)");
+            message = lgrsJs.format_last_error(indent);
           }
           prevResultElem.style.color = "red";
-          prevResultElem.textContent = "  ⌛ Previous coordinate conversion failed with error message below. Check that inputs are complete and correct, then try again.\n       ";
+          prevResultElem.textContent = "  ⌛ Previous coordinate conversion failed with error message below. Check that inputs are complete and correct, then try again.\n";
           const messageElem = document.createElement("i");
           messageElem.textContent = message;  // Text, not HTML.
           prevResultElem.appendChild(messageElem);

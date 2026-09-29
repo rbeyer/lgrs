@@ -26,7 +26,10 @@ import shutil as _shutil
 # Note: Although `sqlite3` is not explicitly used, importing it avoids a
 # fatal error when grid generation is executed under Pyodide.
 import sqlite3 as _sqlite3  # noqa: F401
+import sys as _sys
 import tempfile as _tempfile
+import textwrap as _textwrap
+import traceback as _traceback
 import typing as _typing
 
 # External.
@@ -287,6 +290,50 @@ def convert_coordinate_from_form(
     # Pass to `convert_coordinate()`.
     form_kwargs.update(kwargs)
     return convert_coordinate(**form_kwargs)
+
+
+def format_last_error(indent: str = "") -> str | None:
+    """
+    Format the Python exception that most recently reached JavaScript.
+
+    The text includes any exceptions chained to it and the members of
+    any exception group, but no stack frames. Call this function in a
+    JavaScript ``catch`` block, before running any other Python code,
+    because the next Python exception to reach JavaScript replaces the
+    current one.
+
+    Parameters
+    ----------
+    indent : string, default=""
+        Prepended to every nonblank line.
+
+    Returns
+    -------
+    text : str or None
+        The formatted exception, or `None` if no Python exception has
+        reached JavaScript.
+
+    Examples
+    --------
+    In JavaScript, where ``lgrsJs`` is ``pyodide.pyimport("lgrs.js")``::
+
+        try {
+          lgrsJs.convert_coordinate.callKwargs(
+            "not a coordinate", { precision: 1 }
+          );
+        } catch (e) {
+          // Note: Only an error that comes from Python has a `type`.
+          if (e.type !== undefined) {
+            console.error(lgrsJs.format_last_error());
+          }
+        }
+    """
+    exc = getattr(_sys, "last_exc", None)
+    if exc is None:
+        return None
+    text = "".join(_traceback.format_exception(exc, limit=0)).rstrip()
+    indented_text = _textwrap.indent(text, indent)
+    return indented_text
 
 
 @_util.partially_wraps(_grid.make_box_grid)

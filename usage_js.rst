@@ -160,7 +160,9 @@ Handling errors
 
 When a Python function raises an exception, JavaScript receives an error whose
 ``type`` property is the name of the Python exception class. Errors that come
-from JavaScript itself have no ``type``. To read the Python message:
+from JavaScript itself have no ``type``. To report a Python exception, together
+with any exceptions chained to it, call ``format_last_error()`` in the
+``catch`` block:
 
 .. code-block:: javascript
 
@@ -168,9 +170,8 @@ from JavaScript itself have no ``type``. To read the Python message:
       lgrsJs.convert_coordinate.callKwargs("not a coordinate", { precision: 1 });
     } catch (e) {
       if (e.type !== undefined) {
-        const message = pyodide.runPython("import sys; str(sys.last_value)");
-        console.error(e.type, message);
-        // Prints: CoordinateError `string` is not in a supported format:
-        // 'not a coordinate'
+        console.error(lgrsJs.format_last_error());
+        // Prints: lgrs.exceptions.CoordinateError: `string` is not in a
+        // supported format: 'not a coordinate'
       }
     }
