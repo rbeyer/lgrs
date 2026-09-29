@@ -26,4 +26,16 @@ class MalformedCoordinate(Exception):
     pass
 
 
+class GeospatialFileError(ValueError):
+    """
+    Raised when a geospatial file cannot be read as vector or raster data.
+
+    The file exists and can be opened for reading. A missing file raises
+    `FileNotFoundError` instead, and a file that cannot be opened raises
+    `PermissionError`.
+    """
+
+    pass
+
+
 # endregion

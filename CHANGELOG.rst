@@ -69,6 +69,10 @@ Changed
   99N"``, now reports why it is invalid: as the cause of the
   ``FileNotFoundError`` when passed as ``bounds``, or of the ``pyproj`` error
   when passed as a CRS.
+  A path given as ``bounds`` that cannot be found raises ``FileNotFoundError``,
+  one that cannot be opened raises ``PermissionError``, and one that is not
+  readable vector or raster data raises the new
+  ``lgrs.exceptions.GeospatialFileError`` (a ``ValueError``).
 * Documentation has been substantially expanded and corrected throughout the
   library, most notably for ``lgrs.easy.write_grid()``, ``lgrs.grid``, and the
   ``precision`` arguments of ``BaseCoordinate.to_acc()``,

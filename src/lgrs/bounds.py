@@ -23,6 +23,7 @@ from __future__ import annotations
 import collections as _collections
 import dataclasses as _dataclasses
 import functools as _functools
+import os as _os
 import pathlib as _pathlib
 import re as _re
 import typing as _typing
@@ -38,6 +39,7 @@ import shapely as _shapely
 # Internal.
 import lgrs.caching as _caching
 import lgrs.database as _database
+import lgrs.exceptions as _exceptions
 import lgrs.srs.srs as _srs
 import lgrs.srs.wkt as _wkt
 import lgrs.values as _values
@@ -286,8 +288,12 @@ class _BaseBounds(_Base):
 
         Raises
         ------
-        TypeError
-            If `path` cannot be found or cannot be read.
+        FileNotFoundError
+            If `path` cannot be found.
+        PermissionError
+            If `path` is found but cannot be opened for reading.
+        lgrs.exceptions.GeospatialFileError
+            If `path` is found but cannot be read as vector or raster data.
         pyproj.ProjError
             If CRS cannot be transformed to IAU_2015:30100, even after applying
             `fallback_to_geo` behavior, if enabled.
@@ -295,7 +301,7 @@ class _BaseBounds(_Base):
         # Determine CRS and bounds in that CRS.
         file_path, open_kwargs = _resolve_file_path_and_open_kwargs(path)
         if not file_path.exists():
-            raise TypeError(f"Path could not be found: {file_path}")
+            raise FileNotFoundError(f"Path could not be found: {file_path}")
         try:
             gdf = _geopandas.read_file(file_path, **open_kwargs)
         except Exception as vec_err:
@@ -304,13 +310,26 @@ class _BaseBounds(_Base):
                     native_bounds = src.bounds
                     native_crs = src.crs
             except Exception as ras_err:
-                raise TypeError(
-                    f"Path could not be read either as vector or raster data: "
-                    f"{path}."
-                ) from ExceptionGroup(
+                group = ExceptionGroup(
                     "attempted vector and raster reads both failed",
                     (vec_err, ras_err),
                 )
+                # Note: If both readers failed, check whether
+                # `file_path` can be opened at all, so that a permission
+                # problem is reported as `PermissionError` rather than
+                # as a file that is not vector or raster data.
+                try:
+                    if file_path.is_dir():
+                        with _os.scandir(file_path):
+                            pass
+                    else:
+                        file_path.open("rb").close()
+                except PermissionError as perm_err:
+                    raise perm_err from group
+                raise _exceptions.GeospatialFileError(
+                    f"Path could not be read either as vector or raster data: "
+                    f"{path}."
+                ) from group
         else:
             native_bounds = gdf.total_bounds
             native_crs = gdf.crs
