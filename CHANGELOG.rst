@@ -63,6 +63,9 @@ Changed
   than keyword-only.
 * ``lgrs.grid.make_box_grid()`` and ``lgrs.easy.write_grid()`` expand ``~``
   in path-like ``bounds``.
+* Grid generation is about twice as fast for large grids, because each
+  ``lgrs.srs.srs.CRS`` now computes its hash once instead of on every use as a
+  cache key.
 * Error reporting is more informative across ``lgrs.bounds``, ``lgrs.coords``,
   and ``lgrs.easy``, including chained causes for failed vector/raster reads.
   A string that has the form of a lunar CRS name but is invalid, such as ``"LTM
