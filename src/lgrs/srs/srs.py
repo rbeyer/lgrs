@@ -215,6 +215,13 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     False
     """
 
+    # Note: Hashing a `pyproj.CRS` exports it as WKT on every call, so
+    # where a `CRS` is hashed repeatedly (as when it keys a cache),
+    # caching the hash can significantly improve performance. Caching
+    # is valid because a `CRS` is not modified after creation.
+    def __hash__(self) -> int:
+        return self._hash
+
     def _extract(self, regex: _re.Pattern) -> str | None:
         if self.coordinate_operation is None:
             return None
@@ -222,6 +229,10 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
         if match is None:
             return None
         return match.group(1)
+
+    @_functools.cached_property
+    def _hash(self) -> int:
+        return super().__hash__()
 
     @_functools.cached_property
     def lps_hemisphere(self) -> _typing.Literal["N", "S", None]:
