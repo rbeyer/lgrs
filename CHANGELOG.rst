@@ -115,6 +115,12 @@ Fixed
   bounds-order typo and a wrong path.
 * ``lgrs.grid`` now preserves ``name_hint``.
 * ``lgrs.database`` accepts a broader range of numeric types.
+* ``make install`` and the instructions in ``README.rst`` for installing from a
+  cloned repository now run ``pip install .``. Both ran ``pip install`` with
+  nothing to install, which fails.
+* Building ``lgrs`` now requires setuptools 77.0.3 or newer, which the
+  package's ``Apache-2.0`` license expression needs. Only builds without build
+  isolation were affected.
 
 
 0.3.0 (2026-06-25)
