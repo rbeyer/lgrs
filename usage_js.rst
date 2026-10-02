@@ -11,7 +11,7 @@ JavaScript objects rather than Python objects.
 
 This guide shows the essential calls. For complete, working web pages, see the
 two files in the `examples folder
-<https://github.com/rbeyer/lgrs/tree/master/examples>`__. Each marks its
+<https://github.com/rbeyer/lgrs/tree/main/examples>`__. Each marks its
 *lgrs*-specific code with ``lgrs: BEGIN`` and ``lgrs: END`` comments. For
 using *lgrs* from Python, see the `usage guide <usage.rst>`__.
 

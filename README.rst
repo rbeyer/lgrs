@@ -64,11 +64,11 @@ Usage
 -----
 
 Examples and how to get started with the *lgrs* library can be found in our
-`usage guide <https://github.com/rbeyer/lgrs/blob/master/usage.rst>`__.
+`usage guide <https://github.com/rbeyer/lgrs/blob/main/usage.rst>`__.
 
 To use *lgrs* in a web browser (via Pyodide), see the `JavaScript usage guide
-<https://github.com/rbeyer/lgrs/blob/master/usage_js.rst>`__. The `examples
-folder <https://github.com/rbeyer/lgrs/tree/master/examples>`__ has two
+<https://github.com/rbeyer/lgrs/blob/main/usage_js.rst>`__. The `examples
+folder <https://github.com/rbeyer/lgrs/tree/main/examples>`__ has two
 complete web pages that do so: ``convert_coordinate.html`` converts a
 coordinate, and ``package_grid.html`` generates and downloads a grid. To try
 one, download the file and open it in a web browser.
@@ -89,7 +89,7 @@ The *lgrs* library  was developed in the open at the SETI Institute,
 based on open code originally developed by the United States
 Geological Survey.
 
-See the `AUTHORS <https://github.com/rbeyer/lgrs/blob/master/AUTHORS.rst>`__
+See the `AUTHORS <https://github.com/rbeyer/lgrs/blob/main/AUTHORS.rst>`__
 file for a complete list of developers.
 
 

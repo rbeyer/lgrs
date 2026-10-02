@@ -34,13 +34,13 @@
 
 ## Licensing:
 
-This project is released under the [LICENSE](https://github.com/rbeyer/lgrs/blob/master/LICENSE).
+This project is released under the [LICENSE](https://github.com/rbeyer/lgrs/blob/main/LICENSE).
 
 <!-- Remove the statement that does not apply. -->
 - I claim copyrights on my contributions in this pull request, and I provide those contributions via this pull request under the same license terms that the lgrs project uses.
 - I dedicate any and all copyright interest in my contributions in this pull request to the public domain.  I make this dedication for the benefit of the public at large and to the detriment of my heirs and successors. I intend this dedication to be an overt act of relinquishment in perpetuity of all present and future rights to this contribution under copyright law.
 
 <!-- No matter how you contributed, please make sure you add your name to the
-[AUTHORS](https://github.com/rbeyer/lgrs/blob/master/AUTHORS.rst) file, if you haven't already. -->
+[AUTHORS](https://github.com/rbeyer/lgrs/blob/main/AUTHORS.rst) file, if you haven't already. -->
 
 <!-- Thanks for contributing to lgrs! -->
