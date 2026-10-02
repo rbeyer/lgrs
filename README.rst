@@ -45,7 +45,7 @@ It is highly suggested to install this into a virtual Python environment.
 Change directory to where you have downloaded this repository after you have
 set up your virtual environment, just do this::
 
-$> pip install
+$> pip install .
 
 
 or::
