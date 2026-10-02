@@ -198,6 +198,15 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     """
     Equivalent to `pyproj.CRS` with caching support.
 
+    Notes
+    -----
+    `.srs`, inherited from `pyproj.CRS`, holds the input that created
+    the CRS, exactly as given. For an LPS or LTM CRS from
+    `make_lunar_crs()`, that input is the WKT from `make_lunar_wkt()`,
+    which is the WKT that `lgrs` defines for the CRS. `.to_wkt()`
+    instead returns `pyproj`'s rendering of the CRS, which can differ
+    from `.srs` in layout or content.
+
     Examples
     --------
     >>> from lgrs import CRS
@@ -212,6 +221,16 @@ class CRS(_pyproj.CRS, metaclass=_caching._MetaMultiton):
     >>> crs_utm3.is_exact_same(crs_utm)
     True
     >>> crs_utm3 is crs_utm
+    False
+
+    For an LPS or LTM CRS, `.srs` is the WKT that `lgrs` defines, while
+    `.to_wkt()` differs from it.
+
+    >>> from lgrs import make_lunar_crs, make_lunar_wkt
+    >>> crs_ltm = make_lunar_crs("LTM 23N")
+    >>> crs_ltm.srs == make_lunar_wkt("LTM 23N")
+    True
+    >>> crs_ltm.to_wkt() == crs_ltm.srs
     False
     """
 
