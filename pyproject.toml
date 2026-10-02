@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lgrs"
-description = "The lgrs package is software to support the Lunar Grid Reference System."
+description = "Coordinate conversion, grid generation, and projections for the Lunar Grid Reference System (LGRS)"
+keywords = [
+    "Moon", "lunar", "LGRS", "Artemis", "grid", "coordinates", "CRS", "WKT"
+]
 authors = [
     { name = "Ethan Schaefer", email = "eschaefer@seti.org" },
     { name = "Ross Beyer", email = "rbeyer@seti.org" }
@@ -15,9 +18,15 @@ requires-python = ">=3.13"
 classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
     "Intended Audience :: Science/Research",
     "Development Status :: 2 - Pre-Alpha",
     "Natural Language :: English",
+    "Environment :: Console",
+    "Environment :: WebAssembly :: Emscripten",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Astronomy",
 ]
 license = "Apache-2.0"
 license-files = ["LICENSE", "AUTHORS.rst"]
@@ -31,6 +40,10 @@ reference = ["gdal"]
 
 [project.urls]
 Repository = "https://github.com/rbeyer/lgrs"
+Documentation = "https://github.com/rbeyer/lgrs/blob/main/usage.rst"
+"JavaScript guide" = "https://github.com/rbeyer/lgrs/blob/main/usage_js.rst"
+Issues = "https://github.com/rbeyer/lgrs/issues"
+Changelog = "https://github.com/rbeyer/lgrs/blob/main/CHANGELOG.rst"
 
 [project.scripts]
 lgrs = "lgrs.cli:main"
