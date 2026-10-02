@@ -8,7 +8,7 @@ Contributions are welcome, and they are greatly appreciated! Every little bit
 helps, and credit will always be given.
 
 For a high-level overview of the philosophy of contributions, please see
-https://github.com/rplanetarypy/TC/blob/master/Contributing.md.
+https://github.com/planetarypy/TC/blob/master/Contributing.md.
 
 You can contribute in many ways:
 
