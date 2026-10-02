@@ -102,4 +102,4 @@ develop: clean  ## install the package in an editable format for development
 	pip install --no-deps -e .
 
 install: clean ## install the package to the active Python's site-packages
-	pip install
+	pip install .
