@@ -28,6 +28,9 @@ and the release date, in year-month-day format (see examples below).
 Unreleased
 ----------
 
+0.4.0 (2026-10-05)
+------------------
+
 Added
 ^^^^^
 * CLI support for critical functionality, including coordinate conversion, grid

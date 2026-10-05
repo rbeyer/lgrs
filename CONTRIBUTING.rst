@@ -204,7 +204,7 @@ case.
   Then run::
 
   $> bump-my-version show-bump
-  $> bump-my-version bump --vv --dry-run release
+  $> bump-my-version bump -vv --dry-run release
 
   If the above all looks okay, then:
   
