@@ -16,7 +16,7 @@
 
 __author__ = "lgrs Developers"
 __email__ = "eschaefer@seti.org"
-__version__ = "0.4.0-dev"
+__version__ = "0.4.0"
 
 # * IMPORT BEARTYPE. ──────────────────────────────────────────────────
 import beartype.claw
