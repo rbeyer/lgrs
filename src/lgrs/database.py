@@ -36,6 +36,7 @@ from __future__ import annotations
 import collections as _collections
 import functools as _functools
 import itertools as _itertools
+import math as _math
 import numbers as _numbers
 import re as _re
 import typing as _typing
@@ -77,6 +78,9 @@ class _InternalNameParsed(_typing.NamedTuple):
 def _calculate_ltm_zone_number(longitude: float) -> tuple[float, int]:
     # Below: Eq. 13 of M2025. Zones are 1-indexed.
     zone_float = ((longitude + 180) / (2 * _wkt.LTM_ZONE_HALF_WIDTH)) + 1
+    # Note: For the largest float below 180, `longitude + 180` rounds to
+    # 360, which would give zone 46. Keep such longitudes in zone 45.
+    zone_float = min(zone_float, _math.nextafter(46.0, 0.0))
     zone_int = int(zone_float)
     return (zone_float, zone_int)
 
