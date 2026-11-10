@@ -3169,7 +3169,9 @@ class LpsPoint(PointCoordinate):
         lat, lon = transformer.transform(self.easting, self.northing)
         latlon = LatLonPoint(
             latitude=lat,
-            longitude=lon,
+            # Note: pyproj may return +180 on the antimeridian, which
+            # is outside the [-180, 180) interval.
+            longitude=_database._conform_longitude(lon),
             constraints=self.constraints,
             validate=False,
         )
@@ -3206,16 +3208,25 @@ class LpsPoint(PointCoordinate):
             #  reference code.
             # TODO: Let Mark know that Eq. 103 treats Table 13 as 1-
             #  indexed but Eq. 102 treats it as 0-indexed.
-            # Note: Eq. 103 uses "24" but "23" used here since our Table
-            # 13 equivalent starts at 1, not 0.
-            ea_idx = 23 - _floor(abs(e_adj) // 25_000)  # Eq. 103
+            # Note: Eq. 103 is 24 - ceil(|e_adj| / 25000), which equals
+            # 24 + floor(e_adj / 25000) for e_adj < 0.
+            # Note: Eq. 103 and 105 use abs(e_adj), which assigns an exact
+            # multiple of 25 km to the area to its west with easting
+            # 25000. Use floor division and a non-negative remainder of
+            # the signed offset instead, so that each area is half-open
+            # [west edge, east edge), as in the east half (Eq. 102, 106).
+            ea_q, e_west = divmod(e_adj, 25_000)
+            if e_west >= 25_000:  # Float rounding of a tiny negative e_adj
+                ea_q += 1  # *REASSIGNMENT*
+                e_west -= 25_000  # *REASSIGNMENT*
+            ea_idx = 24 + _floor(ea_q)  # Eq. 103
         else:
             ea_idx = _floor(e_adj // 25_000)  # Eq. 102
         ea = LpsLgrsBox._easting_area_chars[ea_idx]  # Tables 13, 14
         na_idx = _floor(n_adj // 25_000) + 13  # Eq. 104
         na = LpsLgrsBox._northing_area_chars[na_idx]  # Tables 15, 16
         if is_in_west_half:
-            e = 25_000 - (abs(e_adj) % 25_000)  # Eq. 105
+            e = e_west  # Eq. 105
         else:
             e = e_adj % 25_000  # Eq. 106
         n = n_adj % 25_000
