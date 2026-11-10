@@ -24,7 +24,9 @@ import dataclasses as _dataclasses
 import functools as _functools
 import re as _re
 import typing as _typing
+import warnings as _warnings
 
+import numpy as _numpy
 import pyproj as _pyproj
 
 # Internal.
@@ -44,7 +46,190 @@ def get_transformer(
     transformer = _pyproj.Transformer.from_crs(
         crs_from, crs_to, always_xy=always_xy, **kwargs
     )
-    return transformer
+    exact = _ExactSphericalTmTransformer.wrap(
+        transformer, crs_from, crs_to, always_xy
+    )
+    return transformer if exact is None else exact
+
+
+def _sincosd(degrees: _typing.Any) -> tuple[_typing.Any, _typing.Any]:
+    """Return (sin, cos) of angles in degrees, exact at multiples of 90.
+
+    The angle is reduced to [-45, 45] degrees by whole quarter turns before
+    converting to radians, so sin(180) is exactly 0 rather than ~1.2e-16.
+    """
+    x = _numpy.fmod(_numpy.asarray(degrees, dtype=float), 360.0)
+    q = _numpy.round(x / 90.0)
+    r = _numpy.radians(x - 90.0 * q)
+    s, c = _numpy.sin(r), _numpy.cos(r)
+    q = _numpy.mod(q, 4)
+    sin = _numpy.select([q == 0, q == 1, q == 2], [s, c, -s], -c)
+    cos = _numpy.select([q == 0, q == 1, q == 2], [c, -s, -c], s)
+    return sin + 0.0, cos + 0.0  # + 0.0 turns -0.0 into 0.0
+
+
+class _ExactSphericalTmTransformer:
+    """Closed-form LTM and LPS projections on a sphere.
+
+    PROJ's spherical ``tmerc`` computes the northing through ``acos()``,
+    which loses up to ~3 cm within ~1e-6 degrees of the equator, and its
+    spherical polar ``stere`` inverse loses up to a few millimetres within
+    a few centimetres of the pole. These closed forms are exact to
+    floating-point precision. Only ``transform()`` between a geographic CRS
+    and a spherical ``tmerc`` (LTM) or polar ``stere`` (LPS) CRS is
+    replaced; every other attribute (e.g., ``transform_bounds()``) is
+    delegated to the wrapped pyproj transformer.
+    """
+
+    def __init__(
+        self,
+        transformer: _pyproj.Transformer,
+        *,
+        forward: bool,
+        polar: int,
+        geo_lon_first: bool,
+        radius: float,
+        k0: float,
+        lon0: float,
+        x0: float,
+        y0: float,
+    ) -> None:
+        self._transformer = transformer
+        self._forward = forward  # geographic -> projected
+        self._polar = polar  # 0: tmerc; +1 / -1: north / south polar stere
+        self._geo_lon_first = geo_lon_first
+        self._k0r = k0 * radius
+        self._lon0_deg = lon0
+        self._lon0 = _numpy.radians(lon0)
+        self._x0 = x0
+        self._y0 = y0
+
+    @classmethod
+    def wrap(
+        cls,
+        transformer: _pyproj.Transformer,
+        crs_from: _pyproj.CRS,
+        crs_to: _pyproj.CRS,
+        always_xy: bool,
+    ) -> _ExactSphericalTmTransformer | None:
+        crs_from = _pyproj.CRS(crs_from)
+        crs_to = _pyproj.CRS(crs_to)
+        if crs_from.is_geographic and crs_to.is_projected:
+            geo, proj, forward = crs_from, crs_to, True
+        elif crs_from.is_projected and crs_to.is_geographic:
+            geo, proj, forward = crs_to, crs_from, False
+        else:
+            return None
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("ignore")
+            params = proj.to_dict()
+        ellipsoid = proj.ellipsoid
+        if params.get("proj") == "tmerc" and params.get("lat_0", 0) == 0:
+            polar = 0
+        elif params.get("proj") == "stere" and params.get("lat_0") in (
+            90,
+            -90,
+        ):
+            polar = 1 if params["lat_0"] == 90 else -1
+        else:
+            return None
+        if (
+            ellipsoid is None
+            or ellipsoid.semi_major_metre != ellipsoid.semi_minor_metre
+            or proj.geodetic_crs != geo
+            or (
+                [a.direction for a in proj.axis_info] != ["east", "north"]
+                and not (
+                    polar and [a.abbrev for a in proj.axis_info] == ["X", "Y"]
+                )
+            )
+        ):
+            return None
+        if always_xy:
+            geo_lon_first = True
+        else:
+            directions = [a.direction for a in geo.axis_info][:2]
+            if directions == ["north", "east"]:
+                geo_lon_first = False
+            elif directions == ["east", "north"]:
+                geo_lon_first = True
+            else:
+                return None
+        return cls(
+            transformer,
+            forward=forward,
+            polar=polar,
+            geo_lon_first=geo_lon_first,
+            radius=ellipsoid.semi_major_metre,
+            k0=float(params.get("k", params.get("k_0", 1))),
+            lon0=float(params.get("lon_0", 0)),
+            x0=float(params.get("x_0", 0)),
+            y0=float(params.get("y_0", 0)),
+        )
+
+    def __getattr__(self, name: str) -> _typing.Any:
+        return getattr(self._transformer, name)
+
+    def transform(
+        self, xx: _typing.Any, yy: _typing.Any, *args, **kwargs
+    ) -> tuple[_typing.Any, _typing.Any]:
+        if args or kwargs:
+            return self._transformer.transform(xx, yy, *args, **kwargs)
+        scalar = _numpy.isscalar(xx) and _numpy.isscalar(yy)
+        a = _numpy.asarray(xx, dtype=float)
+        b = _numpy.asarray(yy, dtype=float)
+        with _numpy.errstate(divide="ignore", invalid="ignore"):
+            if self._polar:
+                out1, out2 = self._polar_stere(a, b)
+            elif self._forward:
+                lon, lat = (a, b) if self._geo_lon_first else (b, a)
+                sin_phi, cos_phi = _sincosd(lat)
+                sin_dlam, cos_dlam = _sincosd(lon - self._lon0_deg)
+                u = cos_phi * cos_dlam
+                x = self._k0r * _numpy.arcsinh(
+                    cos_phi * sin_dlam / _numpy.hypot(sin_phi, u)
+                )
+                y = self._k0r * _numpy.arctan2(sin_phi, u)
+                out1, out2 = x + self._x0, y + self._y0
+            else:
+                xs = (a - self._x0) / self._k0r
+                d = (b - self._y0) / self._k0r
+                sinh_x = _numpy.sinh(xs)
+                cos_d = _numpy.cos(d)
+                lat = _numpy.degrees(
+                    _numpy.arctan2(_numpy.sin(d), _numpy.hypot(sinh_x, cos_d))
+                )
+                lon = _numpy.degrees(
+                    self._lon0 + _numpy.arctan2(sinh_x, cos_d)
+                )
+                lon = _numpy.where(lon >= 180, lon - 360, lon)
+                lon = _numpy.where(lon < -180, lon + 360, lon)
+                out1, out2 = (lon, lat) if self._geo_lon_first else (lat, lon)
+        if scalar:
+            return float(out1), float(out2)
+        return out1, out2
+
+    def _polar_stere(self, a, b):  # type: ignore[no-untyped-def]
+        s = self._polar
+        two_k0r = 2 * self._k0r
+        if self._forward:
+            lon, lat = (a, b) if self._geo_lon_first else (b, a)
+            sin_h, cos_h = _sincosd(45.0 - s * lat / 2.0)
+            rho = two_k0r * sin_h / cos_h
+            sin_dlam, cos_dlam = _sincosd(lon - self._lon0_deg)
+            return (
+                self._x0 + rho * sin_dlam,
+                self._y0 - s * rho * cos_dlam,
+            )
+        dx = a - self._x0
+        dy = b - self._y0
+        rho = _numpy.hypot(dx, dy)
+        lat = s * (90 - _numpy.degrees(2 * _numpy.arctan(rho / two_k0r)))
+        dlam = _numpy.where(rho == 0, 0.0, _numpy.arctan2(dx, -s * dy))
+        lon = _numpy.degrees(self._lon0 + dlam)
+        lon = _numpy.where(lon >= 180, lon - 360, lon)
+        lon = _numpy.where(lon < -180, lon + 360, lon)
+        return (lon, lat) if self._geo_lon_first else (lat, lon)
 
 
 # endregion
