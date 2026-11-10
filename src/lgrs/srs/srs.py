@@ -24,7 +24,9 @@ import dataclasses as _dataclasses
 import functools as _functools
 import re as _re
 import typing as _typing
+import warnings as _warnings
 
+import numpy as _numpy
 import pyproj as _pyproj
 
 # Internal.
@@ -44,7 +46,134 @@ def get_transformer(
     transformer = _pyproj.Transformer.from_crs(
         crs_from, crs_to, always_xy=always_xy, **kwargs
     )
-    return transformer
+    exact = _ExactSphericalTmTransformer.wrap(
+        transformer, crs_from, crs_to, always_xy
+    )
+    return transformer if exact is None else exact
+
+
+class _ExactSphericalTmTransformer:
+    """Closed-form Transverse Mercator on a sphere, for LTM.
+
+    PROJ's spherical ``tmerc`` computes the northing through ``acos()``,
+    which loses up to ~3 cm within ~1e-6 degrees of the equator. These
+    closed forms are exact to floating-point precision everywhere in an LTM
+    zone. Only ``transform()`` between a geographic CRS and a spherical
+    ``tmerc`` CRS is replaced; every other attribute (e.g.,
+    ``transform_bounds()``) is delegated to the wrapped pyproj transformer.
+    """
+
+    def __init__(
+        self,
+        transformer: _pyproj.Transformer,
+        *,
+        forward: bool,
+        geo_lon_first: bool,
+        radius: float,
+        k0: float,
+        lon0: float,
+        x0: float,
+        y0: float,
+    ) -> None:
+        self._transformer = transformer
+        self._forward = forward  # geographic -> projected
+        self._geo_lon_first = geo_lon_first
+        self._k0r = k0 * radius
+        self._lon0 = _numpy.radians(lon0)
+        self._x0 = x0
+        self._y0 = y0
+
+    @classmethod
+    def wrap(
+        cls,
+        transformer: _pyproj.Transformer,
+        crs_from: _pyproj.CRS,
+        crs_to: _pyproj.CRS,
+        always_xy: bool,
+    ) -> _ExactSphericalTmTransformer | None:
+        crs_from = _pyproj.CRS(crs_from)
+        crs_to = _pyproj.CRS(crs_to)
+        if crs_from.is_geographic and crs_to.is_projected:
+            geo, proj, forward = crs_from, crs_to, True
+        elif crs_from.is_projected and crs_to.is_geographic:
+            geo, proj, forward = crs_to, crs_from, False
+        else:
+            return None
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("ignore")
+            params = proj.to_dict()
+        ellipsoid = proj.ellipsoid
+        if (
+            params.get("proj") != "tmerc"
+            or params.get("lat_0", 0) != 0
+            or ellipsoid is None
+            or ellipsoid.semi_major_metre != ellipsoid.semi_minor_metre
+            or proj.geodetic_crs != geo
+            or [a.direction for a in proj.axis_info] != ["east", "north"]
+        ):
+            return None
+        if always_xy:
+            geo_lon_first = True
+        else:
+            directions = [a.direction for a in geo.axis_info][:2]
+            if directions == ["north", "east"]:
+                geo_lon_first = False
+            elif directions == ["east", "north"]:
+                geo_lon_first = True
+            else:
+                return None
+        return cls(
+            transformer,
+            forward=forward,
+            geo_lon_first=geo_lon_first,
+            radius=ellipsoid.semi_major_metre,
+            k0=float(params.get("k", params.get("k_0", 1))),
+            lon0=float(params.get("lon_0", 0)),
+            x0=float(params.get("x_0", 0)),
+            y0=float(params.get("y_0", 0)),
+        )
+
+    def __getattr__(self, name: str) -> _typing.Any:
+        return getattr(self._transformer, name)
+
+    def transform(
+        self, xx: _typing.Any, yy: _typing.Any, *args, **kwargs
+    ) -> tuple[_typing.Any, _typing.Any]:
+        if args or kwargs:
+            return self._transformer.transform(xx, yy, *args, **kwargs)
+        scalar = _numpy.isscalar(xx) and _numpy.isscalar(yy)
+        a = _numpy.asarray(xx, dtype=float)
+        b = _numpy.asarray(yy, dtype=float)
+        with _numpy.errstate(divide="ignore", invalid="ignore"):
+            if self._forward:
+                lon, lat = (a, b) if self._geo_lon_first else (b, a)
+                phi = _numpy.radians(lat)
+                dlam = _numpy.radians(lon) - self._lon0
+                cos_phi = _numpy.cos(phi)
+                sin_phi = _numpy.sin(phi)
+                u = cos_phi * _numpy.cos(dlam)
+                x = self._k0r * _numpy.arcsinh(
+                    cos_phi * _numpy.sin(dlam) / _numpy.hypot(sin_phi, u)
+                )
+                y = self._k0r * _numpy.arctan2(sin_phi, u)
+                out1, out2 = x + self._x0, y + self._y0
+            else:
+                xs = (a - self._x0) / self._k0r
+                d = (b - self._y0) / self._k0r
+                sinh_x = _numpy.sinh(xs)
+                cos_d = _numpy.cos(d)
+                lat = _numpy.degrees(
+                    _numpy.arctan2(_numpy.sin(d), _numpy.hypot(sinh_x, cos_d))
+                )
+                lon = _numpy.degrees(
+                    self._lon0 + _numpy.arctan2(sinh_x, cos_d)
+                )
+                lon = _numpy.where(lon > 180, lon - 360, lon)
+                lon = _numpy.where(lon < -180, lon + 360, lon)
+                out1, out2 = (lon, lat) if self._geo_lon_first else (lat, lon)
+        if scalar:
+            return float(out1), float(out2)
+        return out1, out2
 
 
 # endregion
