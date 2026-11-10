@@ -137,6 +137,23 @@ class TestExactSphericalLtm(unittest.TestCase):
                 q = LatLonPoint(lat, lon)._to_lps_or_ltm(validate=False)
                 LpsPoint(q.hemisphere, q.easting, q.northing)
 
+    def test_sincosd_exact_at_quarter_turns(self) -> None:
+        sin, cos = srs._sincosd([0.0, 90.0, 180.0, -180.0, 270.0, 360.0])
+        self.assertEqual(list(sin), [0.0, 1.0, 0.0, 0.0, -1.0, 0.0])
+        self.assertEqual(list(cos), [1.0, 0.0, -1.0, -1.0, 0.0, 1.0])
+
+    def test_antimeridian_at_80_degrees_is_east_half(self) -> None:
+        # Previously AZ-Z999X818 / YZ+Z999B181: sin(-180 deg) ~ -1.2e-16 put
+        # E just below 500000. The point is exactly on E = 500000.
+        self.assertEqual(
+            LatLonPoint(-80.0, -180.0).to_acc(precision=1).string,
+            "BA--000X818",
+        )
+        self.assertEqual(
+            LatLonPoint(80.0, -180.0).to_acc(precision=1).string,
+            "ZA+-000B181",
+        )
+
     def test_point_just_south_of_equator(self) -> None:
         # Previously `23MKFT234-000`, the box north of the equator.
         self.assertEqual(

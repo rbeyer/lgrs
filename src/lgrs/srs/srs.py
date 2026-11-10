@@ -52,6 +52,22 @@ def get_transformer(
     return transformer if exact is None else exact
 
 
+def _sincosd(degrees: _typing.Any) -> tuple[_typing.Any, _typing.Any]:
+    """Return (sin, cos) of angles in degrees, exact at multiples of 90.
+
+    The angle is reduced to [-45, 45] degrees by whole quarter turns before
+    converting to radians, so sin(180) is exactly 0 rather than ~1.2e-16.
+    """
+    x = _numpy.fmod(_numpy.asarray(degrees, dtype=float), 360.0)
+    q = _numpy.round(x / 90.0)
+    r = _numpy.radians(x - 90.0 * q)
+    s, c = _numpy.sin(r), _numpy.cos(r)
+    q = _numpy.mod(q, 4)
+    sin = _numpy.select([q == 0, q == 1, q == 2], [s, c, -s], -c)
+    cos = _numpy.select([q == 0, q == 1, q == 2], [c, -s, -c], s)
+    return sin + 0.0, cos + 0.0  # + 0.0 turns -0.0 into 0.0
+
+
 class _ExactSphericalTmTransformer:
     """Closed-form LTM and LPS projections on a sphere.
 
@@ -83,6 +99,7 @@ class _ExactSphericalTmTransformer:
         self._polar = polar  # 0: tmerc; +1 / -1: north / south polar stere
         self._geo_lon_first = geo_lon_first
         self._k0r = k0 * radius
+        self._lon0_deg = lon0
         self._lon0 = _numpy.radians(lon0)
         self._x0 = x0
         self._y0 = y0
@@ -166,13 +183,11 @@ class _ExactSphericalTmTransformer:
                 out1, out2 = self._polar_stere(a, b)
             elif self._forward:
                 lon, lat = (a, b) if self._geo_lon_first else (b, a)
-                phi = _numpy.radians(lat)
-                dlam = _numpy.radians(lon) - self._lon0
-                cos_phi = _numpy.cos(phi)
-                sin_phi = _numpy.sin(phi)
-                u = cos_phi * _numpy.cos(dlam)
+                sin_phi, cos_phi = _sincosd(lat)
+                sin_dlam, cos_dlam = _sincosd(lon - self._lon0_deg)
+                u = cos_phi * cos_dlam
                 x = self._k0r * _numpy.arcsinh(
-                    cos_phi * _numpy.sin(dlam) / _numpy.hypot(sin_phi, u)
+                    cos_phi * sin_dlam / _numpy.hypot(sin_phi, u)
                 )
                 y = self._k0r * _numpy.arctan2(sin_phi, u)
                 out1, out2 = x + self._x0, y + self._y0
@@ -187,7 +202,7 @@ class _ExactSphericalTmTransformer:
                 lon = _numpy.degrees(
                     self._lon0 + _numpy.arctan2(sinh_x, cos_d)
                 )
-                lon = _numpy.where(lon > 180, lon - 360, lon)
+                lon = _numpy.where(lon >= 180, lon - 360, lon)
                 lon = _numpy.where(lon < -180, lon + 360, lon)
                 out1, out2 = (lon, lat) if self._geo_lon_first else (lat, lon)
         if scalar:
@@ -199,12 +214,12 @@ class _ExactSphericalTmTransformer:
         two_k0r = 2 * self._k0r
         if self._forward:
             lon, lat = (a, b) if self._geo_lon_first else (b, a)
-            phi = _numpy.radians(lat)
-            dlam = _numpy.radians(lon) - self._lon0
-            rho = two_k0r * _numpy.tan(_numpy.pi / 4 - s * phi / 2)
+            sin_h, cos_h = _sincosd(45.0 - s * lat / 2.0)
+            rho = two_k0r * sin_h / cos_h
+            sin_dlam, cos_dlam = _sincosd(lon - self._lon0_deg)
             return (
-                self._x0 + rho * _numpy.sin(dlam),
-                self._y0 - s * rho * _numpy.cos(dlam),
+                self._x0 + rho * sin_dlam,
+                self._y0 - s * rho * cos_dlam,
             )
         dx = a - self._x0
         dy = b - self._y0
@@ -212,7 +227,7 @@ class _ExactSphericalTmTransformer:
         lat = s * (90 - _numpy.degrees(2 * _numpy.arctan(rho / two_k0r)))
         dlam = _numpy.where(rho == 0, 0.0, _numpy.arctan2(dx, -s * dy))
         lon = _numpy.degrees(self._lon0 + dlam)
-        lon = _numpy.where(lon > 180, lon - 360, lon)
+        lon = _numpy.where(lon >= 180, lon - 360, lon)
         lon = _numpy.where(lon < -180, lon + 360, lon)
         return (lon, lat) if self._geo_lon_first else (lat, lon)
 
