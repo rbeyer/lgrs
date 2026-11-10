@@ -53,14 +53,16 @@ def get_transformer(
 
 
 class _ExactSphericalTmTransformer:
-    """Closed-form Transverse Mercator on a sphere, for LTM.
+    """Closed-form LTM and LPS projections on a sphere.
 
     PROJ's spherical ``tmerc`` computes the northing through ``acos()``,
-    which loses up to ~3 cm within ~1e-6 degrees of the equator. These
-    closed forms are exact to floating-point precision everywhere in an LTM
-    zone. Only ``transform()`` between a geographic CRS and a spherical
-    ``tmerc`` CRS is replaced; every other attribute (e.g.,
-    ``transform_bounds()``) is delegated to the wrapped pyproj transformer.
+    which loses up to ~3 cm within ~1e-6 degrees of the equator, and its
+    spherical polar ``stere`` inverse loses up to a few millimetres within
+    a few centimetres of the pole. These closed forms are exact to
+    floating-point precision. Only ``transform()`` between a geographic CRS
+    and a spherical ``tmerc`` (LTM) or polar ``stere`` (LPS) CRS is
+    replaced; every other attribute (e.g., ``transform_bounds()``) is
+    delegated to the wrapped pyproj transformer.
     """
 
     def __init__(
@@ -68,6 +70,7 @@ class _ExactSphericalTmTransformer:
         transformer: _pyproj.Transformer,
         *,
         forward: bool,
+        polar: int,
         geo_lon_first: bool,
         radius: float,
         k0: float,
@@ -77,6 +80,7 @@ class _ExactSphericalTmTransformer:
     ) -> None:
         self._transformer = transformer
         self._forward = forward  # geographic -> projected
+        self._polar = polar  # 0: tmerc; +1 / -1: north / south polar stere
         self._geo_lon_first = geo_lon_first
         self._k0r = k0 * radius
         self._lon0 = _numpy.radians(lon0)
@@ -103,13 +107,25 @@ class _ExactSphericalTmTransformer:
             _warnings.simplefilter("ignore")
             params = proj.to_dict()
         ellipsoid = proj.ellipsoid
+        if params.get("proj") == "tmerc" and params.get("lat_0", 0) == 0:
+            polar = 0
+        elif params.get("proj") == "stere" and params.get("lat_0") in (
+            90,
+            -90,
+        ):
+            polar = 1 if params["lat_0"] == 90 else -1
+        else:
+            return None
         if (
-            params.get("proj") != "tmerc"
-            or params.get("lat_0", 0) != 0
-            or ellipsoid is None
+            ellipsoid is None
             or ellipsoid.semi_major_metre != ellipsoid.semi_minor_metre
             or proj.geodetic_crs != geo
-            or [a.direction for a in proj.axis_info] != ["east", "north"]
+            or (
+                [a.direction for a in proj.axis_info] != ["east", "north"]
+                and not (
+                    polar and [a.abbrev for a in proj.axis_info] == ["X", "Y"]
+                )
+            )
         ):
             return None
         if always_xy:
@@ -125,6 +141,7 @@ class _ExactSphericalTmTransformer:
         return cls(
             transformer,
             forward=forward,
+            polar=polar,
             geo_lon_first=geo_lon_first,
             radius=ellipsoid.semi_major_metre,
             k0=float(params.get("k", params.get("k_0", 1))),
@@ -145,7 +162,9 @@ class _ExactSphericalTmTransformer:
         a = _numpy.asarray(xx, dtype=float)
         b = _numpy.asarray(yy, dtype=float)
         with _numpy.errstate(divide="ignore", invalid="ignore"):
-            if self._forward:
+            if self._polar:
+                out1, out2 = self._polar_stere(a, b)
+            elif self._forward:
                 lon, lat = (a, b) if self._geo_lon_first else (b, a)
                 phi = _numpy.radians(lat)
                 dlam = _numpy.radians(lon) - self._lon0
@@ -174,6 +193,28 @@ class _ExactSphericalTmTransformer:
         if scalar:
             return float(out1), float(out2)
         return out1, out2
+
+    def _polar_stere(self, a, b):  # type: ignore[no-untyped-def]
+        s = self._polar
+        two_k0r = 2 * self._k0r
+        if self._forward:
+            lon, lat = (a, b) if self._geo_lon_first else (b, a)
+            phi = _numpy.radians(lat)
+            dlam = _numpy.radians(lon) - self._lon0
+            rho = two_k0r * _numpy.tan(_numpy.pi / 4 - s * phi / 2)
+            return (
+                self._x0 + rho * _numpy.sin(dlam),
+                self._y0 - s * rho * _numpy.cos(dlam),
+            )
+        dx = a - self._x0
+        dy = b - self._y0
+        rho = _numpy.hypot(dx, dy)
+        lat = s * (90 - _numpy.degrees(2 * _numpy.arctan(rho / two_k0r)))
+        dlam = _numpy.where(rho == 0, 0.0, _numpy.arctan2(dx, -s * dy))
+        lon = _numpy.degrees(self._lon0 + dlam)
+        lon = _numpy.where(lon > 180, lon - 360, lon)
+        lon = _numpy.where(lon < -180, lon + 360, lon)
+        return (lon, lat) if self._geo_lon_first else (lat, lon)
 
 
 # endregion

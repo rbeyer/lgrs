@@ -1,4 +1,4 @@
-"""Tests for the closed-form spherical LTM transform in `lgrs.srs.srs`."""
+"""Tests for the closed-form spherical LTM and LPS transforms."""
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import unittest
 
 # Internal.
 import lgrs.srs.srs as srs
-from lgrs.coords import LatLonPoint
+from lgrs.coords import LatLonPoint, LpsPoint
 
 # External.
 import pyproj
@@ -85,10 +85,57 @@ class TestExactSphericalLtm(unittest.TestCase):
                 e2, n2 = proj.transform(lat, lon0 + dlon)
                 self.assertLess(math.hypot(e1 - e2, n1 - n2), 1e-4)
 
-    def test_non_ltm_transformer_is_unchanged(self) -> None:
-        crs = srs.make_lunar_crs("S")  # LPS
-        transformer = srs.get_transformer(self.geo, crs, always_xy=False)
+    def test_projected_to_projected_is_unchanged(self) -> None:
+        transformer = srs.get_transformer(
+            srs.make_lunar_crs("23S"),
+            srs.make_lunar_crs("24S"),
+            always_xy=True,
+        )
         self.assertIsInstance(transformer, pyproj.Transformer)
+
+    def test_lps_matches_closed_form(self) -> None:
+        for hemisphere, sign in (("N", 1), ("S", -1)):
+            crs = srs.make_lunar_crs(hemisphere)
+            fwd = srs.get_transformer(self.geo, crs, always_xy=False)
+            for lat in (80.0, 85.0, 89.9, 90 - 1e-9):
+                for lon in (-180.0, -45.0, 0.0, 120.0):
+                    with self.subTest(hemisphere=hemisphere, lat=lat, lon=lon):
+                        phi = math.radians(sign * lat)
+                        rho = (
+                            2
+                            * 0.994
+                            * R
+                            * math.tan(math.pi / 4 - sign * phi / 2)
+                        )
+                        e, n = fwd.transform(sign * lat, lon)
+                        self.assertAlmostEqual(
+                            e,
+                            500_000 + rho * math.sin(math.radians(lon)),
+                            delta=1e-6,
+                        )
+                        self.assertAlmostEqual(
+                            n,
+                            500_000 - sign * rho * math.cos(math.radians(lon)),
+                            delta=1e-6,
+                        )
+
+    def test_lps_inverse_near_pole(self) -> None:
+        # PROJ's spherical stere inverse returns -90 for this point.
+        crs = srs.make_lunar_crs("S")
+        fwd = srs.get_transformer(self.geo, crs, always_xy=False)
+        inv = srs.get_transformer(crs, self.geo, always_xy=False)
+        lat = -(90 - 1e-8)
+        back_lat, _ = inv.transform(*fwd.transform(lat, 37.0))
+        self.assertAlmostEqual(back_lat, lat, delta=1e-13)
+        self.assertEqual(inv.transform(500_000.0, 500_000.0), (-90.0, 0.0))
+
+    def test_lps_points_from_80_degrees_validate(self) -> None:
+        # Previously "should be in LTM region": the inverse returned
+        # -79.99999999999999 for points built from exactly -80.
+        for lat, lon in ((-80.0, 10.0), (-80.0, -180.0), (80.0, -180.0)):
+            with self.subTest(lat=lat, lon=lon):
+                q = LatLonPoint(lat, lon)._to_lps_or_ltm(validate=False)
+                LpsPoint(q.hemisphere, q.easting, q.northing)
 
     def test_point_just_south_of_equator(self) -> None:
         # Previously `23MKFT234-000`, the box north of the equator.
